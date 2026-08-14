@@ -1,12 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
-import { PrimaryButton } from "@/components/ui";
+import { BackButton, PrimaryButton } from "@/components/ui";
 
 export default function JoinCrewOnboardingPage() {
-  const router = useRouter();
   const [code, setCode] = useState("");
   const [showEmailForm, setShowEmailForm] = useState(false);
   const [email, setEmail] = useState("");
@@ -26,13 +24,7 @@ export default function JoinCrewOnboardingPage() {
     <div className="relative min-h-screen bg-gradient-bloom flex flex-col px-6.5 pt-19.5 pb-10 overflow-hidden">
       <div className="absolute inset-0 bg-ruled-texture pointer-events-none" />
 
-      <button
-        type="button"
-        onClick={() => router.push("/onboarding")}
-        className="relative w-10.5 h-10.5 rounded-md bg-cream/10 flex items-center justify-center text-cream text-xl"
-      >
-        ←
-      </button>
+      <BackButton href="/onboarding" className="relative" />
 
       <div className="relative flex flex-col items-center gap-3 mt-8 text-center">
         <div className="font-heading font-semibold text-[19px] tracking-[2.4px] uppercase text-cream/62">

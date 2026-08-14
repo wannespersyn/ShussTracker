@@ -5,7 +5,7 @@ import { groupMembers } from "@/lib/db/schema";
 import { requireSession } from "@/lib/db/authz";
 import { LogGameWizard } from "@/components/log/LogGameWizard";
 import { Card } from "@/components/ui";
-import { ArrowLeftIcon } from "@/components/ui/icons/ArrowLeftIcon";
+import { ChevronRightIcon } from "@/components/ui/icons/ChevronRightIcon";
 
 export default async function LogGamePage({
   searchParams,
@@ -57,7 +57,7 @@ export default async function LogGamePage({
                     {m.group.members.length} {m.group.members.length === 1 ? "member" : "members"}
                   </div>
                 </div>
-                <div className="font-display text-2xl text-gold/70"><ArrowLeftIcon className="w-6 h-6 rotate-180" /></div>
+                <div className="font-display text-2xl text-gold/70"><ChevronRightIcon className="w-6 h-6" /></div>
               </Card>
             </Link>
           ))}

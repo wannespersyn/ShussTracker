@@ -9,6 +9,9 @@ type LeaderboardRowProps = {
   name: string;
   sub?: string;
   points: number | string;
+  /** Label under the points value — "Points" by default; the crew
+   * leaderboard's "Red zone" tab uses "Chugs" instead. */
+  pointsLabel?: string;
   /** Current-user highlight — independent of rank. */
   highlighted?: boolean;
   onClick?: () => void;
@@ -21,6 +24,7 @@ export function LeaderboardRow({
   name,
   sub,
   points,
+  pointsLabel = "Points",
   highlighted = false,
   onClick,
 }: LeaderboardRowProps) {
@@ -46,7 +50,7 @@ export function LeaderboardRow({
       <div className="text-right shrink-0">
         <div className={cn("font-display text-[22px]", isFirst ? "text-gold" : "text-cream")}>{points}</div>
         <div className="font-heading font-semibold text-[11px] tracking-[1.2px] text-cream/35 uppercase">
-          Points
+          {pointsLabel}
         </div>
       </div>
     </button>

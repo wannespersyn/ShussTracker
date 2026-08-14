@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { capCrownClipPath, capRingGradient, capRingPairs, type CapRingColor } from "@/lib/theme/tokens";
 import { cn } from "@/lib/cn";
-import { PrimaryButton } from "@/components/ui";
+import { BackButton, PrimaryButton } from "@/components/ui";
 import { logGame } from "@/app/(app)/log/actions";
 
 const TEAM_COLORS: CapRingColor[] = ["gold", "red", "mint", "cream"];
@@ -209,13 +209,7 @@ export function LogGameWizard({ groupId, roster }: { groupId: string; roster: Ro
   return (
     <div className="relative min-h-screen bg-surface flex flex-col pt-16.5 pb-2">
       <div className="px-5 flex items-center gap-3.5">
-        <button
-          type="button"
-          onClick={back}
-          className="w-10.5 h-10.5 rounded-md bg-cream/10 flex items-center justify-center text-cream text-xl"
-        >
-          ←
-        </button>
+        <BackButton onClick={back} />
         <div className="flex-1">
           <div className="font-heading font-semibold text-[13px] tracking-[1.8px] uppercase text-cream/45">
             {copy.kicker}
@@ -344,19 +338,44 @@ export function LogGameWizard({ groupId, roster }: { groupId: string; roster: Ro
             ))}
           </div>
 
-          <div className="relative rounded-xl overflow-hidden bg-cream border-3 border-surface-deep p-3 h-82.5">
-            <button type="button" onClick={() => logShot("3")} className="w-full h-18.5 rounded-md bg-field-far flex items-center justify-between px-4">
-              <div className="font-display text-4xl text-cream">3</div>
-              <div className="font-heading font-bold text-sm tracking-[1.6px] text-cream/75">FAR FIELD</div>
+          <div className="relative rounded-xl overflow-hidden bg-[linear-gradient(#F8F2E0,#E7DCBF)] border-4 border-surface-deep h-88 shadow-elevation-lg">
+            <div
+              className="absolute inset-0 pointer-events-none"
+              style={{ backgroundImage: "repeating-linear-gradient(45deg, rgba(11,38,32,.05) 0 3px, transparent 3px 7px)" }}
+            />
+            <button
+              type="button"
+              onClick={() => logShot("3")}
+              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[78%] aspect-square rounded-pill bg-field-far shadow-[inset_0_3px_10px_rgba(0,0,0,.35)] flex flex-col items-center pt-3.5"
+            >
+              <span className="font-heading font-bold text-[13px] tracking-[2px] text-cream/65">FAR · 3</span>
             </button>
-            <button type="button" onClick={() => logShot("2")} className="mt-2 w-full h-18.5 rounded-md bg-field-mid flex items-center justify-between px-4">
-              <div className="font-display text-4xl text-cream">2</div>
-              <div className="font-heading font-bold text-sm tracking-[1.6px] text-cream/75">MID FIELD</div>
+            <button
+              type="button"
+              onClick={() => logShot("2")}
+              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[55%] aspect-square rounded-pill bg-field-mid shadow-[inset_0_3px_8px_rgba(0,0,0,.3)] flex flex-col items-center pt-3"
+            >
+              <span className="font-heading font-bold text-[13px] tracking-[2px] text-cream/70">MID · 2</span>
             </button>
-            <button type="button" onClick={() => logShot("1")} className="mt-2 w-full h-18.5 rounded-md bg-field-near flex items-center justify-between px-4">
-              <div className="font-display text-4xl text-cream">1</div>
-              <div className="font-heading font-bold text-sm tracking-[1.6px] text-cream/80">NEAR FIELD</div>
+            <button
+              type="button"
+              onClick={() => logShot("1")}
+              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[34%] aspect-square rounded-pill bg-field-near shadow-[inset_0_3px_8px_rgba(0,0,0,.28)] flex flex-col items-center pt-3"
+            >
+              <span className="font-heading font-bold text-[12px] tracking-[2px] text-[rgba(4,23,15,.75)]">NEAR · 1</span>
             </button>
+            <div
+              className="absolute w-9.5 h-9.5 rotate-12 pointer-events-none shadow-elevation-sm"
+              style={{ left: "18%", top: "22%", background: capRingGradient("gold"), clipPath: capCrownClipPath }}
+            />
+            <div
+              className="absolute w-8.5 h-8.5 -rotate-22 pointer-events-none shadow-elevation-sm"
+              style={{ right: "13%", top: "36%", background: capRingGradient("cream"), clipPath: capCrownClipPath }}
+            />
+            <div
+              className="absolute w-9 h-9 rotate-34 pointer-events-none shadow-elevation-sm"
+              style={{ left: "30%", bottom: "12%", background: capRingGradient("red"), clipPath: capCrownClipPath }}
+            />
             <button
               type="button"
               onClick={() => logShot("mama")}

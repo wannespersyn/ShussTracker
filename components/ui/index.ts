@@ -1,4 +1,5 @@
 export { AvatarChip } from "./AvatarChip";
+export { BackButton } from "./BackButton";
 export { Card } from "./Card";
 export { PrimaryButton } from "./PrimaryButton";
 export { LinkButton } from "./LinkButton";
