@@ -1,26 +1,283 @@
 @import "tailwindcss";
 
+/* ---------------------------------------------------------------------
+ * Shussapp design tokens
+ * Extracted from Claude Design project "Shussapp stats tracker"
+ * (Shussapp App.dc.html + Shussapp.dc.html, 16 screens).
+ * Do not add new colors/sizes/radii/shadows here without checking the
+ * source designs first — everything downstream should reuse these.
+ * ------------------------------------------------------------------- */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Backgrounds — enamel-sign dark green, layered dark -> light */
+  --color-ink: #081a15; /* deepest bg (app shell, share card) */
+  --color-surface: #0b2620; /* primary screen bg, avatar inner circle */
+  --color-surface-raised: #17513f; /* hero/card gradient start (165deg) */
+  --color-surface-raised-end: #0e3227; /* hero/card gradient end */
+  --color-surface-alt: #174c3c; /* selected-tile gradient start (160deg) */
+  --color-surface-alt-end: #103127; /* selected-tile gradient end */
+  --color-surface-deep: #0f3529; /* share card / log-mat frame border */
+  --color-surface-bloom: #15493a; /* radial bloom center: onboarding, empty state, notification, paywall */
+
+  /* Log-mat shot zones (near -> far field, brighter = closer) */
+  --color-field-near: #16a075;
+  --color-field-mid: #12855f;
+  --color-field-far: #0f6b4f;
+
+  /* Gold — primary accent */
+  --color-gold: #f2b01e;
+  --color-gold-hover: #ffd166; /* link hover only */
+  --color-gold-dark: #c07c0a; /* cap-ridge dark stop */
+  --color-gold-shadow: #a96c05; /* chunky CTA "lip" shadow color */
+  --color-gold-end: #e0900f; /* gradient end: best-duo card, paywall price card */
+  --color-gold-end-alt: #b87a06; /* gradient end: season-recap gold slide */
+
+  /* Red — "risk zone" accent */
+  --color-red: #e5352b;
+  --color-red-bright: #ff6b60; /* risk numbers, sign-out */
+  --color-red-pale: #ffb3ae; /* thin-log warning copy */
+  --color-red-dark: #9c1f19; /* cap-ridge dark stop */
+  --color-red-end: #a81c15; /* gradient end: event/bracket header */
+  --color-red-mid: #8e1610; /* radial mid stop: cap-of-the-night, biggest-win recap */
+  --color-red-deep: #5b0d09; /* radial darkest stop */
+
+  /* Cream — primary text-on-dark */
+  --color-cream: #f6efdd;
+  --color-cream-dark: #b9af95; /* cap-ridge dark stop */
+
+  /* Mint — secondary team accent */
+  --color-mint: #5cc8a0;
+  --color-mint-dark: #2e7a5f; /* cap-ridge dark stop */
+
+  /* Fonts (wired to next/font variables in app/layout.tsx) */
+  --font-display: var(--font-anton), sans-serif; /* scoreboard numerals, headlines */
+  --font-heading: var(--font-barlow-condensed), sans-serif; /* uppercase kickers/labels */
+  --font-body: var(--font-barlow), sans-serif; /* body copy */
+
+  /* Border radii */
+  --radius-xs: 4px; /* progress-bar segments, step dots */
+  --radius-sm: 9px; /* small icon buttons, chips */
+  --radius-md: 12px; /* list rows, small cards */
+  --radius-lg: 16px; /* primary buttons, standard cards */
+  --radius-xl: 20px; /* hero cards, sheets, share card */
+  --radius-pill: 999px; /* segmented tabs, circular avatars */
+
+  /* Signature chunky CTA "lip" shadow (no blur, looks pressed into page) */
+  --shadow-cta: 0 7px 0 var(--color-gold-shadow);
+  --shadow-cta-lg: 0 8px 0 var(--color-gold-shadow); /* 62px onboarding CTA */
+  --shadow-cta-inverted: 0 7px 0 rgba(0, 0, 0, 0.35); /* dark button on gold surface */
+  --shadow-fab: 0 6px 0 var(--color-gold-shadow), 0 10px 22px rgba(0, 0, 0, 0.4);
+
+  /* Ambient elevation shadows (pure blur, no lip) */
+  --shadow-elevation-sm: 0 6px 14px rgba(0, 0, 0, 0.35);
+  --shadow-elevation-md: 0 8px 22px rgba(0, 0, 0, 0.4);
+  --shadow-elevation-lg: 0 12px 30px rgba(0, 0, 0, 0.45);
+  --shadow-elevation-xl: 0 20px 50px rgba(0, 0, 0, 0.55); /* share card modal, max elevation */
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-ink: var(--color-ink);
+  --color-surface: var(--color-surface);
+  --color-surface-raised: var(--color-surface-raised);
+  --color-surface-raised-end: var(--color-surface-raised-end);
+  --color-surface-alt: var(--color-surface-alt);
+  --color-surface-alt-end: var(--color-surface-alt-end);
+  --color-surface-deep: var(--color-surface-deep);
+  --color-surface-bloom: var(--color-surface-bloom);
+
+  --color-field-near: var(--color-field-near);
+  --color-field-mid: var(--color-field-mid);
+  --color-field-far: var(--color-field-far);
+
+  --color-gold: var(--color-gold);
+  --color-gold-hover: var(--color-gold-hover);
+  --color-gold-dark: var(--color-gold-dark);
+  --color-gold-shadow: var(--color-gold-shadow);
+  --color-gold-end: var(--color-gold-end);
+  --color-gold-end-alt: var(--color-gold-end-alt);
+
+  --color-red: var(--color-red);
+  --color-red-bright: var(--color-red-bright);
+  --color-red-pale: var(--color-red-pale);
+  --color-red-dark: var(--color-red-dark);
+  --color-red-end: var(--color-red-end);
+  --color-red-mid: var(--color-red-mid);
+  --color-red-deep: var(--color-red-deep);
+
+  --color-cream: var(--color-cream);
+  --color-cream-dark: var(--color-cream-dark);
+
+  --color-mint: var(--color-mint);
+  --color-mint-dark: var(--color-mint-dark);
+
+  --font-display: var(--font-display);
+  --font-heading: var(--font-heading);
+  --font-body: var(--font-body);
+
+  --radius-xs: var(--radius-xs);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+  --radius-pill: var(--radius-pill);
+
+  --shadow-cta: var(--shadow-cta);
+  --shadow-cta-lg: var(--shadow-cta-lg);
+  --shadow-cta-inverted: var(--shadow-cta-inverted);
+  --shadow-fab: var(--shadow-fab);
+  --shadow-elevation-sm: var(--shadow-elevation-sm);
+  --shadow-elevation-md: var(--shadow-elevation-md);
+  --shadow-elevation-lg: var(--shadow-elevation-lg);
+  --shadow-elevation-xl: var(--shadow-elevation-xl);
+
+  /* Semantic type scale. Display-hero numbers (split-flap counters, recap
+   * stats) are deliberately NOT collapsed into this scale — each is a
+   * specific extracted value used once on its own screen; see
+   * lib/theme/tokens.ts `displayHero`. */
+  --text-display-2xl: 132px; /* season recap hero stat */
+  --text-display-2xl--line-height: 0.84;
+  --text-display-xl: 86px; /* home win-rate split-flap */
+  --text-display-xl--line-height: 1;
+  --text-display-lg: 64px; /* H2H win count, big score digits */
+  --text-display-lg--line-height: 0.9;
+  --text-display-md: 40px; /* headlines: event live title, paywall headline */
+  --text-display-md--line-height: 0.98;
+  --text-display-sm: 26px; /* screen header titles */
+  --text-display-sm--line-height: 1;
+  --text-heading: 20px; /* row/card titles */
+  --text-heading--line-height: 1.1;
+  --text-label-kicker: 13px; /* uppercase section kickers */
+  --text-label-kicker--line-height: 1.2;
+  --text-label-sm: 11.5px; /* small uppercase labels */
+  --text-label-sm--line-height: 1.2;
+  --text-body: 15px;
+  --text-body--line-height: 1.35;
+  --text-body-sm: 13.5px;
+  --text-body-sm--line-height: 1.3;
+  --text-caption: 12.5px;
+  --text-caption--line-height: 1.4;
+
+  /* Kicker tracking is a signature part of the type system: Barlow
+   * Condensed 700, uppercase, letter-spacing ~1.8px at 12-13px. */
+  --tracking-kicker: 0.09em;
+
+  /* Motion */
+  --animate-roll: roll 1.6s cubic-bezier(0.15, 0.85, 0.25, 1) forwards;
+  --animate-fly: fly 0.5s cubic-bezier(0.2, 0.8, 0.3, 1) forwards;
+  --animate-pop: pop 0.32s ease-out forwards;
+  --animate-glow: glow 2.4s ease-out infinite;
+  --animate-push-in: pushIn 0.22s ease-out;
+  --animate-fade-in: fadeIn 0.2s ease-out;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  body {
+    background: var(--color-surface);
+    color: var(--color-cream);
+    font-family: var(--font-body);
+  }
+
+  a {
+    color: var(--color-gold);
+    text-decoration: none;
+  }
+  a:hover {
+    color: var(--color-gold-hover);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Reusable gradient/texture treatments that recur across screens.
+ * Kept as utilities (not tokens) because they combine 2+ properties. */
+@layer components {
+  .bg-gradient-hero {
+    background: linear-gradient(165deg, var(--color-surface-raised), var(--color-surface-raised-end));
+  }
+  .bg-gradient-alt {
+    background: linear-gradient(160deg, var(--color-surface-alt), var(--color-surface-alt-end));
+  }
+  .bg-gradient-gold {
+    background: linear-gradient(120deg, var(--color-gold), var(--color-gold-end));
+  }
+  .bg-gradient-event {
+    /* Tonight event / bracket header */
+    background: linear-gradient(160deg, var(--color-red), var(--color-red-end));
+  }
+  .bg-stripe-texture {
+    /* diagonal hazard-stripe overlay used on red event/bracket headers */
+    background-image: repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.14) 0 12px, transparent 12px 24px);
+  }
+  .bg-ruled-texture {
+    /* faint horizontal rule-line overlay: onboarding, empty state, paywall */
+    background-image: linear-gradient(rgba(246, 239, 221, 0.045) 1px, transparent 1px);
+    background-size: 100% 34px;
+  }
+  .bg-gradient-bloom {
+    /* radial bloom wash: onboarding + empty state background */
+    background: radial-gradient(120% 80% at 50% 0%, var(--color-surface-bloom) 0%, var(--color-surface) 55%, var(--color-ink) 100%);
+  }
+}
+
+@keyframes roll {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-10em);
+  }
+}
+@keyframes fly {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 340px) scale(0.4) rotate(0deg);
+  }
+  18% {
+    opacity: 1;
+  }
+  72% {
+    transform: translate(-50%, -6px) scale(1.25) rotate(340deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1) rotate(360deg);
+  }
+}
+@keyframes pop {
+  0% {
+    transform: scale(0.7);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+@keyframes glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(229, 53, 43, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 0 14px rgba(229, 53, 43, 0);
+  }
+}
+@keyframes pushIn {
+  from {
+    opacity: 0;
+    transform: translateX(26px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }

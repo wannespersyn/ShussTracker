@@ -1,0 +1,51 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c ' *)",
+      "Bash(timeout 60 npx next build)",
+      "Bash(npm install *)",
+      "Bash(mkdir -p /Users/persynwannes/Documents/Projects/shusstracker/lib/db)",
+      "Bash(mkdir -p \"/Users/persynwannes/Documents/Projects/shusstracker/app/api/auth/[...nextauth]\")",
+      "Bash(npx tsc *)",
+      "Bash(DATABASE_URL=\"postgresql://user:pass@localhost:5432/db\" AUTH_SECRET=\"dev-secret-placeholder-please-replace\" AUTH_GOOGLE_ID=\"x\" AUTH_GOOGLE_SECRET=\"x\" AUTH_RESEND_KEY=\"x\" npx next build)",
+      "Bash(npx --yes playwright --version)",
+      "Bash(node /private/tmp/claude-501/-Users-persynwannes-Documents-Projects-shusstracker/be5fd31b-0f3a-4bca-b4a3-73a8984720ce/scratchpad/screenshot.mjs)",
+      "Bash(npm init *)",
+      "Bash(node screenshot.mjs)",
+      "Bash(lsof -ti:3000 -sTCP:LISTEN)",
+      "Bash(xargs -r kill)",
+      "Bash(npm run *)",
+      "Bash(node -e ' *)",
+      "Bash(npx next *)",
+      "Bash(mkdir -p /Users/persynwannes/Documents/Projects/shusstracker/components/log /Users/persynwannes/Documents/Projects/shusstracker/app/log \"/Users/persynwannes/Documents/Projects/shusstracker/app/game/[gameId]\")",
+      "Bash(sed -i '' 's/waitUntil: \"networkidle\"/waitUntil: \"load\"/' log-shot.mjs)",
+      "Bash(node log-shot.mjs)",
+      "Bash(mkdir -p \"app/\\(app\\)\" && git mv app/home \"app/\\(app\\)/home\" && git mv app/crews \"app/\\(app\\)/crews\" && git mv app/log \"app/\\(app\\)/log\" && git mv app/game \"app/\\(app\\)/game\" && find \"app/\\(app\\)\" -type f | sort)",
+      "Bash(npx eslint *)",
+      "Bash(curl -sf http://localhost:3000)",
+      "Bash(break)",
+      "Bash(lsof -i:3000 -sTCP:LISTEN)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} -> %{redirect_url}\\\\n\" http://localhost:3000/)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} -> %{redirect_url}\\\\n\" http://localhost:3000/home)",
+      "Bash(curl -s -w \"\\\\nSTATUS:%{http_code}\\\\n\" http://localhost:3000/onboarding)",
+      "Bash(curl -s -w \"\\\\nSTATUS:%{http_code}\\\\n\" http://localhost:3000/onboarding/join-crew)",
+      "Bash(curl -s -w \"\\\\nSTATUS:%{http_code}\\\\n\" http://localhost:3000/dev/ui)",
+      "Bash(curl -s -w \"\\\\nSTATUS:%{http_code}\\\\n\" http://localhost:3000/onboarding/check-email)",
+      "Bash(> /tmp/shusstracker-dev.log)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3000/home)",
+      "Bash(curl -s -o /dev/null -w \"crews: %{http_code}\\\\n\" http://localhost:3000/crews)",
+      "Bash(curl -s -o /dev/null -w \"crews/join: %{http_code}\\\\n\" http://localhost:3000/crews/join)",
+      "Bash(curl -s -o /dev/null -w \"game/x: %{http_code}\\\\n\" http://localhost:3000/game/does-not-exist)",
+      "Bash(grep -o \"^DATABASE_URL=.\\\\{0,25\\\\}\" /Users/persynwannes/Documents/Projects/shusstracker/.env)",
+      "Bash(grep -E \"^tsx$|^ts-node$|^dotenv$\")",
+      "Bash(grep -E \"^dotenv$\")",
+      "Bash(npx tsx *)"
+    ],
+    "additionalDirectories": [
+      "/Users/persynwannes/Documents/Projects/shusstracker/lib",
+      "/Users/persynwannes/Documents/Projects/shusstracker/app/api/auth",
+      "/Users/persynwannes/Documents/Projects/shusstracker/app/game",
+      "/Users/persynwannes/Documents/Projects/shusstracker/app"
+    ]
+  }
+}
