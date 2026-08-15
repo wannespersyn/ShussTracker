@@ -178,6 +178,68 @@ export const shots = pgTable("shot", {
 });
 
 /* -----------------------------------------------------------------------
+ * Tournament domain — single-elimination bracket over a crew's members,
+ * seeded as fixed duos ("entrants") at creation time. A played match's
+ * result is a normal game/gameTeams/shots row (so tournament games count
+ * toward every existing stat), just linked back onto the match.
+ * --------------------------------------------------------------------- */
+
+export const tournamentStatusEnum = pgEnum("tournament_status", ["setup", "active", "completed"]);
+
+export const tournaments = pgTable("tournament", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  groupId: uuid("group_id")
+    .notNull()
+    .references(() => groups.id, { onDelete: "cascade" }),
+  eventId: uuid("event_id").references(() => events.id, { onDelete: "set null" }),
+  name: text("name").notNull(),
+  status: tournamentStatusEnum("status").notNull().default("setup"),
+  createdBy: uuid("created_by")
+    .notNull()
+    .references(() => users.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// A fixed duo for the life of the tournament — distinct from gameTeams,
+// which exist per played game. Formed manually or via Chwazi at creation.
+export const tournamentEntrants = pgTable("tournament_entrant", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tournamentId: uuid("tournament_id")
+    .notNull()
+    .references(() => tournaments.id, { onDelete: "cascade" }),
+  seed: integer("seed").notNull(),
+  player1Id: uuid("player1_id")
+    .notNull()
+    .references(() => users.id),
+  player2Id: uuid("player2_id")
+    .notNull()
+    .references(() => users.id),
+});
+
+// A single-elimination bracket slot. `round`/`slot` place it in the
+// bracket — round r, slot s's winner feeds round r+1, slot floor(s/2),
+// derived by arithmetic rather than a stored "next match" pointer. Every
+// round after the first starts with null entrant slots; a bye (odd
+// entrant count) resolves immediately with `winnerEntrantId` set and no
+// `gameId`.
+export const tournamentMatches = pgTable(
+  "tournament_match",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tournamentId: uuid("tournament_id")
+      .notNull()
+      .references(() => tournaments.id, { onDelete: "cascade" }),
+    round: integer("round").notNull(),
+    slot: integer("slot").notNull(),
+    entrantAId: uuid("entrant_a_id").references(() => tournamentEntrants.id, { onDelete: "set null" }),
+    entrantBId: uuid("entrant_b_id").references(() => tournamentEntrants.id, { onDelete: "set null" }),
+    winnerEntrantId: uuid("winner_entrant_id").references(() => tournamentEntrants.id, { onDelete: "set null" }),
+    gameId: uuid("game_id").references(() => games.id, { onDelete: "set null" }),
+  },
+  (t) => [unique().on(t.tournamentId, t.round, t.slot)],
+);
+
+/* -----------------------------------------------------------------------
  * Relations (for the Drizzle relational query API)
  * --------------------------------------------------------------------- */
 
@@ -255,4 +317,51 @@ export const shotsRelations = relations(shots, ({ one }) => ({
     fields: [shots.gameTeamPlayerId],
     references: [gameTeamPlayers.id],
   }),
+}));
+
+export const tournamentsRelations = relations(tournaments, ({ one, many }) => ({
+  group: one(groups, { fields: [tournaments.groupId], references: [groups.id] }),
+  event: one(events, { fields: [tournaments.eventId], references: [events.id] }),
+  entrants: many(tournamentEntrants),
+  matches: many(tournamentMatches),
+}));
+
+export const tournamentEntrantsRelations = relations(tournamentEntrants, ({ one }) => ({
+  tournament: one(tournaments, {
+    fields: [tournamentEntrants.tournamentId],
+    references: [tournaments.id],
+  }),
+  player1: one(users, {
+    fields: [tournamentEntrants.player1Id],
+    references: [users.id],
+    relationName: "entrantPlayer1",
+  }),
+  player2: one(users, {
+    fields: [tournamentEntrants.player2Id],
+    references: [users.id],
+    relationName: "entrantPlayer2",
+  }),
+}));
+
+export const tournamentMatchesRelations = relations(tournamentMatches, ({ one }) => ({
+  tournament: one(tournaments, {
+    fields: [tournamentMatches.tournamentId],
+    references: [tournaments.id],
+  }),
+  entrantA: one(tournamentEntrants, {
+    fields: [tournamentMatches.entrantAId],
+    references: [tournamentEntrants.id],
+    relationName: "matchEntrantA",
+  }),
+  entrantB: one(tournamentEntrants, {
+    fields: [tournamentMatches.entrantBId],
+    references: [tournamentEntrants.id],
+    relationName: "matchEntrantB",
+  }),
+  winnerEntrant: one(tournamentEntrants, {
+    fields: [tournamentMatches.winnerEntrantId],
+    references: [tournamentEntrants.id],
+    relationName: "matchWinnerEntrant",
+  }),
+  game: one(games, { fields: [tournamentMatches.gameId], references: [games.id] }),
 }));

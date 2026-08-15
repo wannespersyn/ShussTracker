@@ -58,17 +58,17 @@ export default async function GameReplayPage({ params }: { params: Promise<{ gam
             <Card key={t.id} variant={isWinner ? "gold" : "default"} className="flex items-center gap-3.5">
               <div
                 className={cn(
-                  "w-11.5 h-11.5 shrink-0 rounded-pill flex items-center justify-center font-display text-xl",
-                  isWinner ? "bg-gold text-surface" : "bg-cream/10 text-cream",
+                  "w-11.5 h-11.5 shrink-0 rounded-pill flex items-center justify-center font-mono font-semibold text-xl",
+                  isWinner ? "bg-gold text-ink" : "bg-cream/10 text-cream",
                 )}
               >
                 {t.finalRank ?? "–"}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="font-display text-2xl text-cream truncate">
+                <div className="font-heading font-semibold text-heading text-cream truncate">
                   {t.players.map((p) => p.user.name ?? "Player").join(" & ")}
                 </div>
-                <div className="font-heading font-semibold text-[13px] tracking-[1.4px] uppercase text-cream/45">
+                <div className="font-mono font-medium text-[10px] tracking-widest uppercase text-cream/45 mt-1">
                   {t.teamLabel}
                 </div>
               </div>
@@ -85,7 +85,7 @@ export default async function GameReplayPage({ params }: { params: Promise<{ gam
           <div className="flex gap-2">
             {tally.map((t) => (
               <div key={t.fieldHit} className="flex-1 text-center py-3 rounded-md bg-cream/5">
-                <div className="font-display text-2xl text-cream">{t.n}</div>
+                <div className="font-mono font-semibold text-2xl text-cream">{t.n}</div>
                 <div className="font-heading font-semibold text-[11px] tracking-[1.2px] text-cream/45 uppercase">
                   {t.label}
                 </div>

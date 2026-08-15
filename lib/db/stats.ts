@@ -1,12 +1,7 @@
 import { eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { games, gameTeamPlayers, shots } from "@/lib/db/schema";
-
-const FIELD_VALUE: Record<string, number> = { "1": 1, "2": 2, "3": 3, mama: 0, miss: 0 };
-
-function scoreFor(players: { shots: { fieldHit: string }[] }[]) {
-  return players.reduce((sum, p) => sum + p.shots.reduce((s, sh) => s + (FIELD_VALUE[sh.fieldHit] ?? 0), 0), 0);
-}
+import { events, games, gameTeamPlayers, groupMembers, shots } from "@/lib/db/schema";
+import { scoreForPlayers as scoreFor } from "@/lib/scoring";
 
 export type ShotDistributionEntry = { fieldHit: string; label: string; count: number; pct: number };
 
@@ -136,4 +131,137 @@ export async function getRecentGamesDetail(userId: string, limit = 3): Promise<R
       matType: game.matType,
     };
   });
+}
+
+export type PlayerStatsSummary = {
+  totalGames: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  streak: number;
+  riskZone: number;
+  shotDist: { makeRate: number; bars: ShotDistributionEntry[] } | null;
+  bestDuo: BestDuo | null;
+  recentGames: RecentGame[];
+};
+
+/** Everything the "my stats" card cluster needs (win rate, streak, red
+ * zone, shot distribution, best duo, recent games) — used by both the
+ * Home dashboard ("you") and a player's profile page (any player). */
+export async function getPlayerStatsSummary(userId: string): Promise<PlayerStatsSummary> {
+  const played = await db.query.gameTeamPlayers.findMany({
+    where: eq(gameTeamPlayers.userId, userId),
+    with: { gameTeam: { with: { game: true } }, shots: true },
+  });
+
+  const byRecent = [...played].sort(
+    (a, b) => new Date(b.gameTeam.game.playedAt).getTime() - new Date(a.gameTeam.game.playedAt).getTime(),
+  );
+  const totalGames = byRecent.length;
+  const wins = byRecent.filter((g) => g.gameTeam.finalRank === 1).length;
+  const losses = totalGames - wins;
+  const winRate = totalGames > 0 ? Math.round((wins / totalGames) * 100) : 0;
+
+  let streak = 0;
+  for (const g of byRecent) {
+    if (g.gameTeam.finalRank === 1) streak++;
+    else break;
+  }
+
+  const riskZone = byRecent.reduce((sum, g) => sum + g.shots.filter((s) => s.fieldHit === "mama").length, 0);
+
+  const [shotDist, bestDuo, recentGames] =
+    totalGames > 0
+      ? await Promise.all([getShotDistribution(userId), getBestDuo(userId), getRecentGamesDetail(userId, 3)])
+      : [null, null, []];
+
+  return { totalGames, wins, losses, winRate, streak, riskZone, shotDist, bestDuo, recentGames };
+}
+
+export type StatsPerson = { id: string; name: string };
+export type StatsCrew = { id: string; name: string; memberCount: number };
+export type StatsEvent = { id: string; name: string; crewId: string; date: string };
+export type StatsFieldCounts = { far: number; mid: number; near: number; risk: number; miss: number };
+export type StatsTeam = { userIds: string[]; won: boolean; points: number; shots: Record<string, StatsFieldCounts> };
+export type StatsGame = {
+  id: string;
+  crewId: string | null;
+  eventId: string | null;
+  matType: "4" | "8";
+  playedAt: string;
+  teams: StatsTeam[];
+};
+export type StatsExplorerData = {
+  people: StatsPerson[];
+  crews: StatsCrew[];
+  events: StatsEvent[];
+  games: StatsGame[];
+};
+
+function tallyShots(playerShots: { fieldHit: string }[]): StatsFieldCounts {
+  const c: StatsFieldCounts = { far: 0, mid: 0, near: 0, risk: 0, miss: 0 };
+  for (const s of playerShots) {
+    if (s.fieldHit === "3") c.far++;
+    else if (s.fieldHit === "2") c.mid++;
+    else if (s.fieldHit === "1") c.near++;
+    else if (s.fieldHit === "mama") c.risk++;
+    else if (s.fieldHit === "miss") c.miss++;
+  }
+  return c;
+}
+
+/** Everything the Stats deep-dive page needs to filter and aggregate
+ * client-side in one shot: every game (with per-player shot tallies) across
+ * every crew the user belongs to, plus the people/crews/events those games
+ * reference. Small enough (a hobby-league's worth of games) to ship whole
+ * and let the filter chips slice it in the browser, matching how the design
+ * itself was built (see the `Component` class in the source .dc.html). */
+export async function getStatsExplorerData(userId: string): Promise<StatsExplorerData> {
+  const memberships = await db.query.groupMembers.findMany({
+    where: eq(groupMembers.userId, userId),
+    with: { group: { with: { members: { with: { user: true } } } } },
+  });
+  if (memberships.length === 0) {
+    return { people: [], crews: [], events: [], games: [] };
+  }
+
+  const groupIds = memberships.map((m) => m.groupId);
+
+  const peopleById = new Map<string, StatsPerson>();
+  const crews: StatsCrew[] = memberships.map((m) => {
+    for (const gm of m.group.members) {
+      peopleById.set(gm.userId, { id: gm.userId, name: gm.user.name ?? "Player" });
+    }
+    return { id: m.group.id, name: m.group.name, memberCount: m.group.members.length };
+  });
+
+  const groupEvents = await db.query.events.findMany({ where: inArray(events.groupId, groupIds) });
+  const eventList: StatsEvent[] = groupEvents
+    .filter((e) => e.groupId !== null)
+    .map((e) => ({ id: e.id, name: e.name, crewId: e.groupId as string, date: e.date }));
+
+  const groupGames = await db.query.games.findMany({
+    where: inArray(games.groupId, groupIds),
+    with: { teams: { with: { players: { with: { shots: true } } } } },
+  });
+
+  const gameList: StatsGame[] = groupGames.map((g) => ({
+    id: g.id,
+    crewId: g.groupId,
+    eventId: g.eventId,
+    matType: g.matType,
+    playedAt: g.playedAt.toISOString(),
+    teams: g.teams.map((t) => {
+      const shots: Record<string, StatsFieldCounts> = {};
+      let points = 0;
+      for (const p of t.players) {
+        const counts = tallyShots(p.shots);
+        shots[p.userId] = counts;
+        points += counts.near + counts.mid * 2 + counts.far * 3;
+      }
+      return { userIds: t.players.map((p) => p.userId), won: t.finalRank === 1, points, shots };
+    }),
+  }));
+
+  return { people: [...peopleById.values()], crews, events: eventList, games: gameList };
 }

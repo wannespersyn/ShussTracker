@@ -1,4 +1,5 @@
 export { BellIcon } from './BellIcon';
+export { ChartIcon } from './ChartIcon';
 export { CreditCardIcon } from './CreditCardIcon';
 export { GroupIcon } from './GroupIcon';
 export { HomeIcon } from './HomeIcon';
@@ -15,3 +16,6 @@ export { ChevronRightIcon } from './ChevronRightIcon';
 export { DeleteIcon } from './DeleteIcon';
 export { StarIcon } from './StarIcon';
 export { PlusIcon } from './PlusIcon';
+export { LockIcon } from './LockIcon';
+export { FilterIcon } from './FilterIcon';
+export { InfoIcon } from './InfoIcon';

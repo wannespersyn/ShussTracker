@@ -2,77 +2,73 @@
 
 /* ---------------------------------------------------------------------
  * Shussapp design tokens
- * Extracted from Claude Design project "Shussapp stats tracker"
- * (Shussapp App.dc.html + Shussapp.dc.html, 16 screens).
+ * Extracted from Claude Design project "Shussapp Flow" (Shussapp
+ * Flow.dc.html, 15 screens).
  * Do not add new colors/sizes/radii/shadows here without checking the
  * source designs first — everything downstream should reuse these.
  * ------------------------------------------------------------------- */
 
 :root {
-  /* Backgrounds — enamel-sign dark green, layered dark -> light */
-  --color-ink: #081a15; /* deepest bg (app shell, share card) */
-  --color-surface: #0b2620; /* primary screen bg, avatar inner circle */
-  --color-surface-raised: #17513f; /* hero/card gradient start (165deg) */
-  --color-surface-raised-end: #0e3227; /* hero/card gradient end */
-  --color-surface-alt: #174c3c; /* selected-tile gradient start (160deg) */
-  --color-surface-alt-end: #103127; /* selected-tile gradient end */
-  --color-surface-deep: #0f3529; /* share card / log-mat frame border */
-  --color-surface-bloom: #15493a; /* radial bloom center: onboarding, empty state, notification, paywall */
-
-  /* Log-mat shot zones (near -> far field, brighter = closer) */
-  --color-field-near: #16a075;
-  --color-field-mid: #12855f;
-  --color-field-far: #0f6b4f;
+  /* Backgrounds — near-black bottle-green, layered dark -> light */
+  --color-ink: #0a0c0a; /* deepest bg (status bar chrome, gold recap slide footer) */
+  --color-surface: #0b0f0c; /* primary screen bg, phone frame fill */
+  --color-surface-raised: #17211b; /* hero/card gradient start (160deg) */
+  --color-surface-raised-end: #0e1411; /* hero/card gradient end */
+  --color-surface-alt: #1d2a1f; /* selected-tile / leaderboard hero gradient start (155deg) */
+  --color-surface-alt-end: #0e1411; /* selected-tile / leaderboard hero gradient end */
+  --color-surface-deep: #131a16; /* standard card / row fill */
+  --color-surface-panel: #141a16; /* nav pill, icon buttons, input fill */
+  --color-surface-bloom: #14201a; /* radial bloom center: team picker mat, onboarding */
 
   /* Gold — primary accent */
-  --color-gold: #f2b01e;
-  --color-gold-hover: #ffd166; /* link hover only */
-  --color-gold-dark: #c07c0a; /* cap-ridge dark stop */
-  --color-gold-shadow: #a96c05; /* chunky CTA "lip" shadow color */
-  --color-gold-end: #e0900f; /* gradient end: best-duo card, paywall price card */
-  --color-gold-end-alt: #b87a06; /* gradient end: season-recap gold slide */
+  --color-gold: #e8b33c;
+  --color-gold-hover: #f5d077; /* link hover only */
+  --color-gold-dark: #c9992f; /* progress-bar gradient end, badge glow */
+  --color-gold-end: #b87a06; /* recap gold-slide gradient end */
 
-  /* Red — "risk zone" accent */
-  --color-red: #e5352b;
-  --color-red-bright: #ff6b60; /* risk numbers, sign-out */
-  --color-red-pale: #ffb3ae; /* thin-log warning copy */
-  --color-red-dark: #9c1f19; /* cap-ridge dark stop */
-  --color-red-end: #a81c15; /* gradient end: event/bracket header */
-  --color-red-mid: #8e1610; /* radial mid stop: cap-of-the-night, biggest-win recap */
-  --color-red-deep: #5b0d09; /* radial darkest stop */
+  /* Red — "mama" / threat accent */
+  --color-red: #c8342b;
+  --color-red-bright: #e05b4e; /* mama numbers, live badges, sign-out */
+  --color-red-pale: #f2a89e; /* thin-log warning copy, risk-zone label text */
+  --color-red-end: #a81c15; /* gradient end where needed */
 
   /* Cream — primary text-on-dark */
-  --color-cream: #f6efdd;
-  --color-cream-dark: #b9af95; /* cap-ridge dark stop */
+  --color-cream: #efe7d6;
 
-  /* Mint — secondary team accent */
-  --color-mint: #5cc8a0;
-  --color-mint-dark: #2e7a5f; /* cap-ridge dark stop */
+  /* Mint — positive/secondary accent (streak deltas, points-up) */
+  --color-mint: #8fbf9c;
+
+  /* Log-mat shot zones (near -> far field, brighter = closer) */
+  --color-field-near: #1f8f68;
+  --color-field-mid: #167058;
+  --color-field-far: #12594a;
 
   /* Fonts (wired to next/font variables in app/layout.tsx) */
-  --font-display: var(--font-anton), sans-serif; /* scoreboard numerals, headlines */
-  --font-heading: var(--font-barlow-condensed), sans-serif; /* uppercase kickers/labels */
-  --font-body: var(--font-barlow), sans-serif; /* body copy */
+  --font-display: var(--font-anton), sans-serif; /* hero numbers, headlines, VS */
+  --font-heading: var(--font-archivo), sans-serif; /* names, section titles, buttons */
+  --font-body: var(--font-archivo), sans-serif; /* body copy */
+  --font-mono: var(--font-ibm-plex-mono), monospace; /* every stat number, timestamp, uppercase meta kicker */
 
   /* Border radii */
   --radius-xs: 4px; /* progress-bar segments, step dots */
-  --radius-sm: 9px; /* small icon buttons, chips */
-  --radius-md: 12px; /* list rows, small cards */
-  --radius-lg: 16px; /* primary buttons, standard cards */
-  --radius-xl: 20px; /* hero cards, sheets, share card */
-  --radius-pill: 999px; /* segmented tabs, circular avatars */
+  --radius-sm: 9px; /* small icon buttons, plus/minus chips */
+  --radius-md: 13px; /* list rows, small cards, icon buttons */
+  --radius-lg: 18px; /* standard cards */
+  --radius-xl: 22px; /* hero cards, sheets */
+  --radius-cta: 28px; /* primary CTAs */
+  --radius-pill: 999px; /* segmented tabs, nav pill, circular avatars */
 
-  /* Signature chunky CTA "lip" shadow (no blur, looks pressed into page) */
-  --shadow-cta: 0 7px 0 var(--color-gold-shadow);
-  --shadow-cta-lg: 0 8px 0 var(--color-gold-shadow); /* 62px onboarding CTA */
-  --shadow-cta-inverted: 0 7px 0 rgba(0, 0, 0, 0.35); /* dark button on gold surface */
-  --shadow-fab: 0 6px 0 var(--color-gold-shadow), 0 10px 22px rgba(0, 0, 0, 0.4);
+  /* Soft ambient glow shadows — no offset "lip", blur only */
+  --shadow-cta: 0 10px 26px rgba(232, 179, 60, 0.24);
+  --shadow-cta-lg: 0 10px 26px rgba(232, 179, 60, 0.24);
+  --shadow-cta-inverted: 0 10px 22px rgba(0, 0, 0, 0.35);
+  --shadow-fab: 0 8px 22px rgba(232, 179, 60, 0.32);
 
   /* Ambient elevation shadows (pure blur, no lip) */
   --shadow-elevation-sm: 0 6px 14px rgba(0, 0, 0, 0.35);
   --shadow-elevation-md: 0 8px 22px rgba(0, 0, 0, 0.4);
   --shadow-elevation-lg: 0 12px 30px rgba(0, 0, 0, 0.45);
-  --shadow-elevation-xl: 0 20px 50px rgba(0, 0, 0, 0.55); /* share card modal, max elevation */
+  --shadow-elevation-xl: 0 20px 50px rgba(0, 0, 0, 0.55); /* max elevation */
 }
 
 @theme inline {
@@ -83,42 +79,38 @@
   --color-surface-alt: var(--color-surface-alt);
   --color-surface-alt-end: var(--color-surface-alt-end);
   --color-surface-deep: var(--color-surface-deep);
+  --color-surface-panel: var(--color-surface-panel);
   --color-surface-bloom: var(--color-surface-bloom);
+
+  --color-gold: var(--color-gold);
+  --color-gold-hover: var(--color-gold-hover);
+  --color-gold-dark: var(--color-gold-dark);
+  --color-gold-end: var(--color-gold-end);
+
+  --color-red: var(--color-red);
+  --color-red-bright: var(--color-red-bright);
+  --color-red-pale: var(--color-red-pale);
+  --color-red-end: var(--color-red-end);
+
+  --color-cream: var(--color-cream);
+
+  --color-mint: var(--color-mint);
 
   --color-field-near: var(--color-field-near);
   --color-field-mid: var(--color-field-mid);
   --color-field-far: var(--color-field-far);
 
-  --color-gold: var(--color-gold);
-  --color-gold-hover: var(--color-gold-hover);
-  --color-gold-dark: var(--color-gold-dark);
-  --color-gold-shadow: var(--color-gold-shadow);
-  --color-gold-end: var(--color-gold-end);
-  --color-gold-end-alt: var(--color-gold-end-alt);
-
-  --color-red: var(--color-red);
-  --color-red-bright: var(--color-red-bright);
-  --color-red-pale: var(--color-red-pale);
-  --color-red-dark: var(--color-red-dark);
-  --color-red-end: var(--color-red-end);
-  --color-red-mid: var(--color-red-mid);
-  --color-red-deep: var(--color-red-deep);
-
-  --color-cream: var(--color-cream);
-  --color-cream-dark: var(--color-cream-dark);
-
-  --color-mint: var(--color-mint);
-  --color-mint-dark: var(--color-mint-dark);
-
   --font-display: var(--font-display);
   --font-heading: var(--font-heading);
   --font-body: var(--font-body);
+  --font-mono: var(--font-mono);
 
   --radius-xs: var(--radius-xs);
   --radius-sm: var(--radius-sm);
   --radius-md: var(--radius-md);
   --radius-lg: var(--radius-lg);
   --radius-xl: var(--radius-xl);
+  --radius-cta: var(--radius-cta);
   --radius-pill: var(--radius-pill);
 
   --shadow-cta: var(--shadow-cta);
@@ -136,11 +128,11 @@
    * lib/theme/tokens.ts `displayHero`. */
   --text-display-2xl: 132px; /* season recap hero stat */
   --text-display-2xl--line-height: 0.84;
-  --text-display-xl: 86px; /* home win-rate split-flap */
-  --text-display-xl--line-height: 1;
+  --text-display-xl: 76px; /* home win-rate number */
+  --text-display-xl--line-height: 0.92;
   --text-display-lg: 64px; /* H2H win count, big score digits */
   --text-display-lg--line-height: 0.9;
-  --text-display-md: 40px; /* headlines: event live title, paywall headline */
+  --text-display-md: 40px; /* headlines: event live title */
   --text-display-md--line-height: 0.98;
   --text-display-sm: 26px; /* screen header titles */
   --text-display-sm--line-height: 1;
@@ -157,17 +149,20 @@
   --text-caption: 12.5px;
   --text-caption--line-height: 1.4;
 
-  /* Kicker tracking is a signature part of the type system: Barlow
-   * Condensed 700, uppercase, letter-spacing ~1.8px at 12-13px. */
-  --tracking-kicker: 0.09em;
+  /* Kicker tracking is a signature part of the type system: mono uppercase
+   * kickers/labels track ~0.14-0.18em; Archivo section headers track
+   * tighter, ~0.06-0.1em. This default matches the mono kicker case. */
+  --tracking-kicker: 0.14em;
 
   /* Motion */
   --animate-roll: roll 1.6s cubic-bezier(0.15, 0.85, 0.25, 1) forwards;
   --animate-fly: fly 0.5s cubic-bezier(0.2, 0.8, 0.3, 1) forwards;
   --animate-pop: pop 0.32s ease-out forwards;
   --animate-glow: glow 2.4s ease-out infinite;
+  --animate-bob: bob 4.5s ease-in-out infinite;
   --animate-push-in: pushIn 0.22s ease-out;
   --animate-fade-in: fadeIn 0.2s ease-out;
+  --animate-sheet-up: sheetUp 0.22s ease-out;
 }
 
 @layer base {
@@ -190,16 +185,16 @@
  * Kept as utilities (not tokens) because they combine 2+ properties. */
 @layer components {
   .bg-gradient-hero {
-    background: linear-gradient(165deg, var(--color-surface-raised), var(--color-surface-raised-end));
+    background: linear-gradient(160deg, var(--color-surface-raised) 0%, var(--color-surface-raised-end) 60%);
   }
   .bg-gradient-alt {
-    background: linear-gradient(160deg, var(--color-surface-alt), var(--color-surface-alt-end));
+    background: linear-gradient(155deg, var(--color-surface-alt), var(--color-surface-alt-end));
   }
   .bg-gradient-gold {
-    background: linear-gradient(120deg, var(--color-gold), var(--color-gold-end));
+    background: linear-gradient(120deg, var(--color-gold), var(--color-gold-dark));
   }
   .bg-gradient-event {
-    /* Tonight event / bracket header */
+    /* live event / bracket header */
     background: linear-gradient(160deg, var(--color-red), var(--color-red-end));
   }
   .bg-stripe-texture {
@@ -207,12 +202,12 @@
     background-image: repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.14) 0 12px, transparent 12px 24px);
   }
   .bg-ruled-texture {
-    /* faint horizontal rule-line overlay: onboarding, empty state, paywall */
-    background-image: linear-gradient(rgba(246, 239, 221, 0.045) 1px, transparent 1px);
+    /* faint horizontal rule-line overlay: onboarding, empty state */
+    background-image: linear-gradient(rgba(239, 231, 214, 0.045) 1px, transparent 1px);
     background-size: 100% 34px;
   }
   .bg-gradient-bloom {
-    /* radial bloom wash: onboarding + empty state background */
+    /* radial bloom wash: onboarding + team-picker mat background */
     background: radial-gradient(120% 80% at 50% 0%, var(--color-surface-bloom) 0%, var(--color-surface) 55%, var(--color-ink) 100%);
   }
 }
@@ -257,10 +252,19 @@
 @keyframes glow {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(229, 53, 43, 0.55);
+    box-shadow: 0 0 0 0 rgba(200, 52, 43, 0.55);
   }
   50% {
-    box-shadow: 0 0 0 14px rgba(229, 53, 43, 0);
+    box-shadow: 0 0 0 14px rgba(200, 52, 43, 0);
+  }
+}
+@keyframes bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-7px);
   }
 }
 @keyframes pushIn {
@@ -279,5 +283,13 @@
   }
   to {
     opacity: 1;
+  }
+}
+@keyframes sheetUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
   }
 }

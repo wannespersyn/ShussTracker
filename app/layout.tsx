@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Anton, Barlow, Barlow_Condensed } from "next/font/google";
+import { Anton, Archivo, IBM_Plex_Mono } from "next/font/google";
 import { ServiceWorkerRegister } from "@/components/pwa/ServiceWorkerRegister";
 import "./globals.css";
 
@@ -9,15 +9,15 @@ const anton = Anton({
   subsets: ["latin"],
 });
 
-const barlowCondensed = Barlow_Condensed({
-  variable: "--font-barlow-condensed",
-  weight: ["500", "600", "700"],
+const archivo = Archivo({
+  variable: "--font-archivo",
+  weight: ["400", "500", "600", "700"],
   subsets: ["latin"],
 });
 
-const barlow = Barlow({
-  variable: "--font-barlow",
-  weight: ["400", "500", "600", "700"],
+const ibmPlexMono = IBM_Plex_Mono({
+  variable: "--font-ibm-plex-mono",
+  weight: ["400", "500", "600"],
   subsets: ["latin"],
 });
 
@@ -31,14 +31,14 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#1b3d2c",
+  themeColor: "#0a0c0a",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${anton.variable} ${barlowCondensed.variable} ${barlow.variable} h-full antialiased`}
+      className={`${anton.variable} ${archivo.variable} ${ibmPlexMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         {children}

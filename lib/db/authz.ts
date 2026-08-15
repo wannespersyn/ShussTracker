@@ -68,6 +68,24 @@ export async function requireGroupOwner(userId: string, groupId: string) {
   if (!group) throw new ForbiddenError("Only the crew owner can do this");
 }
 
+/** Throws ForbiddenError unless the viewer and target share at least one
+ * crew (or are the same user) — the light gate on viewing another
+ * player's profile/achievements/H2H, so user ids can't be probed
+ * cross-crew. */
+export async function requireSharesCrew(viewerId: string, targetUserId: string) {
+  if (viewerId === targetUserId) return;
+
+  const [mine, theirs] = await Promise.all([
+    db.select({ groupId: groupMembers.groupId }).from(groupMembers).where(eq(groupMembers.userId, viewerId)),
+    db.select({ groupId: groupMembers.groupId }).from(groupMembers).where(eq(groupMembers.userId, targetUserId)),
+  ]);
+  const theirGroupIds = new Set(theirs.map((r) => r.groupId));
+
+  if (!mine.some((r) => theirGroupIds.has(r.groupId))) {
+    throw new ForbiddenError("Not in a shared crew");
+  }
+}
+
 /** Teams are always exactly 2 players — enforced here, not by the DB. */
 export function assertTwoPlayersPerTeam(playerIds: readonly string[]) {
   if (playerIds.length !== 2) {

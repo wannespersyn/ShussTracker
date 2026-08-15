@@ -6,3 +6,4 @@ export { LinkButton } from "./LinkButton";
 export { Badge } from "./Badge";
 export { StatCounter } from "./StatCounter";
 export { LeaderboardRow } from "./LeaderboardRow";
+export { ConfirmForm } from "./ConfirmForm";

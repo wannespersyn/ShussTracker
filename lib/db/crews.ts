@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { groups, groupMembers, games } from "@/lib/db/schema";
+import { wilsonLowerBound } from "@/lib/ranking";
 
 function isToday(date: Date) {
   const now = new Date();
@@ -62,6 +63,35 @@ export async function joinCrewByCode(
   return { groupId: group.id };
 }
 
+export async function renameCrew(groupId: string, name: string) {
+  await db.update(groups).set({ name }).where(eq(groups.id, groupId));
+}
+
+export async function regenerateInviteCode(groupId: string): Promise<string> {
+  let inviteCode = generateInviteCode();
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const [existing] = await db.select().from(groups).where(eq(groups.inviteCode, inviteCode)).limit(1);
+    if (!existing) break;
+    inviteCode = generateInviteCode();
+  }
+  await db.update(groups).set({ inviteCode }).where(eq(groups.id, groupId));
+  return inviteCode;
+}
+
+/** Also used for a member leaving a crew on their own — same underlying
+ * operation, just called with their own userId and a member-level (not
+ * owner-level) authz check at the call site. */
+export async function removeCrewMember(groupId: string, userId: string) {
+  await db.delete(groupMembers).where(and(eq(groupMembers.groupId, groupId), eq(groupMembers.userId, userId)));
+}
+
+/** Members cascade-delete via the FK; games/events that referenced this
+ * crew survive with `groupId` set to null (schema's onDelete: "set null") —
+ * historical stats aren't wiped out from under anyone. */
+export async function deleteCrew(groupId: string) {
+  await db.delete(groups).where(eq(groups.id, groupId));
+}
+
 export type CrewLeaderboardEntry = {
   userId: string;
   name: string;
@@ -105,7 +135,12 @@ export async function getCrewLeaderboard(
       wins: wins.get(m.userId) ?? 0,
       gamesPlayed: played.get(m.userId) ?? 0,
     }))
-    .sort((a, b) => b.wins - a.wins || b.gamesPlayed - a.gamesPlayed);
+    .sort(
+      (a, b) =>
+        wilsonLowerBound(b.wins, b.gamesPlayed) - wilsonLowerBound(a.wins, a.gamesPlayed) ||
+        b.wins - a.wins ||
+        b.gamesPlayed - a.gamesPlayed,
+    );
 }
 
 export type CrewRedZoneEntry = {
@@ -148,4 +183,51 @@ export async function getCrewRedZoneLeaderboard(groupId: string): Promise<CrewRe
       gamesPlayed: played.get(m.userId) ?? 0,
     }))
     .sort((a, b) => b.chugs - a.chugs || b.gamesPlayed - a.gamesPlayed);
+}
+
+export type CrewBestDuo = {
+  aUserId: string;
+  aName: string;
+  bUserId: string;
+  bName: string;
+  wins: number;
+  losses: number;
+};
+
+/** The best 2-player pairing across a crew's whole history, ranked by wins
+ * together — for the crew detail page's "Best partner" card. Returns null
+ * once no pair has shared a team. */
+export async function getCrewBestDuo(groupId: string): Promise<CrewBestDuo | null> {
+  const groupGames = await db.query.games.findMany({
+    where: eq(games.groupId, groupId),
+    with: { teams: { with: { players: { with: { user: true } } } } },
+  });
+
+  type DuoTally = { a: { userId: string; name: string }; b: { userId: string; name: string }; wins: number; losses: number };
+  const tally = new Map<string, DuoTally>();
+  for (const game of groupGames) {
+    for (const team of game.teams) {
+      if (team.players.length !== 2) continue;
+      const [p1, p2] = team.players;
+      const key = [p1.userId, p2.userId].sort().join("+");
+      const entry = tally.get(key) ?? {
+        a: { userId: p1.userId, name: p1.user.name ?? "Player" },
+        b: { userId: p2.userId, name: p2.user.name ?? "Player" },
+        wins: 0,
+        losses: 0,
+      };
+      if (team.finalRank === 1) entry.wins++;
+      else entry.losses++;
+      tally.set(key, entry);
+    }
+  }
+
+  let best: DuoTally | null = null;
+  for (const duo of tally.values()) {
+    if (!best || duo.wins > best.wins || (duo.wins === best.wins && duo.wins + duo.losses > best.wins + best.losses)) {
+      best = duo;
+    }
+  }
+  if (!best) return null;
+  return { aUserId: best.a.userId, aName: best.a.name, bUserId: best.b.userId, bName: best.b.name, wins: best.wins, losses: best.losses };
 }

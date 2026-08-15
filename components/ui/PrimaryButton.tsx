@@ -22,17 +22,13 @@ export function primaryButtonClasses({
   size = "md",
   className,
 }: Pick<PrimaryButtonProps, "variant" | "size" | "className">) {
-  const pressTranslate = size === "lg" ? "active:translate-y-[8px]" : "active:translate-y-[7px]";
-
   return cn(
-    "rounded-lg transition-transform duration-100 inline-flex items-center justify-center",
+    "rounded-cta transition-transform duration-100 inline-flex items-center justify-center active:scale-[0.98]",
     "disabled:opacity-40 disabled:pointer-events-none",
     size === "lg" ? "h-15.5 text-2xl" : "h-14.5 text-xl",
     variant !== "ghost" && "font-display uppercase tracking-[1.2px]",
-    variant === "gold" &&
-      cn("bg-gold text-surface", size === "lg" ? "shadow-cta-lg" : "shadow-cta", pressTranslate, "active:shadow-none"),
-    variant === "inverted" &&
-      cn("bg-surface text-cream shadow-cta-inverted", pressTranslate, "active:shadow-none"),
+    variant === "gold" && cn("bg-gold text-ink", size === "lg" ? "shadow-cta-lg" : "shadow-cta"),
+    variant === "inverted" && "bg-ink text-cream shadow-cta-inverted",
     variant === "outline" && "bg-transparent text-cream border-2 border-cream/28",
     variant === "ghost" &&
       "bg-transparent text-cream/65 border-2 border-dashed border-cream/22 font-heading font-bold text-base tracking-[1.6px] uppercase",

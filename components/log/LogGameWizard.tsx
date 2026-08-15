@@ -2,75 +2,86 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { capCrownClipPath, capRingGradient, capRingPairs, type CapRingColor } from "@/lib/theme/tokens";
+import { capRingGradient, capRingPairs, type CapRingColor } from "@/lib/theme/tokens";
+import { shortNamesFor } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { BackButton, PrimaryButton } from "@/components/ui";
+import { DuoPairingBoard } from "@/components/teams/DuoPairingBoard";
+import { pairIntoDuos, shuffleIntoDuos, toTeamPlayers, type Duo, type RosterPlayer, type TeamPlayer } from "@/lib/teams";
 import { logGame } from "@/app/(app)/log/actions";
 
-const TEAM_COLORS: CapRingColor[] = ["gold", "red", "mint", "cream"];
 const FIELD_HITS = ["3", "2", "1", "mama", "miss"] as const;
 type FieldHit = (typeof FIELD_HITS)[number];
 
-type RosterPlayer = { id: string; name: string };
-type Player = RosterPlayer & { initials: string; ring: CapRingColor };
-type Team = { id: string; label: string; color: CapRingColor; players: [Player, Player] };
 type FlyingCap = { id: number; left: string; top: string };
 
-function initialsFor(name: string) {
-  const parts = name.trim().split(/\s+/);
-  return (parts.length > 1 ? parts[0][0] + parts[1][0] : name.slice(0, 2)).toUpperCase();
-}
-
-function shuffle<T>(arr: T[]): T[] {
-  const copy = [...arr];
-  for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]];
-  }
-  return copy;
-}
-
-function buildTeams(players: Player[]): Team[] {
-  const shuffled = shuffle(players);
-  const teams: Team[] = [];
-  for (let i = 0; i < shuffled.length; i += 2) {
-    teams.push({
-      id: `team-${i / 2}`,
-      label: `Team ${i / 2 + 1}`,
-      color: TEAM_COLORS[(i / 2) % TEAM_COLORS.length],
-      players: [shuffled[i], shuffled[i + 1]],
-    });
-  }
-  return teams;
-}
-
 const STEP_COPY = [
-  { kicker: "New game", title: "Pick your mat" },
-  { kicker: "Step 2 of 4", title: "Set the duos" },
-  { kicker: "Step 3 of 4", title: "Flick 'em" },
-  { kicker: "Last call", title: "Who won" },
+  { kicker: "Step 1 of 5", title: "Pick your mat" },
+  { kicker: "Step 2 of 5", title: "Choose players" },
+  { kicker: "Step 3 of 5", title: "Set the duos" },
+  { kicker: "Step 4 of 5", title: "Flick 'em" },
+  { kicker: "Step 5 of 5", title: "Who won" },
 ];
 
-export function LogGameWizard({ groupId, roster }: { groupId: string; roster: RosterPlayer[] }) {
+type WizardResult = {
+  matType: "4" | "8";
+  teams: { label: string; playerIds: string[]; finalRank: number }[];
+  shotsByPlayer: { playerId: string; fieldHit: FieldHit }[];
+};
+
+export function LogGameWizard({
+  groupId,
+  eventId,
+  roster,
+  presetPlayerIds,
+  lockedTeams,
+  onComplete,
+  backHref = "/home",
+}: Readonly<{
+  groupId?: string;
+  eventId?: string;
+  roster: RosterPlayer[];
+  presetPlayerIds?: string[];
+  /** Fixed, non-swappable teams (tournament match play) — skips mat-size
+   * picking and duo pairing entirely, starting right at shot logging.
+   * Always exactly 2 teams (a bracket match). */
+  lockedTeams?: Duo[];
+  /** Called with the finished result instead of the built-in `logGame`
+   * call — lets tournament match play record the result against its own
+   * bracket bookkeeping instead of a plain casual game. */
+  onComplete?: (result: WizardResult) => void | Promise<void>;
+  backHref?: string;
+}>) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
-  const players = useMemo<Player[]>(
-    () =>
-      roster.map((p, i) => ({
-        ...p,
-        initials: initialsFor(p.name),
-        ring: TEAM_COLORS[i % TEAM_COLORS.length],
-      })),
-    [roster],
-  );
+  const players = useMemo<TeamPlayer[]>(() => toTeamPlayers(roster), [roster]);
+  const shortNames = useMemo(() => shortNamesFor(players), [players]);
 
-  const [step, setStep] = useState(0);
-  const [matType, setMatType] = useState<"4" | "8" | null>(null);
-  const [selectedPlayerIds, setSelectedPlayerIds] = useState<string[]>([]);
-  const [teams, setTeams] = useState<Team[] | null>(null);
-  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
-  const [activeShooterId, setActiveShooterId] = useState<string | null>(null);
+  // A duo pairing decided elsewhere (Chwazi) and handed off via query
+  // param — skips straight to the duo-review step instead of re-picking a
+  // mat and shuffling fresh.
+  const presetTeams = useMemo<Duo[] | null>(() => {
+    if (!presetPlayerIds || presetPlayerIds.length < 4 || presetPlayerIds.length % 2 !== 0) return null;
+    const ordered = presetPlayerIds
+      .map((id) => players.find((p) => p.id === id))
+      .filter((p): p is TeamPlayer => Boolean(p));
+    return ordered.length === presetPlayerIds.length ? pairIntoDuos(ordered) : null;
+  }, [presetPlayerIds, players]);
+
+  const initialTeams = lockedTeams ?? presetTeams;
+
+  const [step, setStep] = useState(lockedTeams ? 2 : initialTeams ? 1 : 0);
+  const [matType, setMatType] = useState<"4" | "8" | null>(
+    initialTeams ? (initialTeams.length > 2 ? "8" : "4") : null,
+  );
+  const [selectedPlayerIds, setSelectedPlayerIds] = useState<string[]>(
+    initialTeams ? initialTeams.flatMap((t) => t.players.map((p) => p.id)) : [],
+  );
+  const [teams, setTeams] = useState<Duo[] | null>(initialTeams);
+  const [activeShooterId, setActiveShooterId] = useState<string | null>(
+    lockedTeams ? (lockedTeams[0]?.players[0]?.id ?? null) : null,
+  );
   const [shotLog, setShotLog] = useState<{ playerId: string; fieldHit: FieldHit }[]>([]);
   const [flyingCaps, setFlyingCaps] = useState<FlyingCap[]>([]);
   const [winnerTeamId, setWinnerTeamId] = useState<string | null>(null);
@@ -94,35 +105,6 @@ export function LogGameWizard({ groupId, roster }: { groupId: string; roster: Ro
       if (prev.length >= needed) return prev;
       return [...prev, playerId];
     });
-  }
-
-  function shuffleDuos() {
-    if (!teams) return;
-    setTeams(buildTeams(gamePlayers));
-    setSelectedPlayerId(null);
-  }
-
-  function tapPlayer(playerId: string) {
-    if (!teams) return;
-    if (selectedPlayerId === null) {
-      setSelectedPlayerId(playerId);
-      return;
-    }
-    if (selectedPlayerId === playerId) {
-      setSelectedPlayerId(null);
-      return;
-    }
-    setTeams((prev) => {
-      if (!prev) return prev;
-      const flat = prev.flatMap((t) => t.players);
-      const a = flat.find((p) => p.id === selectedPlayerId)!;
-      const b = flat.find((p) => p.id === playerId)!;
-      return prev.map((t) => ({
-        ...t,
-        players: t.players.map((p) => (p.id === a.id ? b : p.id === b.id ? a : p)) as [Player, Player],
-      }));
-    });
-    setSelectedPlayerId(null);
   }
 
   function logShot(fieldHit: FieldHit) {
@@ -149,21 +131,26 @@ export function LogGameWizard({ groupId, roster }: { groupId: string; roster: Ro
   }
 
   const canAdvance =
-    (step === 0 && matType !== null && !notEnoughPlayers && selectedPlayerIds.length === needed) ||
-    (step === 1 && teams !== null) ||
-    step === 2 ||
-    (step === 3 && matType === "4" ? winnerTeamId !== null : rankedTeamIds.length === teams?.length);
+    (step === 0 && matType !== null && !notEnoughPlayers) ||
+    (step === 1 && selectedPlayerIds.length === needed) ||
+    (step === 2 && teams !== null) ||
+    step === 3 ||
+    (step === 4 && matType === "4" ? winnerTeamId !== null : rankedTeamIds.length === teams?.length);
 
   function next() {
-    if (step < 3) {
-      if (step === 0) {
-        setTeams(buildTeams(players.filter((p) => selectedPlayerIds.includes(p.id))));
+    if (step < 4) {
+      // Duos are shuffled once the player picks are final (leaving step 1,
+      // not step 0 — `selectedPlayerIds` isn't settled until then for
+      // rosters bigger than the mat). The shooter is picked once duos are
+      // final too, so a swap made on the pairing board (step 2) is honored.
+      if (step === 1) {
+        setTeams(shuffleIntoDuos(players.filter((p) => selectedPlayerIds.includes(p.id))));
       }
-      if (step === 1) setActiveShooterId(teams?.[0].players[0].id ?? null);
+      if (step === 2) setActiveShooterId(teams?.[0]?.players[0]?.id ?? null);
       setStep((s) => s + 1);
       return;
     }
-    // Final step — submit.
+    // Final step (4, "Who won") — submit.
     if (!teams) return;
     const finalTeams =
       matType === "4"
@@ -179,8 +166,13 @@ export function LogGameWizard({ groupId, roster }: { groupId: string; roster: Ro
           }));
 
     startTransition(() => {
+      if (onComplete) {
+        onComplete({ matType: matType!, teams: finalTeams, shotsByPlayer: shotLog });
+        return;
+      }
       logGame({
-        groupId,
+        groupId: groupId!,
+        eventId,
         matType: matType!,
         teams: finalTeams,
         shotsByPlayer: shotLog,
@@ -189,8 +181,9 @@ export function LogGameWizard({ groupId, roster }: { groupId: string; roster: Ro
   }
 
   function back() {
-    if (step === 0) {
-      router.push("/home");
+    const minStep = lockedTeams ? 2 : 0;
+    if (step === minStep) {
+      router.push(backHref);
       return;
     }
     setStep((s) => s - 1);
@@ -200,11 +193,14 @@ export function LogGameWizard({ groupId, roster }: { groupId: string; roster: Ro
     fieldHit: fh,
     label: fh === "mama" ? "RISK" : fh === "miss" ? "MISS" : fh,
     n: shotLog.filter((s) => s.fieldHit === fh).length,
-    color: fh === "mama" ? "var(--color-red-bright)" : fh === "miss" ? "rgba(246,239,221,.4)" : "var(--color-cream)",
+    color: fh === "mama" ? "var(--color-red-bright)" : fh === "miss" ? "rgba(239,231,214,.4)" : "var(--color-cream)",
   }));
 
-  const copy = STEP_COPY[step];
-  const dots = [1, 2, 3].map((i) => (step >= i ? "bg-gold" : "bg-cream/15"));
+  const copy =
+    lockedTeams && step === 2
+      ? { kicker: "Tournament match", title: `${lockedTeams[0].label} vs ${lockedTeams[1].label}` }
+      : STEP_COPY[step];
+  const dots = [1, 2, 3, 4].map((i) => (step >= i ? "bg-gold" : "bg-cream/15"));
 
   return (
     <div className="relative min-h-screen bg-surface flex flex-col pt-16.5 pb-2">
@@ -216,12 +212,13 @@ export function LogGameWizard({ groupId, roster }: { groupId: string; roster: Ro
           </div>
           <div className="font-display text-display-sm tracking-[0.6px] text-cream">{copy.title}</div>
         </div>
-        <div className="flex gap-1.25">
-          <div className="w-5.5 h-1.25 rounded-[3px] bg-gold" />
-          {dots.map((c, i) => (
-            <div key={i} className={cn("w-5.5 h-1.25 rounded-[3px]", c)} />
-          ))}
-        </div>
+      </div>
+
+      <div className="flex gap-1.25 px-5 w-full mt-4">
+        <div className="w-full h-1.25 rounded-[3px] bg-gold" />
+        {dots.map((c, i) => (
+          <div key={i} className={cn("w-full h-1.25 rounded-[3px]", c)} />
+        ))}
       </div>
 
       {step === 0 && (
@@ -245,6 +242,11 @@ export function LogGameWizard({ groupId, roster }: { groupId: string; roster: Ro
               Your crew only has {players.length} — need {needed} for this mat.
             </div>
           )}
+        </div>
+      )}
+
+      {step === 1 && (
+        <div className="flex-1 px-5 py-6.5 flex flex-col gap-4">
           {matType !== null && !notEnoughPlayers && players.length > needed && (
             <div className="flex flex-col gap-2.5">
               <div className="font-body text-body-sm text-cream/55">
@@ -260,10 +262,10 @@ export function LogGameWizard({ groupId, roster }: { groupId: string; roster: Ro
                       onClick={() => togglePlayerSelection(p.id)}
                       className={cn(
                         "px-4 h-11 rounded-md font-heading font-bold text-sm",
-                        picked ? "bg-gold text-surface" : "bg-cream/8 text-cream/70",
+                        picked ? "bg-gold text-ink" : "bg-cream/8 text-cream/70",
                       )}
                     >
-                      {p.name}
+                      {shortNames[p.id] ?? p.name}
                     </button>
                   );
                 })}
@@ -273,9 +275,11 @@ export function LogGameWizard({ groupId, roster }: { groupId: string; roster: Ro
         </div>
       )}
 
-      {step === 1 && teams && (
+      {}
+
+      {step === 2 && teams && (
         <div className="flex-1 px-5 pt-5.5 flex flex-col gap-3.5 overflow-auto">
-          <div className="flex items-baseline gap-2">
+          <div className="flex flex-col items-baseline gap-2">
             <div className="font-heading font-bold text-[12px] tracking-[1.6px] uppercase text-gold">
               {matType}-PLAYER MAT
             </div>
@@ -283,44 +287,11 @@ export function LogGameWizard({ groupId, roster }: { groupId: string; roster: Ro
               Tap two names to swap. Nobody&apos;s stuck with their partner.
             </div>
           </div>
-          {teams.map((t) => (
-            <div key={t.id} className="rounded-lg bg-cream/5 border border-cream/10 p-3.5 pb-4">
-              <div className="flex items-center gap-2 mb-2.5">
-                <div className="w-3.5 h-3.5 rounded-pill" style={{ background: capRingPairs[t.color].light }} />
-                <div className="font-heading font-bold text-sm tracking-[1.8px] uppercase text-cream/70">
-                  {t.label}
-                </div>
-              </div>
-              <div className="flex gap-2.5">
-                {t.players.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => tapPlayer(p.id)}
-                    className={cn(
-                      "flex-1 h-16 rounded-md font-display text-[22px] flex items-center justify-center",
-                      selectedPlayerId === p.id
-                        ? "bg-gold/20 border-2 border-gold text-gold"
-                        : "bg-cream/8 border-2 border-transparent text-cream",
-                    )}
-                  >
-                    {p.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
-          <button
-            type="button"
-            onClick={shuffleDuos}
-            className="h-13 rounded-md border-2 border-dashed border-cream/22 flex items-center justify-center gap-2 font-heading font-bold text-base tracking-[1.6px] uppercase text-cream/65"
-          >
-            ↻ Shuffle the duos
-          </button>
+          <DuoPairingBoard players={gamePlayers} teams={teams} onChange={setTeams} />
         </div>
       )}
 
-      {step === 2 && teams && (
+      {step === 3 && teams && (
         <div className="flex-1 px-5 pt-4 flex flex-col relative">
           <div className="flex flex-wrap gap-2 mb-3.5">
             {gamePlayers.map((p) => (
@@ -330,10 +301,10 @@ export function LogGameWizard({ groupId, roster }: { groupId: string; roster: Ro
                 onClick={() => setActiveShooterId(p.id)}
                 className={cn(
                   "flex-1 min-w-19 h-11 rounded-md font-heading font-bold text-sm tracking-[0.6px]",
-                  activeShooterId === p.id ? "bg-gold text-surface" : "bg-cream/8 text-cream/70",
+                  activeShooterId === p.id ? "bg-gold text-ink" : "bg-cream/8 text-cream/70",
                 )}
               >
-                {p.name}
+                {shortNames[p.id] ?? p.name}
               </button>
             ))}
           </div>
@@ -343,52 +314,61 @@ export function LogGameWizard({ groupId, roster }: { groupId: string; roster: Ro
               className="absolute inset-0 pointer-events-none"
               style={{ backgroundImage: "repeating-linear-gradient(45deg, rgba(11,38,32,.05) 0 3px, transparent 3px 7px)" }}
             />
-            <button
-              type="button"
-              onClick={() => logShot("3")}
-              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[78%] aspect-square rounded-pill bg-field-far shadow-[inset_0_3px_10px_rgba(0,0,0,.35)] flex flex-col items-center pt-3.5"
-            >
-              <span className="font-heading font-bold text-[13px] tracking-[2px] text-cream/65">FAR · 3</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => logShot("2")}
-              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[55%] aspect-square rounded-pill bg-field-mid shadow-[inset_0_3px_8px_rgba(0,0,0,.3)] flex flex-col items-center pt-3"
-            >
-              <span className="font-heading font-bold text-[13px] tracking-[2px] text-cream/70">MID · 2</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => logShot("1")}
-              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[34%] aspect-square rounded-pill bg-field-near shadow-[inset_0_3px_8px_rgba(0,0,0,.28)] flex flex-col items-center pt-3"
-            >
-              <span className="font-heading font-bold text-[12px] tracking-[2px] text-[rgba(4,23,15,.75)]">NEAR · 1</span>
-            </button>
+
+            {/* Mat lane: a funnel of pockets narrowing from NEAR (wide, closest
+                to the flick) up to FAR (narrow, hardest) — a shuffleboard lane,
+                not a dartboard bullseye. */}
+            <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0 w-full h-full">
+              <polygon
+                points="8,98 92,98 80,74 20,74"
+                className="fill-field-near cursor-pointer"
+                onClick={() => logShot("1")}
+              />
+              <polygon
+                points="20,74 80,74 70,48 30,48"
+                className="fill-field-mid cursor-pointer"
+                onClick={() => logShot("2")}
+              />
+              <polygon
+                points="30,48 70,48 60,22 40,22"
+                className="fill-field-far cursor-pointer"
+                onClick={() => logShot("3")}
+              />
+              <g className="pointer-events-none">
+                <text x="50" y="90" textAnchor="middle" fontSize="5" className="font-heading font-bold fill-cream/70" style={{ letterSpacing: "0.06em" }}>
+                  NEAR · 1
+                </text>
+                <text x="50" y="64" textAnchor="middle" fontSize="5" className="font-heading font-bold fill-cream/75" style={{ letterSpacing: "0.06em" }}>
+                  MID · 2
+                </text>
+                <text x="50" y="37" textAnchor="middle" fontSize="4.3" className="font-heading font-bold fill-cream/80" style={{ letterSpacing: "0.06em" }}>
+                  FAR · 3
+                </text>
+              </g>
+            </svg>
+
             <div
-              className="absolute w-9.5 h-9.5 rotate-12 pointer-events-none shadow-elevation-sm"
-              style={{ left: "18%", top: "22%", background: capRingGradient("gold"), clipPath: capCrownClipPath }}
+              className="absolute w-8.5 h-8.5 rounded-pill -rotate-22 pointer-events-none shadow-elevation-sm"
+              style={{ right: "13%", top: "58%", background: capRingGradient("cream") }}
             />
             <div
-              className="absolute w-8.5 h-8.5 -rotate-22 pointer-events-none shadow-elevation-sm"
-              style={{ right: "13%", top: "36%", background: capRingGradient("cream"), clipPath: capCrownClipPath }}
+              className="absolute w-9 h-9 rounded-pill rotate-34 pointer-events-none shadow-elevation-sm"
+              style={{ left: "12%", bottom: "10%", background: capRingGradient("red") }}
             />
-            <div
-              className="absolute w-9 h-9 rotate-34 pointer-events-none shadow-elevation-sm"
-              style={{ left: "30%", bottom: "12%", background: capRingGradient("red"), clipPath: capCrownClipPath }}
-            />
+
             <button
               type="button"
               onClick={() => logShot("mama")}
-              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 rounded-pill bg-red border-5 border-cream flex flex-col items-center justify-center animate-glow"
+              className="absolute left-1/2 top-2.5 -translate-x-1/2 w-[86%] h-13.5 rounded-md bg-red border-4 border-cream flex flex-col items-center justify-center animate-glow"
             >
-              <div className="font-display text-2xl text-white leading-none">RISK</div>
-              <div className="font-heading font-bold text-[11px] tracking-[1.4px] text-white/85">THEY CHUG</div>
+              <div className="font-display text-lg text-white leading-none">RISK</div>
+              <div className="font-heading font-bold text-[10px] tracking-[1.2px] text-white/85 mt-0.5">THEY CHUG</div>
             </button>
             {flyingCaps.map((c) => (
               <div
                 key={c.id}
-                className="absolute w-10 h-10 animate-fly pointer-events-none shadow-elevation-sm"
-                style={{ left: c.left, top: c.top, background: capRingGradient("gold"), clipPath: capCrownClipPath }}
+                className="absolute w-10 h-10 rounded-pill animate-fly pointer-events-none shadow-elevation-sm"
+                style={{ left: c.left, top: c.top, background: capRingGradient("gold") }}
               />
             ))}
           </div>
@@ -404,7 +384,7 @@ export function LogGameWizard({ groupId, roster }: { groupId: string; roster: Ro
           <div className="mt-3.5 flex items-center gap-2">
             {tally.map((t) => (
               <div key={t.fieldHit} className="flex-1 text-center py-2 rounded-md bg-cream/5">
-                <div className="font-display text-[22px]" style={{ color: t.color }}>
+                <div className="font-mono font-semibold text-[22px]" style={{ color: t.color }}>
                   {t.n}
                 </div>
                 <div className="font-heading font-semibold text-[11px] tracking-[1.2px] text-cream/45 uppercase">
@@ -423,7 +403,7 @@ export function LogGameWizard({ groupId, roster }: { groupId: string; roster: Ro
         </div>
       )}
 
-      {step === 3 && teams && (
+      {step === 4 && teams && (
         <div className="flex-1 px-5 pt-5.5 flex flex-col gap-3 overflow-auto">
           <div className="font-body text-[14.5px] text-cream/55">
             {matType === "4" ? "Tap the winning duo." : "Tap teams in order of finish, best first."}
@@ -442,21 +422,21 @@ export function LogGameWizard({ groupId, roster }: { groupId: string; roster: Ro
                 )}
               >
                 <div
-                  className="w-11.5 h-11.5 rounded-pill flex items-center justify-center font-display text-xl text-surface"
+                  className="w-11.5 h-11.5 rounded-pill flex items-center justify-center font-mono font-semibold text-xl text-ink"
                   style={{ background: capRingPairs[t.color].light }}
                 >
                   {rank ?? "–"}
                 </div>
                 <div className="flex-1">
-                  <div className="font-display text-2xl text-cream">
+                  <div className="font-heading font-semibold text-heading text-cream">
                     {t.players.map((p) => p.name).join(" & ")}
                   </div>
-                  <div className="font-heading font-semibold text-[13px] tracking-[1.4px] uppercase text-cream/45">
+                  <div className="font-mono font-medium text-[10px] tracking-widest uppercase text-cream/45">
                     {t.label}
                   </div>
                 </div>
                 {rank !== null && (
-                  <div className="font-display text-[34px]" style={{ color: capRingPairs[t.color].light }}>
+                  <div className="font-mono font-semibold text-[22px]" style={{ color: capRingPairs[t.color].light }}>
                     #{rank}
                   </div>
                 )}
@@ -474,7 +454,11 @@ export function LogGameWizard({ groupId, roster }: { groupId: string; roster: Ro
 
       <div className="px-5 pt-3.5">
         <PrimaryButton className="h-16 w-full" size="lg" disabled={!canAdvance || isPending} onClick={next}>
-          {isPending ? "Saving…" : step < 3 ? ["NEXT", "LOCK IN TEAMS", "DONE FLICKING"][step] : "SAVE THE GAME"}
+          {isPending
+            ? "Saving…"
+            : step < 4
+              ? ["NEXT", "NEXT", "LOCK IN TEAMS", "DONE FLICKING"][step]
+              : "SAVE THE GAME"}
         </PrimaryButton>
       </div>
     </div>
@@ -487,13 +471,13 @@ function MatTile({
   dots,
   selected,
   onClick,
-}: {
+}: Readonly<{
   label: string;
   sub: string;
   dots: CapRingColor[];
   selected: boolean;
   onClick: () => void;
-}) {
+}>) {
   return (
     <button
       type="button"
@@ -505,11 +489,7 @@ function MatTile({
     >
       <div className="flex gap-2 flex-wrap max-w-50">
         {dots.map((ring, i) => (
-          <div
-            key={i}
-            className="w-9 h-9"
-            style={{ background: capRingGradient(ring), clipPath: capCrownClipPath }}
-          />
+          <div key={i} className="w-9 h-9 rounded-pill" style={{ background: capRingGradient(ring) }} />
         ))}
       </div>
       <div>

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { AvatarChip } from "@/components/ui/AvatarChip";
 import type { CapRingColor } from "@/lib/theme/tokens";
 import { cn } from "@/lib/cn";
@@ -14,8 +15,17 @@ type LeaderboardRowProps = {
   pointsLabel?: string;
   /** Current-user highlight — independent of rank. */
   highlighted?: boolean;
+  /** Navigates to a fixed route (e.g. a player's profile) as a real
+   * `<Link>`. Mutually exclusive with `onClick`. */
+  href?: string;
   onClick?: () => void;
 };
+
+const rowClasses = (highlighted: boolean) =>
+  cn(
+    "w-full flex items-center rounded-md border px-3 py-2.5 text-left",
+    highlighted ? "bg-linear-to-r from-gold/15 to-surface-deep border-gold" : "bg-surface-deep border-cream/6",
+  );
 
 export function LeaderboardRow({
   rank,
@@ -26,33 +36,41 @@ export function LeaderboardRow({
   points,
   pointsLabel = "Points",
   highlighted = false,
+  href,
   onClick,
 }: LeaderboardRowProps) {
-  const isFirst = rank === 1;
+  const isTop3 = rank <= 3;
 
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "w-full flex items-center gap-3 rounded-xl border px-3.5 py-3 text-left",
-        highlighted ? "bg-gold/10 border-gold/30" : "bg-cream/5 border-cream/10",
-      )}
-    >
-      <div className={cn("font-display text-heading w-[30px]", isFirst ? "text-gold" : "text-cream/45")}>
+  const content = (
+    <>
+      <div className={cn("font-mono font-semibold text-body w-6.5", isTop3 ? "text-gold" : "text-cream/40")}>
         {rank}
       </div>
-      <AvatarChip initials={initials} ring={ring} size={40} />
+      <AvatarChip initials={initials} ring={ring} size={32} className="mr-2.5" />
       <div className="flex-1 min-w-0">
-        <div className="font-display text-[20px] leading-[1.1] text-cream truncate">{name}</div>
-        {sub && <div className="font-body text-[12.5px] text-cream/45 truncate">{sub}</div>}
+        <div className="font-heading font-semibold text-body-sm leading-[1.2] text-cream truncate">{name}</div>
+        {sub && <div className="font-mono text-[9.5px] leading-[1.3] text-cream/40 mt-0.5 truncate">{sub}</div>}
       </div>
       <div className="text-right shrink-0">
-        <div className={cn("font-display text-[22px]", isFirst ? "text-gold" : "text-cream")}>{points}</div>
-        <div className="font-heading font-semibold text-[11px] tracking-[1.2px] text-cream/35 uppercase">
-          {pointsLabel}
-        </div>
+        <div className="font-mono font-semibold text-body-sm text-gold">{points}</div>
+        {pointsLabel !== "Points" && (
+          <div className="font-mono text-[9px] tracking-kicker text-cream/35 uppercase mt-0.5">{pointsLabel}</div>
+        )}
       </div>
+    </>
+  );
+
+  if (href) {
+    return (
+      <Link href={href} className={rowClasses(highlighted)}>
+        {content}
+      </Link>
+    );
+  }
+
+  return (
+    <button type="button" onClick={onClick} className={rowClasses(highlighted)}>
+      {content}
     </button>
   );
 }

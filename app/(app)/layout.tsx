@@ -9,7 +9,7 @@ export default async function AppLayout({ children }: Readonly<{ children: React
   return (
     <div className="flex-1 flex flex-col">
       {children}
-      <BottomNav />
+      <BottomNav currentUserId={session.user.id} />
     </div>
   );
 }

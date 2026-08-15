@@ -1,4 +1,4 @@
-import { capCrownClipPath, capRingGradient, capRingPairs, type CapRingColor } from "@/lib/theme/tokens";
+import { capFaceGradient, capInkColor, capRingGradient, type CapRingColor } from "@/lib/theme/tokens";
 import { cn } from "@/lib/cn";
 
 type AvatarChipProps = {
@@ -6,39 +6,39 @@ type AvatarChipProps = {
   ring?: CapRingColor;
   /** Outer diameter in px. */
   size?: number;
-  /** Inner-circle treatment — "dark" (ink bg/cream text) is the common
-   * case across leaderboards/replay/H2H; "light" (cream bg/ink text) is
-   * used for the home-header hero chip. */
-  variant?: "dark" | "light";
+  /** Adds the ambient drop shadow used for hero-sized chips (home header,
+   * onboarding, leaderboard "king of the mat" capsule) — small list-row
+   * chips skip it. */
+  elevated?: boolean;
   className?: string;
 };
 
-export function AvatarChip({
-  initials,
-  ring = "gold",
-  size = 40,
-  variant = "dark",
-  className,
-}: AvatarChipProps) {
-  const bezelSize = Math.round(size * 0.76);
-  const innerSize = Math.round(size * 0.64);
+/** Bottle-cap avatar: a sunburst ring around a glossy radial "face," with
+ * initials set directly on the face in a dark ink tone — no separate
+ * neutral center plate. */
+export function AvatarChip({ initials, ring = "gold", size = 40, elevated = false, className }: AvatarChipProps) {
+  const inset = Math.max(2, Math.round(size * 0.09));
   const fontSize = Math.max(10, Math.round(size * 0.32));
 
   return (
     <div
-      className={cn("relative shrink-0", className)}
-      style={{ width: size, height: size, background: capRingGradient(ring), clipPath: capCrownClipPath }}
+      className={cn("relative shrink-0 rounded-pill", className)}
+      style={{
+        width: size,
+        height: size,
+        background: capRingGradient(ring),
+        boxShadow: `inset 0 0 0 1px rgba(0,0,0,.5), inset 0 -2px 3px rgba(0,0,0,.35), inset 0 2px 3px rgba(255,255,255,.12)${elevated ? ", 0 5px 16px rgba(0,0,0,.5)" : ""}`,
+      }}
     >
       <div
-        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-pill"
-        style={{ width: bezelSize, height: bezelSize, background: capRingPairs[ring].light }}
-      />
-      <div
-        className={cn(
-          "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-pill flex items-center justify-center font-display",
-          variant === "dark" ? "bg-surface text-cream" : "bg-cream text-surface",
-        )}
-        style={{ width: innerSize, height: innerSize, fontSize }}
+        className="absolute rounded-pill flex items-center justify-center font-heading font-bold"
+        style={{
+          inset,
+          background: capFaceGradient(ring),
+          boxShadow: "inset 0 1px 2px rgba(0,0,0,.45), inset 0 -1px 1px rgba(255,255,255,.16), 0 0 0 1px rgba(0,0,0,.35)",
+          fontSize,
+          color: capInkColor(ring),
+        }}
       >
         {initials}
       </div>

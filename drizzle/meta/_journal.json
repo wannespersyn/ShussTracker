@@ -8,6 +8,13 @@
       "when": 1786710581214,
       "tag": "0000_tan_zaran",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1786781589374,
+      "tag": "0001_slow_violations",
+      "breakpoints": true
     }
   ]
 }
