@@ -6,6 +6,64 @@ import { DuoPairingBoard } from "@/components/teams/DuoPairingBoard";
 import { pairIntoDuos, shuffleIntoDuos, toTeamPlayers, type Duo, type RosterPlayer, type TeamPlayer } from "@/lib/teams";
 import { cn } from "@/lib/cn";
 import { createTournamentAction } from "@/app/(app)/tournaments/new/actions";
+import type { TournamentFormat } from "@/lib/db/tournaments";
+
+type FormatOption = {
+  value: TournamentFormat;
+  label: string;
+  tagline: string;
+  preview: string;
+  suggestion: string;
+  disabledReason?: string;
+};
+
+/** Live preview + "what fits best" copy per format, computed from the
+ * actual duo count — not generic marketing text. Double elim additionally
+ * needs an exact power-of-two duo count (see `lib/db/tournaments.ts`), so
+ * it's disabled with a concrete instruction when the count doesn't fit. */
+function formatOptionsFor(duoCount: number): FormatOption[] {
+  const singleGames = Math.max(duoCount - 1, 0);
+  const doubleGames = Math.max(duoCount * 2 - 2, 0);
+  const robinGames = Math.round((duoCount * (duoCount - 1)) / 2);
+  const doubleValid = duoCount >= 4 && (duoCount & (duoCount - 1)) === 0;
+
+  return [
+    {
+      value: "single_elim",
+      label: "SINGLE ELIM",
+      tagline: "One loss and you're out.",
+      preview: `${duoCount} duos · ${singleGames} matches to a champion`,
+      suggestion:
+        duoCount >= 6
+          ? "Best fit — fastest way to a winner with this many duos."
+          : "Solid default — quick and decisive.",
+    },
+    {
+      value: "double_elim",
+      label: "DOUBLE ELIM",
+      tagline: "Lose twice before you're out.",
+      preview: doubleValid
+        ? `${duoCount} duos · up to ${doubleGames} matches, room for a comeback`
+        : "Needs 4, 8, 16… duos",
+      suggestion: doubleValid
+        ? duoCount <= 8
+          ? "Best fit — forgiving bracket for a medium field."
+          : "Works, but it'll be a longer night."
+        : `You have ${duoCount} — add or drop a duo to reach a power of two.`,
+      disabledReason: doubleValid ? undefined : `Needs an exact power-of-two duo count (4, 8, 16…) — you have ${duoCount}.`,
+    },
+    {
+      value: "round_robin",
+      label: "ROUND ROBIN",
+      tagline: "Everyone plays everyone, ranked by wins.",
+      preview: `${duoCount} duos · ${robinGames} matches total`,
+      suggestion:
+        duoCount <= 6
+          ? "Best fit — nobody's eliminated early."
+          : `That's ${robinGames} matches — a long night for ${duoCount} duos.`,
+    },
+  ];
+}
 
 export function TournamentSetup({
   groupId,
@@ -29,8 +87,12 @@ export function TournamentSetup({
   );
   const [teams, setTeams] = useState<Duo[] | null>(presetTeams);
   const [name, setName] = useState("Tournament");
+  const [format, setFormat] = useState<TournamentFormat>("single_elim");
 
   const canShuffle = selectedIds.length >= 4 && selectedIds.length % 2 === 0;
+  const formatOptions = useMemo(() => formatOptionsFor(teams?.length ?? 0), [teams]);
+  const selectedFormatOption = formatOptions.find((f) => f.value === format);
+  const canStart = Boolean(teams) && teams!.length >= 2 && !selectedFormatOption?.disabledReason;
 
   function toggle(id: string) {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -43,12 +105,13 @@ export function TournamentSetup({
   }
 
   function start() {
-    if (!teams || teams.length < 2) return;
+    if (!canStart || !teams) return;
     startTransition(() => {
       createTournamentAction({
         groupId,
         eventId,
         name: name.trim() || "Tournament",
+        format,
         entrantPairs: teams.map((t) => [t.players[0].id, t.players[1].id] as [string, string]),
       });
     });
@@ -104,19 +167,63 @@ export function TournamentSetup({
       ) : (
         <>
           <div className="font-body text-body-sm text-cream/55">
-            {teams.length} duos · single elimination. Tap two names to swap.
+            {teams.length} duos. Tap two names to swap.
           </div>
           <DuoPairingBoard players={teams.flatMap((t) => t.players)} teams={teams} onChange={setTeams} />
-          <PrimaryButton
-            className="mt-auto h-16 w-full"
-            size="lg"
-            disabled={isPending || teams.length < 2}
-            onClick={start}
-          >
+
+          <div className="flex flex-col gap-2.5">
+            <div className="font-heading font-semibold text-[12px] tracking-kicker uppercase text-cream/55">
+              Pick a format
+            </div>
+            <div className="flex flex-col gap-2.5">
+              {formatOptions.map((opt) => (
+                <FormatTile key={opt.value} option={opt} selected={format === opt.value} onClick={() => setFormat(opt.value)} />
+              ))}
+            </div>
+          </div>
+
+          <PrimaryButton className="mt-auto h-16 w-full" size="lg" disabled={isPending || !canStart} onClick={start}>
             {isPending ? "Building bracket…" : "Start tournament"}
           </PrimaryButton>
         </>
       )}
     </div>
+  );
+}
+
+function FormatTile({
+  option,
+  selected,
+  onClick,
+}: Readonly<{ option: FormatOption; selected: boolean; onClick: () => void }>) {
+  const disabled = Boolean(option.disabledReason);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(
+        "rounded-xl p-4.5 flex flex-col gap-1.5 text-left border-2",
+        disabled
+          ? "bg-cream/3 border-cream/8 opacity-55"
+          : selected
+            ? "bg-gradient-alt border-gold"
+            : "bg-cream/5 border-cream/10",
+      )}
+    >
+      <div className="flex items-baseline justify-between gap-2">
+        <div className="font-display text-xl tracking-[0.4px] text-cream">{option.label}</div>
+        {selected && !disabled && (
+          <span className="font-mono font-semibold text-[10px] tracking-widest uppercase text-gold shrink-0">
+            Selected
+          </span>
+        )}
+      </div>
+      <div className="font-body text-[14px] text-cream/70">{option.tagline}</div>
+      <div className="font-mono font-medium text-[11.5px] tracking-wide text-cream/45">{option.preview}</div>
+      <div className={cn("font-body text-[13px] mt-0.5", disabled ? "text-red-pale" : "text-gold/80")}>
+        {option.disabledReason ?? option.suggestion}
+      </div>
+    </button>
   );
 }

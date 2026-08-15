@@ -15,6 +15,13 @@
       "when": 1786781589374,
       "tag": "0001_slow_violations",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786814504175,
+      "tag": "0002_mixed_the_order",
+      "breakpoints": true
     }
   ]
 }

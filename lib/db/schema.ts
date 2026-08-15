@@ -8,6 +8,7 @@ import {
   date,
   primaryKey,
   unique,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import type { AdapterAccountType } from "next-auth/adapters";
@@ -178,13 +179,14 @@ export const shots = pgTable("shot", {
 });
 
 /* -----------------------------------------------------------------------
- * Tournament domain — single-elimination bracket over a crew's members,
- * seeded as fixed duos ("entrants") at creation time. A played match's
- * result is a normal game/gameTeams/shots row (so tournament games count
- * toward every existing stat), just linked back onto the match.
+ * Tournament domain — a bracket or schedule over a crew's members, seeded
+ * as fixed duos ("entrants") at creation time. A played match's result is
+ * a normal game/gameTeams/shots row (so tournament games count toward
+ * every existing stat), just linked back onto the match.
  * --------------------------------------------------------------------- */
 
 export const tournamentStatusEnum = pgEnum("tournament_status", ["setup", "active", "completed"]);
+export const tournamentFormatEnum = pgEnum("tournament_format", ["single_elim", "double_elim", "round_robin"]);
 
 export const tournaments = pgTable("tournament", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -193,6 +195,7 @@ export const tournaments = pgTable("tournament", {
     .references(() => groups.id, { onDelete: "cascade" }),
   eventId: uuid("event_id").references(() => events.id, { onDelete: "set null" }),
   name: text("name").notNull(),
+  format: tournamentFormatEnum("format").notNull().default("single_elim"),
   status: tournamentStatusEnum("status").notNull().default("setup"),
   createdBy: uuid("created_by")
     .notNull()
@@ -216,12 +219,23 @@ export const tournamentEntrants = pgTable("tournament_entrant", {
     .references(() => users.id),
 });
 
-// A single-elimination bracket slot. `round`/`slot` place it in the
-// bracket — round r, slot s's winner feeds round r+1, slot floor(s/2),
-// derived by arithmetic rather than a stored "next match" pointer. Every
-// round after the first starts with null entrant slots; a bye (odd
-// entrant count) resolves immediately with `winnerEntrantId` set and no
-// `gameId`.
+export const tournamentBracketEnum = pgEnum("tournament_bracket", ["winners", "losers", "grand_final", "round_robin"]);
+export const tournamentMatchSlotEnum = pgEnum("tournament_match_slot", ["a", "b"]);
+
+// A bracket/schedule slot. `bracket` distinguishes a double-elim match's
+// winners-bracket, losers-bracket, or grand-final leg (round-robin has one
+// flat "round_robin" bracket); `round`/`slot` place it within that
+// bracket for display and are unique per (tournamentId, bracket, round,
+// slot). Propagation is via explicit `winnerNext*`/`loserNext*` pointers
+// (set at creation, followed at result-recording time) rather than
+// round/slot arithmetic — single-elim's simple round-doubling and
+// double-elim's alternating consolidation/drop-in losers-bracket rounds
+// don't share one formula, and pointers work for both plus round-robin's
+// "no propagation at all" uniformly. Every match beyond a bracket's first
+// round starts with null entrant slots; a single-elim bye (odd entrant
+// count) resolves immediately with `winnerEntrantId` set and no `gameId`
+// — double-elim instead requires an exact power-of-two entrant count so
+// its losers bracket never has to reason about byes.
 export const tournamentMatches = pgTable(
   "tournament_match",
   {
@@ -229,14 +243,26 @@ export const tournamentMatches = pgTable(
     tournamentId: uuid("tournament_id")
       .notNull()
       .references(() => tournaments.id, { onDelete: "cascade" }),
+    bracket: tournamentBracketEnum("bracket").notNull().default("winners"),
     round: integer("round").notNull(),
     slot: integer("slot").notNull(),
     entrantAId: uuid("entrant_a_id").references(() => tournamentEntrants.id, { onDelete: "set null" }),
     entrantBId: uuid("entrant_b_id").references(() => tournamentEntrants.id, { onDelete: "set null" }),
     winnerEntrantId: uuid("winner_entrant_id").references(() => tournamentEntrants.id, { onDelete: "set null" }),
     gameId: uuid("game_id").references(() => games.id, { onDelete: "set null" }),
+    // Where this match's winner/loser flows next — null when nobody
+    // advances further on that side (a decisive match, or round-robin's
+    // no-propagation matches).
+    winnerNextMatchId: uuid("winner_next_match_id").references((): AnyPgColumn => tournamentMatches.id, {
+      onDelete: "set null",
+    }),
+    winnerNextSlot: tournamentMatchSlotEnum("winner_next_slot"),
+    loserNextMatchId: uuid("loser_next_match_id").references((): AnyPgColumn => tournamentMatches.id, {
+      onDelete: "set null",
+    }),
+    loserNextSlot: tournamentMatchSlotEnum("loser_next_slot"),
   },
-  (t) => [unique().on(t.tournamentId, t.round, t.slot)],
+  (t) => [unique().on(t.tournamentId, t.bracket, t.round, t.slot)],
 );
 
 /* -----------------------------------------------------------------------

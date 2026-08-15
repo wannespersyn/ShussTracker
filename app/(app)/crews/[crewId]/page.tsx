@@ -13,6 +13,8 @@ import { CrewLeaderboard } from "@/components/crews/CrewLeaderboard";
 import { SettingsIcon, ChevronRightIcon } from "@/components/ui/icons";
 import { leaveCrew, createEventAction } from "@/app/(app)/crews/actions";
 
+const TOURNAMENT_FORMAT_LABEL = { single_elim: "Single elim", double_elim: "Double elim", round_robin: "Round robin" } as const;
+
 export default async function CrewPage({ params }: { params: Promise<{ crewId: string }> }) {
   const { crewId } = await params;
   const session = await requireSession();
@@ -150,8 +152,13 @@ export default async function CrewPage({ params }: { params: Promise<{ crewId: s
               {activeTournaments.map((t) => (
                 <Link key={t.id} href={`/tournaments/${t.id}`}>
                   <Card className="flex items-center justify-between border-cream/10">
-                    <div className="font-heading font-semibold text-body text-cream">{t.name}</div>
-                    <ChevronRightIcon className="w-5 h-5 text-gold/70" />
+                    <div className="min-w-0">
+                      <div className="font-heading font-semibold text-body text-cream truncate">{t.name}</div>
+                      <div className="font-mono font-medium text-[10px] tracking-widest uppercase text-cream/40 mt-0.5">
+                        {TOURNAMENT_FORMAT_LABEL[t.format]}
+                      </div>
+                    </div>
+                    <ChevronRightIcon className="w-5 h-5 text-gold/70 shrink-0" />
                   </Card>
                 </Link>
               ))}
