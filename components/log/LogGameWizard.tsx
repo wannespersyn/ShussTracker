@@ -346,17 +346,17 @@ export function LogGameWizard({
                 not a dartboard bullseye. */}
             <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0 w-full h-full">
               <polygon
-                points="8,98 92,98 80,74 20,74"
+                points="8,98 92,98 82,77 18,77"
                 className="fill-field-near cursor-pointer"
                 onClick={() => logShot("1")}
               />
               <polygon
-                points="20,74 80,74 70,48 30,48"
+                points="21,71 79,71 71,51 29,51"
                 className="fill-field-mid cursor-pointer"
                 onClick={() => logShot("2")}
               />
               <polygon
-                points="30,48 70,48 60,22 40,22"
+                points="31,45 69,45 60,22 40,22"
                 className="fill-field-far cursor-pointer"
                 onClick={() => logShot("3")}
               />
