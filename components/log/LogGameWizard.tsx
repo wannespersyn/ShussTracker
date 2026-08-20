@@ -7,7 +7,7 @@ import { shortNamesFor } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { BackButton, PrimaryButton } from "@/components/ui";
 import { DuoPairingBoard } from "@/components/teams/DuoPairingBoard";
-import { pairIntoDuos, shuffleIntoDuos, toTeamPlayers, type Duo, type RosterPlayer, type TeamPlayer } from "@/lib/teams";
+import { pairIntoDuos, pairIntoSolos, shuffleIntoDuos, toTeamPlayers, type Duo, type RosterPlayer, type TeamPlayer } from "@/lib/teams";
 import { logGame } from "@/app/(app)/log/actions";
 
 const FIELD_HITS = ["3", "2", "1", "mama", "miss"] as const;
@@ -15,16 +15,13 @@ type FieldHit = (typeof FIELD_HITS)[number];
 
 type FlyingCap = { id: number; left: string; top: string };
 
-const STEP_COPY = [
-  { kicker: "Step 1 of 5", title: "Pick your mat" },
-  { kicker: "Step 2 of 5", title: "Choose players" },
-  { kicker: "Step 3 of 5", title: "Set the duos" },
-  { kicker: "Step 4 of 5", title: "Flick 'em" },
-  { kicker: "Step 5 of 5", title: "Who won" },
-];
+// Titles by wizard step (0-4). The 2-player mat skips step 2 ("Set the
+// duos" — nothing to pair with just two players) and renumbers the
+// kicker accordingly; see `copy` below.
+const STEP_TITLES = ["Pick your mat", "Choose players", "Set the duos", "Flick 'em", "Who won"];
 
 type WizardResult = {
-  matType: "4" | "8";
+  matType: "2" | "4" | "8";
   teams: { label: string; playerIds: string[]; finalRank: number }[];
   shotsByPlayer: { playerId: string; fieldHit: FieldHit }[];
 };
@@ -72,7 +69,7 @@ export function LogGameWizard({
   const initialTeams = lockedTeams ?? presetTeams;
 
   const [step, setStep] = useState(lockedTeams ? 2 : initialTeams ? 1 : 0);
-  const [matType, setMatType] = useState<"4" | "8" | null>(
+  const [matType, setMatType] = useState<"2" | "4" | "8" | null>(
     initialTeams ? (initialTeams.length > 2 ? "8" : "4") : null,
   );
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<string[]>(
@@ -88,12 +85,12 @@ export function LogGameWizard({
   const [rankedTeamIds, setRankedTeamIds] = useState<string[]>([]);
 
   const gamePlayers = teams?.flatMap((t) => t.players) ?? [];
-  const needed = matType === "8" ? 8 : 4;
+  const needed = matType === "8" ? 8 : matType === "2" ? 2 : 4;
   const notEnoughPlayers = matType !== null && players.length < needed;
 
-  function pickMat(type: "4" | "8") {
+  function pickMat(type: "2" | "4" | "8") {
     setMatType(type);
-    const need = type === "8" ? 8 : 4;
+    const need = type === "8" ? 8 : type === "2" ? 2 : 4;
     // A roster that exactly fills the mat needs no picking; a bigger crew
     // (e.g. 7 members for a 4-player mat) has to say who's actually playing.
     setSelectedPlayerIds(players.length <= need ? players.map((p) => p.id) : []);
@@ -135,7 +132,7 @@ export function LogGameWizard({
     (step === 1 && selectedPlayerIds.length === needed) ||
     (step === 2 && teams !== null) ||
     step === 3 ||
-    (step === 4 && matType === "4" ? winnerTeamId !== null : rankedTeamIds.length === teams?.length);
+    (step === 4 && matType !== "8" ? winnerTeamId !== null : rankedTeamIds.length === teams?.length);
 
   function next() {
     if (step < 4) {
@@ -144,7 +141,17 @@ export function LogGameWizard({
       // rosters bigger than the mat). The shooter is picked once duos are
       // final too, so a swap made on the pairing board (step 2) is honored.
       if (step === 1) {
-        setTeams(shuffleIntoDuos(players.filter((p) => selectedPlayerIds.includes(p.id))));
+        const picked = players.filter((p) => selectedPlayerIds.includes(p.id));
+        // A 2-player mat has nobody to pair up — skip straight past the
+        // duo-pairing step to shot logging.
+        if (matType === "2") {
+          const solo = pairIntoSolos(picked);
+          setTeams(solo);
+          setActiveShooterId(solo[0]?.players[0]?.id ?? null);
+          setStep(3);
+          return;
+        }
+        setTeams(shuffleIntoDuos(picked));
       }
       if (step === 2) setActiveShooterId(teams?.[0]?.players[0]?.id ?? null);
       setStep((s) => s + 1);
@@ -153,7 +160,7 @@ export function LogGameWizard({
     // Final step (4, "Who won") — submit.
     if (!teams) return;
     const finalTeams =
-      matType === "4"
+      matType !== "8"
         ? teams.map((t) => ({
             label: t.label,
             playerIds: t.players.map((p) => p.id),
@@ -186,6 +193,13 @@ export function LogGameWizard({
       router.push(backHref);
       return;
     }
+    // Mirror the forward skip: a 2-player mat jumps straight from picking
+    // players (step 1) to shot logging (step 3), so backing out of shot
+    // logging returns to step 1, not the pairing step it never visited.
+    if (matType === "2" && step === 3) {
+      setStep(1);
+      return;
+    }
     setStep((s) => s - 1);
   }
 
@@ -196,11 +210,16 @@ export function LogGameWizard({
     color: fh === "mama" ? "var(--color-red-bright)" : fh === "miss" ? "rgba(239,231,214,.4)" : "var(--color-cream)",
   }));
 
+  // The 2-player mat skips step 2 entirely, so it only ever visits 4 of
+  // the 5 steps — renumber the kicker and progress dots to match instead
+  // of showing a phantom "step 3".
+  const totalSteps = matType === "2" ? 4 : 5;
+  const displayStep = matType === "2" && step >= 3 ? step - 1 : step;
   const copy =
     lockedTeams && step === 2
       ? { kicker: "Tournament match", title: `${lockedTeams[0].label} vs ${lockedTeams[1].label}` }
-      : STEP_COPY[step];
-  const dots = [1, 2, 3, 4].map((i) => (step >= i ? "bg-gold" : "bg-cream/15"));
+      : { kicker: `Step ${displayStep + 1} of ${totalSteps}`, title: STEP_TITLES[step] };
+  const dots = (matType === "2" ? [1, 3, 4] : [1, 2, 3, 4]).map((i) => (step >= i ? "bg-gold" : "bg-cream/15"));
 
   return (
     <div className="relative min-h-screen bg-surface flex flex-col pt-16.5 pb-2">
@@ -223,6 +242,13 @@ export function LogGameWizard({
 
       {step === 0 && (
         <div className="flex-1 px-5 py-6.5 flex flex-col gap-4">
+          <MatTile
+            label="2 PLAYERS"
+            sub="Just the two of you, head to head."
+            dots={["gold", "mint"]}
+            selected={matType === "2"}
+            onClick={() => pickMat("2")}
+          />
           <MatTile
             label="4 PLAYERS"
             sub="One mat, two duos, quick round."
@@ -406,16 +432,20 @@ export function LogGameWizard({
       {step === 4 && teams && (
         <div className="flex-1 px-5 pt-5.5 flex flex-col gap-3 overflow-auto">
           <div className="font-body text-[14.5px] text-cream/55">
-            {matType === "4" ? "Tap the winning duo." : "Tap teams in order of finish, best first."}
+            {matType !== "8"
+              ? matType === "2"
+                ? "Tap the winner."
+                : "Tap the winning duo."
+              : "Tap teams in order of finish, best first."}
           </div>
           {teams.map((t) => {
-            const rank = matType === "4" ? (t.id === winnerTeamId ? 1 : winnerTeamId ? 2 : null) : rankedTeamIds.indexOf(t.id) + 1 || null;
+            const rank = matType !== "8" ? (t.id === winnerTeamId ? 1 : winnerTeamId ? 2 : null) : rankedTeamIds.indexOf(t.id) + 1 || null;
             const isWinner = rank === 1;
             return (
               <button
                 key={t.id}
                 type="button"
-                onClick={() => (matType === "4" ? tapWinner(t.id) : tapRank(t.id))}
+                onClick={() => (matType !== "8" ? tapWinner(t.id) : tapRank(t.id))}
                 className={cn(
                   "rounded-lg border-2 p-4.5 flex items-center gap-3.5 text-left",
                   isWinner ? "bg-gold/12 border-gold/45" : "bg-cream/5 border-cream/10",
@@ -431,9 +461,11 @@ export function LogGameWizard({
                   <div className="font-heading font-semibold text-heading text-cream">
                     {t.players.map((p) => p.name).join(" & ")}
                   </div>
-                  <div className="font-mono font-medium text-[10px] tracking-widest uppercase text-cream/45">
-                    {t.label}
-                  </div>
+                  {t.players.length > 1 && (
+                    <div className="font-mono font-medium text-[10px] tracking-widest uppercase text-cream/45">
+                      {t.label}
+                    </div>
+                  )}
                 </div>
                 {rank !== null && (
                   <div className="font-mono font-semibold text-[22px]" style={{ color: capRingPairs[t.color].light }}>

@@ -112,7 +112,7 @@ export function TournamentSetup({
         eventId,
         name: name.trim() || "Tournament",
         format,
-        entrantPairs: teams.map((t) => [t.players[0].id, t.players[1].id] as [string, string]),
+        entrantPairs: teams.map((t) => [t.players[0]!.id, t.players[1]!.id] as [string, string]),
       });
     });
   }

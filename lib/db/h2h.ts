@@ -9,7 +9,7 @@ export type HeadToHeadMeeting = {
   aWon: boolean;
   aScore: number;
   bScore: number;
-  matType: "4" | "8";
+  matType: "2" | "4" | "8";
 };
 
 export type HeadToHead = { aWins: number; bWins: number; meetings: HeadToHeadMeeting[] };

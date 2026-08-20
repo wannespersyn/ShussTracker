@@ -80,7 +80,7 @@ export const verificationTokens = pgTable(
  * user id before it touches these tables.
  * --------------------------------------------------------------------- */
 
-export const matTypeEnum = pgEnum("mat_type", ["4", "8"]);
+export const matTypeEnum = pgEnum("mat_type", ["2", "4", "8"]);
 export const fieldHitEnum = pgEnum("field_hit", [
   "1",
   "2",
@@ -150,9 +150,10 @@ export const gameTeams = pgTable("game_team", {
   finalRank: integer("final_rank"),
 });
 
-// Exactly 2 players per team is enforced in the data-access layer
-// (lib/db/authz.ts / game-creation logic), not a DB constraint —
-// Postgres CHECK constraints can't count sibling rows without a trigger.
+// Team size (1 player for a 2-player head-to-head mat, 2 for a 4/8-player
+// mat) is enforced in the data-access layer (lib/db/authz.ts /
+// game-creation logic), not a DB constraint — Postgres CHECK constraints
+// can't count sibling rows without a trigger.
 // Has its own `id` (rather than a composite PK) so Shot can carry a
 // single game_team_player_id FK, per the brief's Shot shape.
 export const gameTeamPlayers = pgTable(

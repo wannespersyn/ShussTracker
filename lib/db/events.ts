@@ -28,7 +28,7 @@ export type EventStanding = { userIds: string[]; names: string; wins: number; lo
 export type EventGame = {
   id: string;
   playedAt: Date;
-  matType: "4" | "8";
+  matType: "2" | "4" | "8";
   teams: { id: string; label: string; finalRank: number | null; playerNames: string[] }[];
 };
 export type EventDetail = {

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
 import { games, gameTeams, gameTeamPlayers, shots } from "@/lib/db/schema";
-import { assertTwoPlayersPerTeam } from "@/lib/db/authz";
+import { assertValidTeamSize } from "@/lib/db/authz";
 
 export type FieldHit = "1" | "2" | "3" | "mama" | "miss";
 
@@ -11,7 +11,7 @@ export type CreateGameInput = {
   groupId: string;
   eventId?: string;
   createdBy: string;
-  matType: "4" | "8";
+  matType: "2" | "4" | "8";
   teams: GameTeamInput[];
   shotsByPlayer: { playerId: string; fieldHit: FieldHit }[];
 };
@@ -27,7 +27,7 @@ export type CreatedGameTeam = { gameTeamId: string; label: string; playerIds: st
 export async function createGameRecord(
   input: CreateGameInput,
 ): Promise<{ gameId: string; teams: CreatedGameTeam[] }> {
-  input.teams.forEach((t) => assertTwoPlayersPerTeam(t.playerIds));
+  input.teams.forEach((t) => assertValidTeamSize(t.playerIds, input.matType));
 
   const gameId = randomUUID();
   const playerIdToGameTeamPlayerId = new Map<string, string>();

@@ -35,7 +35,7 @@ export function DuoPairingBoard({
     onChange(
       teams.map((t) => ({
         ...t,
-        players: t.players.map((p) => (p.id === a.id ? b : p.id === b.id ? a : p)) as [TeamPlayer, TeamPlayer],
+        players: t.players.map((p) => (p.id === a.id ? b : p.id === b.id ? a : p)),
       })),
     );
     setSelectedPlayerId(null);

@@ -91,7 +91,7 @@ export type RecentGame = {
   myScore: number;
   oppScore: number;
   opponentLabel: string;
-  matType: "4" | "8";
+  matType: "2" | "4" | "8";
 };
 
 /** A player's most recent games with the rival team's score and name, for
@@ -187,7 +187,7 @@ export type StatsGame = {
   id: string;
   crewId: string | null;
   eventId: string | null;
-  matType: "4" | "8";
+  matType: "2" | "4" | "8";
   playedAt: string;
   teams: StatsTeam[];
 };

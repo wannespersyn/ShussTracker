@@ -86,11 +86,14 @@ export async function requireSharesCrew(viewerId: string, targetUserId: string) 
   }
 }
 
-/** Teams are always exactly 2 players — enforced here, not by the DB. */
-export function assertTwoPlayersPerTeam(playerIds: readonly string[]) {
-  if (playerIds.length !== 2) {
+/** Team size is fixed by the mat: 1 player a side on a 2-player
+ * head-to-head mat, 2 players a side (a duo) on a 4/8-player mat —
+ * enforced here, not by the DB. */
+export function assertValidTeamSize(playerIds: readonly string[], matType: "2" | "4" | "8") {
+  const expected = matType === "2" ? 1 : 2;
+  if (playerIds.length !== expected) {
     throw new Error(
-      `A team must have exactly 2 players, got ${playerIds.length}`,
+      `A team must have exactly ${expected} player${expected === 1 ? "" : "s"} on a ${matType}-player mat, got ${playerIds.length}`,
     );
   }
 }

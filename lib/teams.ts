@@ -5,7 +5,7 @@ export const TEAM_COLORS: CapRingColor[] = ["gold", "red", "mint", "cream"];
 
 export type RosterPlayer = { id: string; name: string };
 export type TeamPlayer = RosterPlayer & { initials: string; ring: CapRingColor };
-export type Duo = { id: string; label: string; color: CapRingColor; players: [TeamPlayer, TeamPlayer] };
+export type Duo = { id: string; label: string; color: CapRingColor; players: TeamPlayer[] };
 
 export function toTeamPlayers(roster: RosterPlayer[]): TeamPlayer[] {
   return roster.map((p, i) => ({
@@ -47,4 +47,15 @@ export function pairIntoDuos(players: TeamPlayer[]): Duo[] {
  * duo-shuffle step, the Chwazi picker, and tournament entrant seeding. */
 export function shuffleIntoDuos(players: TeamPlayer[]): Duo[] {
   return pairIntoDuos(shuffle(players));
+}
+
+/** Splits a 2-player roster into two solo "teams" of one — the 2-player
+ * mat's head-to-head mode, where there's no duo to pair up. */
+export function pairIntoSolos(players: TeamPlayer[]): Duo[] {
+  return players.map((p, i) => ({
+    id: `team-${i}`,
+    label: p.name,
+    color: TEAM_COLORS[i % TEAM_COLORS.length],
+    players: [p],
+  }));
 }

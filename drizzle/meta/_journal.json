@@ -22,6 +22,13 @@
       "when": 1786814504175,
       "tag": "0002_mixed_the_order",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1787213619493,
+      "tag": "0003_legal_yellow_claw",
+      "breakpoints": true
     }
   ]
 }

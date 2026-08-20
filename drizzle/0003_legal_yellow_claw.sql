@@ -1,0 +1,1 @@
+ALTER TYPE "public"."mat_type" ADD VALUE '2' BEFORE '4';

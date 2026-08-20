@@ -44,7 +44,7 @@ export function MatchPlayer({
   const roster = [...teamA.players, ...teamB.players];
 
   async function handleComplete(result: {
-    matType: "4" | "8";
+    matType: "2" | "4" | "8";
     teams: { label: string; playerIds: string[]; finalRank: number }[];
     shotsByPlayer: { playerId: string; fieldHit: FieldHit }[];
   }) {
