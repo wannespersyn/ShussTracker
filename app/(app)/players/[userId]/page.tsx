@@ -45,9 +45,6 @@ export default async function PlayerProfilePage({ params }: { params: Promise<{ 
         <BackButton href={isSelf ? "/home" : "/crews"} />
         <AvatarChip initials={initialsFor(name)} ring="gold" size={48} />
         <div className="flex-1 min-w-0">
-          <div className="font-heading font-bold text-label-kicker tracking-kicker uppercase text-cream/45 truncate">
-            {crews.map((c) => c.name).join(" · ") || "No crews yet"}
-          </div>
           <div className="font-display text-display-sm text-cream truncate">{name}</div>
         </div>
         {isSelf && (

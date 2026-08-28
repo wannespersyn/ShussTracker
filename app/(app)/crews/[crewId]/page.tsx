@@ -286,8 +286,14 @@ export default async function CrewPage({ params }: { params: Promise<{ crewId: s
           </form>
           <div className="font-body text-[12px] text-cream/40">
             Guests can be picked into games like anyone else. Hand them their claim code once they&apos;re ready to
-            sign up for real — <span className="text-cream/55">/claim</span> folds their history into their new account.
+            sign up for real — claiming folds their history into their new account.
           </div>
+          <Link
+            href="/claim"
+            className="self-start font-heading font-bold text-[11px] tracking-[1.2px] uppercase text-gold"
+          >
+            Claim a guest →
+          </Link>
         </div>
 
         <div className="flex flex-col gap-2.5">

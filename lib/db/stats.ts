@@ -102,6 +102,7 @@ export type RecentGame = {
   myScore: number;
   oppScore: number;
   opponentLabel: string;
+  teammateLabel: string | undefined;
   matType: "2" | "4" | "8";
 };
 
@@ -131,6 +132,7 @@ export async function getRecentGamesDetail(userId: string, limit = 3): Promise<R
     const rival = game.teams
       .filter((t) => t.id !== myTeam.id)
       .sort((a, b) => (a.finalRank ?? 99) - (b.finalRank ?? 99))[0];
+    const teammates = myTeam.players.filter((p) => p.userId !== userId);
 
     return {
       id: game.id,
@@ -139,6 +141,10 @@ export async function getRecentGamesDetail(userId: string, limit = 3): Promise<R
       myScore: scoreFor(myTeam.players),
       oppScore: rival ? scoreFor(rival.players) : 0,
       opponentLabel: rival ? rival.players.map((p) => p.user.name?.split(" ")[0] ?? "Player").join(" & ") : "—",
+      teammateLabel:
+        teammates.length > 0
+          ? teammates.map((p) => p.user.name?.split(" ")[0] ?? "Player").join(" & ")
+          : undefined,
       matType: game.matType,
     };
   });

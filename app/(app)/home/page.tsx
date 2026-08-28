@@ -37,7 +37,6 @@ export default async function HomePage() {
         <div className="flex items-center gap-2.75">
           <AvatarChip initials={initialsFor(name)} ring="gold" size={42} />
           <div>
-            <div className="font-heading text-[11px] text-cream/50 tracking-[0.08em] uppercase">Servus</div>
             <div className="font-heading font-semibold text-base text-cream">{name}</div>
           </div>
         </div>

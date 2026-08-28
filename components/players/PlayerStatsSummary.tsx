@@ -270,6 +270,7 @@ export function PlayerStatsSummary({
               <div className="flex items-center justify-between">
                 <span className="font-heading font-semibold text-sm text-cream w-28 truncate">
                   {isSelf ? "You" : firstName}
+                  {g.teammateLabel && <span className="text-cream/60"> &amp; {g.teammateLabel}</span>}
                 </span>
                 <span className="flex items-center gap-2.25">
                   <span className="font-mono font-semibold text-[19px] text-gold">{g.myScore}</span>
