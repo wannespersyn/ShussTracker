@@ -7,7 +7,7 @@ import { StatCounter } from "@/components/ui";
 import type { RecapData } from "@/lib/db/recap";
 import { shareRecapCard, type RecapCardContent } from "@/lib/recap-card";
 
-const ORDER: RecapSlide[] = ["showedUp", "biggestWin", "bestDuo", "redZones"];
+const ORDER: RecapSlide[] = ["showedUp", "biggestWin", "bestDuo", "topScorer", "mostGames", "redZones"];
 
 /** Mirrors the slide's own JSX content (below) as flat text a canvas can
  * draw — kept in one place so the shared image never drifts from what's
@@ -40,6 +40,24 @@ function cardContentFor(key: RecapSlide, data: RecapData, crewName: string): Rec
             subtext: `wins together · ${data.bestDuo.wins}–${data.bestDuo.losses}`,
           }
         : { kicker, headline: "Best partner", bigNumber: "–", subtext: "No partner pairing yet." };
+    case "topScorer":
+      return data.topScorer
+        ? {
+            kicker,
+            headline: `Top scorer — ${data.topScorer.name}`,
+            bigNumber: String(data.topScorer.points),
+            subtext: "points this season",
+          }
+        : { kicker, headline: "Top scorer", bigNumber: "–", subtext: "No points logged yet." };
+    case "mostGames":
+      return data.mostGames
+        ? {
+            kicker,
+            headline: `Most games — ${data.mostGames.name}`,
+            bigNumber: String(data.mostGames.games),
+            subtext: "games played",
+          }
+        : { kicker, headline: "Most games", bigNumber: "–", subtext: "No games logged yet." };
     case "redZones":
       return data.redZones
         ? {
@@ -149,6 +167,30 @@ export function RecapSlides({
             </>
           ) : (
             <div className="font-body text-lg opacity-85">No partner pairing yet.</div>
+          ))}
+
+        {key === "topScorer" &&
+          (data.topScorer ? (
+            <>
+              <div className="font-body text-lg opacity-85">Top scorer</div>
+              <div className="font-display text-3xl">{data.topScorer.name}</div>
+              <StatCounter value={data.topScorer.points} size={displayHero.seasonRecapStat} />
+              <div className="font-body text-lg opacity-85">points this season</div>
+            </>
+          ) : (
+            <div className="font-body text-lg opacity-85">No points logged yet.</div>
+          ))}
+
+        {key === "mostGames" &&
+          (data.mostGames ? (
+            <>
+              <div className="font-body text-lg opacity-85">Most games</div>
+              <div className="font-display text-3xl">{data.mostGames.name}</div>
+              <StatCounter value={data.mostGames.games} size={displayHero.seasonRecapStat} />
+              <div className="font-body text-lg opacity-85">games played</div>
+            </>
+          ) : (
+            <div className="font-body text-lg opacity-85">No games logged yet.</div>
           ))}
 
         {key === "redZones" &&

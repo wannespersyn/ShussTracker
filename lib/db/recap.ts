@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { games } from "@/lib/db/schema";
-import { scoreForPlayers } from "@/lib/scoring";
+import { scoreForPlayers, scoreForShots } from "@/lib/scoring";
 
 export type RecapData = {
   label: string;
@@ -9,13 +9,15 @@ export type RecapData = {
   biggestWin: { winnerNames: string; loserNames: string; margin: number } | null;
   bestDuo: { names: string; wins: number; losses: number } | null;
   redZones: { name: string; count: number } | null;
+  topScorer: { name: string; points: number } | null;
+  mostGames: { name: string; games: number } | null;
 };
 
-/** The 4 season-recap slides (showedUp / biggestWin / bestDuo / redZones —
- * see lib/theme/tokens.ts `recapSlideThemes`), all derived from existing
- * games/shots tables. "Season" defaults to the current calendar year,
- * falling back to all-time if the crew hasn't logged much this year —
- * a near-empty recap isn't worth showing. */
+/** The 6 season-recap slides (showedUp / biggestWin / bestDuo / redZones /
+ * topScorer / mostGames — see lib/theme/tokens.ts `recapSlideThemes`), all
+ * derived from existing games/shots tables. "Season" defaults to the
+ * current calendar year, falling back to all-time if the crew hasn't
+ * logged much this year — a near-empty recap isn't worth showing. */
 export async function getCrewRecap(groupId: string): Promise<RecapData> {
   const allGames = await db.query.games.findMany({
     where: eq(games.groupId, groupId),
@@ -33,6 +35,8 @@ export async function getCrewRecap(groupId: string): Promise<RecapData> {
   let biggestWin: RecapData["biggestWin"] = null;
   const duoTally = new Map<string, { names: string; wins: number; losses: number }>();
   const riskTally = new Map<string, { name: string; count: number }>();
+  const scoreTally = new Map<string, { name: string; points: number }>();
+  const gameTally = new Map<string, { name: string; games: number }>();
 
   for (const g of scoped) {
     if (g.teams.length >= 2) {
@@ -61,16 +65,28 @@ export async function getCrewRecap(groupId: string): Promise<RecapData> {
       }
       for (const p of t.players) {
         const n = p.shots.filter((s) => s.fieldHit === "mama").length;
-        if (n === 0) continue;
-        const entry = riskTally.get(p.userId) ?? { name: p.user.name ?? "Player", count: 0 };
-        entry.count += n;
-        riskTally.set(p.userId, entry);
+        if (n > 0) {
+          const entry = riskTally.get(p.userId) ?? { name: p.user.name ?? "Player", count: 0 };
+          entry.count += n;
+          riskTally.set(p.userId, entry);
+        }
+
+        const points = scoreForShots(p.shots);
+        const scoreEntry = scoreTally.get(p.userId) ?? { name: p.user.name ?? "Player", points: 0 };
+        scoreEntry.points += points;
+        scoreTally.set(p.userId, scoreEntry);
+
+        const gameEntry = gameTally.get(p.userId) ?? { name: p.user.name ?? "Player", games: 0 };
+        gameEntry.games += 1;
+        gameTally.set(p.userId, gameEntry);
       }
     }
   }
 
   const bestDuo = [...duoTally.values()].sort((a, b) => b.wins - a.wins)[0] ?? null;
   const redZones = [...riskTally.values()].sort((a, b) => b.count - a.count)[0] ?? null;
+  const topScorer = [...scoreTally.values()].sort((a, b) => b.points - a.points)[0] ?? null;
+  const mostGames = [...gameTally.values()].sort((a, b) => b.games - a.games)[0] ?? null;
 
   return {
     label,
@@ -78,5 +94,7 @@ export async function getCrewRecap(groupId: string): Promise<RecapData> {
     biggestWin,
     bestDuo,
     redZones,
+    topScorer,
+    mostGames,
   };
 }

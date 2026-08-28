@@ -12,8 +12,10 @@ const CARD_SIZE = 1080;
 const GRADIENT_STOPS: Record<RecapSlide, { kind: "radial" | "linear"; colors: string[] }> = {
   showedUp: { kind: "radial", colors: ["#14201A", "#0B0F0C", "#0A0C0A"] },
   biggestWin: { kind: "radial", colors: ["#6B1712", "#2C0A08", "#0A0C0A"] },
-  bestDuo: { kind: "linear", colors: ["#E8B33C", "#C9992F", "#14201A", "#0B0F0C"] },
+  bestDuo: { kind: "radial", colors: ["#3D2F12", "#1A140A", "#0A0C0A"] },
   redZones: { kind: "radial", colors: ["#14201A", "#0B0F0C", "#0A0C0A"] },
+  topScorer: { kind: "radial", colors: ["#14201A", "#0B0F0C", "#0A0C0A"] },
+  mostGames: { kind: "radial", colors: ["#14201A", "#0B0F0C", "#0A0C0A"] },
 };
 
 function wrapText(

@@ -90,12 +90,12 @@ export const recapSlideThemes = {
     buttonShadow: "rgba(232,179,60,.28)",
   },
   bestDuo: {
-    background: "linear-gradient(170deg, #E8B33C 0%, #C9992F 34%, #14201A 68%, #0B0F0C 100%)",
-    accent: "#0A0C0A",
-    text: "#0A0C0A",
-    buttonBg: "#0A0C0A",
-    buttonFg: "#EFE7D6",
-    buttonShadow: "rgba(0,0,0,.35)",
+    background: "radial-gradient(120% 120% at 50% 0%, #3D2F12 0%, #1A140A 55%, #0A0C0A 100%)",
+    accent: "#E8B33C",
+    text: "#EFE7D6",
+    buttonBg: "#E8B33C",
+    buttonFg: "#0A0C0A",
+    buttonShadow: "rgba(232,179,60,.28)",
   },
   redZones: {
     background: "radial-gradient(120% 120% at 50% 0%, #14201A 0%, #0B0F0C 55%, #0A0C0A 100%)",
@@ -104,6 +104,22 @@ export const recapSlideThemes = {
     buttonBg: "#E8B33C",
     buttonFg: "#0A0C0A",
     buttonShadow: "rgba(232,179,60,.28)",
+  },
+  topScorer: {
+    background: "radial-gradient(120% 120% at 50% 0%, #14201A 0%, #0B0F0C 55%, #0A0C0A 100%)",
+    accent: "#4FA8E8",
+    text: "#EFE7D6",
+    buttonBg: "#4FA8E8",
+    buttonFg: "#0A0C0A",
+    buttonShadow: "rgba(79,168,232,.28)",
+  },
+  mostGames: {
+    background: "radial-gradient(120% 120% at 50% 0%, #14201A 0%, #0B0F0C 55%, #0A0C0A 100%)",
+    accent: "#A66BE0",
+    text: "#EFE7D6",
+    buttonBg: "#A66BE0",
+    buttonFg: "#0A0C0A",
+    buttonShadow: "rgba(166,107,224,.28)",
   },
 } as const;
 
