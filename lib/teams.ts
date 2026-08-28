@@ -1,5 +1,6 @@
 import { initialsFor } from "@/lib/format";
 import type { CapRingColor } from "@/lib/theme/tokens";
+import { ELO_BASE } from "@/lib/elo";
 
 export const TEAM_COLORS: CapRingColor[] = ["gold", "red", "mint", "cream"];
 
@@ -47,6 +48,34 @@ export function pairIntoDuos(players: TeamPlayer[]): Duo[] {
  * duo-shuffle step, the Chwazi picker, and tournament entrant seeding. */
 export function shuffleIntoDuos(players: TeamPlayer[]): Duo[] {
   return pairIntoDuos(shuffle(players));
+}
+
+/** Chwazi's "balance by skill" option — sorts by rating and pairs the
+ * strongest with the weakest, next-strongest with next-weakest, and so on
+ * ("snake" pairing), so every resulting duo has a similar combined rating
+ * instead of leaving one duo stacked and another sunk. Which duo lands in
+ * which slot (and its color) is still randomized, so the pairing is
+ * balanced but the presentation isn't predictable. Unrated players fall
+ * back to the Elo base rating (see lib/elo.ts's ELO_BASE). */
+export function balanceIntoDuos(players: TeamPlayer[], ratings: Record<string, number>): Duo[] {
+  const ratingOf = (id: string) => ratings[id] ?? ELO_BASE;
+  const sorted = [...players].sort((a, b) => ratingOf(b.id) - ratingOf(a.id));
+
+  const pairs: TeamPlayer[][] = [];
+  let lo = 0;
+  let hi = sorted.length - 1;
+  while (lo < hi) {
+    pairs.push([sorted[lo], sorted[hi]]);
+    lo++;
+    hi--;
+  }
+
+  return shuffle(pairs).map((pair, i) => ({
+    id: `team-${i}`,
+    label: `Team ${i + 1}`,
+    color: TEAM_COLORS[i % TEAM_COLORS.length],
+    players: pair,
+  }));
 }
 
 /** Splits a 2-player roster into two solo "teams" of one — the 2-player

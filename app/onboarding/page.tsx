@@ -38,18 +38,9 @@ export default function OnboardingPage() {
   const router = useRouter();
   const [slide, setSlide] = useState(0);
   const [showAuth, setShowAuth] = useState(false);
-  const [showEmailForm, setShowEmailForm] = useState(false);
-  const [email, setEmail] = useState("");
-  const [sending, setSending] = useState(false);
 
   const s = SLIDES[slide];
   const isLast = slide === SLIDES.length - 1;
-
-  async function sendMagicLink() {
-    if (!email) return;
-    setSending(true);
-    await signIn("resend", { email, callbackUrl: "/home" });
-  }
 
   if (showAuth) {
     return (
@@ -68,40 +59,13 @@ export default function OnboardingPage() {
         </div>
 
         <div className="relative flex flex-col gap-3">
-          {showEmailForm ? (
-            <>
-              <div className="flex items-center gap-3">
-                <BackButton onClick={() => setShowEmailForm(false)} />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@crew.com"
-                  autoFocus
-                  className="flex-1 h-14.5 rounded-lg bg-cream/8 px-4 font-body text-cream placeholder:text-cream/40 outline-none border-2 border-transparent focus:border-gold/40"
-                />
-              </div>
-              <PrimaryButton size="lg" onClick={sendMagicLink} disabled={sending || !email}>
-                {sending ? "Sending…" : "Send magic link"}
-              </PrimaryButton>
-            </>
-          ) : (
-            <PrimaryButton size="lg" onClick={() => setShowEmailForm(true)}>
-              Start flicking
-            </PrimaryButton>
-          )}
+          <PrimaryButton size="lg" onClick={() => signIn("google", { callbackUrl: "/home" })}>
+            Continue with Google
+          </PrimaryButton>
 
           <PrimaryButton size="lg" variant="outline" onClick={() => router.push("/onboarding/join-crew")}>
             I&apos;ve got a crew code
           </PrimaryButton>
-
-          <button
-            type="button"
-            onClick={() => signIn("google", { callbackUrl: "/home" })}
-            className="mt-0.5 h-13 rounded-md bg-cream/8 flex items-center justify-center font-body font-semibold text-base text-cream"
-          >
-            Continue with Google
-          </button>
 
           <div className="mt-2 text-center font-body text-[12.5px] leading-[1.5] text-cream/38">
             Fan-built, unofficial, no lawyers involved.

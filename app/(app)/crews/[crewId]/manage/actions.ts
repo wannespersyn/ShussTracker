@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireUserId, requireGroupOwner } from "@/lib/db/authz";
-import { renameCrew, regenerateInviteCode, removeCrewMember, deleteCrew } from "@/lib/db/crews";
+import { renameCrew, regenerateInviteCode, removeCrewMember, deleteCrew, setTrackShotZones } from "@/lib/db/crews";
 
 export async function renameCrewAction(groupId: string, formData: FormData) {
   const userId = await requireUserId();
@@ -15,6 +15,15 @@ export async function renameCrewAction(groupId: string, formData: FormData) {
   await renameCrew(groupId, name);
   revalidatePath(`/crews/${groupId}`);
   revalidatePath(`/crews/${groupId}/manage`);
+}
+
+export async function setTrackShotZonesAction(groupId: string, formData: FormData) {
+  const userId = await requireUserId();
+  await requireGroupOwner(userId, groupId);
+
+  await setTrackShotZones(groupId, formData.get("trackShotZones") === "on");
+  revalidatePath(`/crews/${groupId}/manage`);
+  revalidatePath(`/log`);
 }
 
 export async function regenerateInviteCodeAction(groupId: string) {

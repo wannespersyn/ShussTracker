@@ -1,0 +1,1 @@
+ALTER TABLE "group" ADD COLUMN "track_shot_zones" boolean DEFAULT false NOT NULL;

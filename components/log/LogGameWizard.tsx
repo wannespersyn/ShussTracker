@@ -34,6 +34,7 @@ export function LogGameWizard({
   lockedTeams,
   onComplete,
   backHref = "/home",
+  trackShotZones = false,
 }: Readonly<{
   groupId?: string;
   eventId?: string;
@@ -48,6 +49,10 @@ export function LogGameWizard({
    * bracket bookkeeping instead of a plain casual game. */
   onComplete?: (result: WizardResult) => void | Promise<void>;
   backHref?: string;
+  /** The crew's `trackShotZones` setting — off by default. When off, the
+   * mat collapses NEAR/MID/FAR into a single HIT tap (logged as "1") since
+   * most crews never actually track which field a cap landed in. */
+  trackShotZones?: boolean;
 }>) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -67,10 +72,14 @@ export function LogGameWizard({
   }, [presetPlayerIds, players]);
 
   const initialTeams = lockedTeams ?? presetTeams;
+  // Total player count uniquely determines mat size (2 solos, 2 duos, or 4
+  // duos) — `initialTeams.length` alone can't tell a 2-player head-to-head
+  // (2 teams of 1) apart from a 4-player mat (2 teams of 2).
+  const initialPlayerCount = initialTeams?.reduce((n, t) => n + t.players.length, 0) ?? 0;
 
   const [step, setStep] = useState(lockedTeams ? 2 : initialTeams ? 1 : 0);
   const [matType, setMatType] = useState<"2" | "4" | "8" | null>(
-    initialTeams ? (initialTeams.length > 2 ? "8" : "4") : null,
+    initialPlayerCount === 2 ? "2" : initialPlayerCount === 8 ? "8" : initialPlayerCount === 4 ? "4" : null,
   );
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<string[]>(
     initialTeams ? initialTeams.flatMap((t) => t.players.map((p) => p.id)) : [],
@@ -82,7 +91,6 @@ export function LogGameWizard({
   const [shotLog, setShotLog] = useState<{ playerId: string; fieldHit: FieldHit }[]>([]);
   const [flyingCaps, setFlyingCaps] = useState<FlyingCap[]>([]);
   const [winnerTeamId, setWinnerTeamId] = useState<string | null>(null);
-  const [rankedTeamIds, setRankedTeamIds] = useState<string[]>([]);
 
   const gamePlayers = teams?.flatMap((t) => t.players) ?? [];
   const needed = matType === "8" ? 8 : matType === "2" ? 2 : 4;
@@ -123,16 +131,12 @@ export function LogGameWizard({
     setWinnerTeamId(teamId);
   }
 
-  function tapRank(teamId: string) {
-    setRankedTeamIds((prev) => (prev.includes(teamId) ? prev : [...prev, teamId]));
-  }
-
   const canAdvance =
     (step === 0 && matType !== null && !notEnoughPlayers) ||
     (step === 1 && selectedPlayerIds.length === needed) ||
     (step === 2 && teams !== null) ||
     step === 3 ||
-    (step === 4 && matType !== "8" ? winnerTeamId !== null : rankedTeamIds.length === teams?.length);
+    (step === 4 && winnerTeamId !== null);
 
   function next() {
     if (step < 4) {
@@ -159,18 +163,11 @@ export function LogGameWizard({
     }
     // Final step (4, "Who won") — submit.
     if (!teams) return;
-    const finalTeams =
-      matType !== "8"
-        ? teams.map((t) => ({
-            label: t.label,
-            playerIds: t.players.map((p) => p.id),
-            finalRank: t.id === winnerTeamId ? 1 : 2,
-          }))
-        : teams.map((t) => ({
-            label: t.label,
-            playerIds: t.players.map((p) => p.id),
-            finalRank: rankedTeamIds.indexOf(t.id) + 1,
-          }));
+    const finalTeams = teams.map((t) => ({
+      label: t.label,
+      playerIds: t.players.map((p) => p.id),
+      finalRank: t.id === winnerTeamId ? 1 : 2,
+    }));
 
     startTransition(() => {
       if (onComplete) {
@@ -203,9 +200,13 @@ export function LogGameWizard({
     setStep((s) => s - 1);
   }
 
-  const tally = FIELD_HITS.map((fh) => ({
+  // Zones off: collapse the near/mid/far tally into a single HIT count
+  // (all logged as "1") — the crew never distinguishes them, so a 3/2/1
+  // breakdown here would just show two columns permanently stuck at zero.
+  const tallyFieldHits: FieldHit[] = trackShotZones ? [...FIELD_HITS] : ["1", "mama", "miss"];
+  const tally = tallyFieldHits.map((fh) => ({
     fieldHit: fh,
-    label: fh === "mama" ? "RISK" : fh === "miss" ? "MISS" : fh,
+    label: fh === "mama" ? "RISK" : fh === "miss" ? "MISS" : trackShotZones ? fh : "HIT",
     n: shotLog.filter((s) => s.fieldHit === fh).length,
     color: fh === "mama" ? "var(--color-red-bright)" : fh === "miss" ? "rgba(239,231,214,.4)" : "var(--color-cream)",
   }));
@@ -258,7 +259,7 @@ export function LogGameWizard({
           />
           <MatTile
             label="8 PLAYERS"
-            sub="Four duos, full ranking at the end."
+            sub="Four duos, one mat, one winner."
             dots={["red", "red", "gold", "gold", "cream", "cream", "mint", "mint"]}
             selected={matType === "8"}
             onClick={() => pickMat("8")}
@@ -343,34 +344,53 @@ export function LogGameWizard({
 
             {/* Mat lane: a funnel of pockets narrowing from NEAR (wide, closest
                 to the flick) up to FAR (narrow, hardest) — a shuffleboard lane,
-                not a dartboard bullseye. */}
+                not a dartboard bullseye. Zones off collapses the three
+                pockets into one HIT tap, since the crew never tracks which
+                field a cap actually landed in. */}
             <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0 w-full h-full">
-              <polygon
-                points="8,98 92,98 82,77 18,77"
-                className="fill-field-near cursor-pointer"
-                onClick={() => logShot("1")}
-              />
-              <polygon
-                points="21,71 79,71 71,51 29,51"
-                className="fill-field-mid cursor-pointer"
-                onClick={() => logShot("2")}
-              />
-              <polygon
-                points="31,45 69,45 60,22 40,22"
-                className="fill-field-far cursor-pointer"
-                onClick={() => logShot("3")}
-              />
-              <g className="pointer-events-none">
-                <text x="50" y="90" textAnchor="middle" fontSize="5" className="font-heading font-bold fill-cream/70" style={{ letterSpacing: "0.06em" }}>
-                  NEAR · 1
-                </text>
-                <text x="50" y="64" textAnchor="middle" fontSize="5" className="font-heading font-bold fill-cream/75" style={{ letterSpacing: "0.06em" }}>
-                  MID · 2
-                </text>
-                <text x="50" y="37" textAnchor="middle" fontSize="4.3" className="font-heading font-bold fill-cream/80" style={{ letterSpacing: "0.06em" }}>
-                  FAR · 3
-                </text>
-              </g>
+              {trackShotZones ? (
+                <>
+                  <polygon
+                    points="8,98 92,98 82,77 18,77"
+                    className="fill-field-near cursor-pointer"
+                    onClick={() => logShot("1")}
+                  />
+                  <polygon
+                    points="21,71 79,71 71,51 29,51"
+                    className="fill-field-mid cursor-pointer"
+                    onClick={() => logShot("2")}
+                  />
+                  <polygon
+                    points="31,45 69,45 60,22 40,22"
+                    className="fill-field-far cursor-pointer"
+                    onClick={() => logShot("3")}
+                  />
+                  <g className="pointer-events-none">
+                    <text x="50" y="90" textAnchor="middle" fontSize="5" className="font-heading font-bold fill-cream/70" style={{ letterSpacing: "0.06em" }}>
+                      NEAR · 1
+                    </text>
+                    <text x="50" y="64" textAnchor="middle" fontSize="5" className="font-heading font-bold fill-cream/75" style={{ letterSpacing: "0.06em" }}>
+                      MID · 2
+                    </text>
+                    <text x="50" y="37" textAnchor="middle" fontSize="4.3" className="font-heading font-bold fill-cream/80" style={{ letterSpacing: "0.06em" }}>
+                      FAR · 3
+                    </text>
+                  </g>
+                </>
+              ) : (
+                <>
+                  <polygon
+                    points="8,98 92,98 60,22 40,22"
+                    className="fill-field-near cursor-pointer"
+                    onClick={() => logShot("1")}
+                  />
+                  <g className="pointer-events-none">
+                    <text x="50" y="64" textAnchor="middle" fontSize="6" className="font-heading font-bold fill-cream/75" style={{ letterSpacing: "0.06em" }}>
+                      HIT
+                    </text>
+                  </g>
+                </>
+              )}
             </svg>
 
             <div
@@ -432,20 +452,16 @@ export function LogGameWizard({
       {step === 4 && teams && (
         <div className="flex-1 px-5 pt-5.5 flex flex-col gap-3 overflow-auto">
           <div className="font-body text-[14.5px] text-cream/55">
-            {matType !== "8"
-              ? matType === "2"
-                ? "Tap the winner."
-                : "Tap the winning duo."
-              : "Tap teams in order of finish, best first."}
+            {matType === "2" ? "Tap the winner." : "Tap the winning duo."}
           </div>
           {teams.map((t) => {
-            const rank = matType !== "8" ? (t.id === winnerTeamId ? 1 : winnerTeamId ? 2 : null) : rankedTeamIds.indexOf(t.id) + 1 || null;
+            const rank = t.id === winnerTeamId ? 1 : winnerTeamId ? 2 : null;
             const isWinner = rank === 1;
             return (
               <button
                 key={t.id}
                 type="button"
-                onClick={() => (matType !== "8" ? tapWinner(t.id) : tapRank(t.id))}
+                onClick={() => tapWinner(t.id)}
                 className={cn(
                   "rounded-lg border-2 p-4.5 flex items-center gap-3.5 text-left",
                   isWinner ? "bg-gold/12 border-gold/45" : "bg-cream/5 border-cream/10",

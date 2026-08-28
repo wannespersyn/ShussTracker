@@ -25,7 +25,14 @@ export function MatchPlayer({
   tournamentId,
   teamA,
   teamB,
-}: Readonly<{ matchId: string; tournamentId: string; teamA: MatchTeam; teamB: MatchTeam }>) {
+  trackShotZones = false,
+}: Readonly<{
+  matchId: string;
+  tournamentId: string;
+  teamA: MatchTeam;
+  teamB: MatchTeam;
+  trackShotZones?: boolean;
+}>) {
   const lockedTeams: Duo[] = [
     {
       id: teamA.entrantId,
@@ -66,6 +73,7 @@ export function MatchPlayer({
       lockedTeams={lockedTeams}
       onComplete={handleComplete}
       backHref={`/tournaments/${tournamentId}`}
+      trackShotZones={trackShotZones}
     />
   );
 }

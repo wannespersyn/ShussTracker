@@ -24,6 +24,11 @@ type Definition = {
   /** Walks history chronologically; returns the index of the game that
    * first satisfies the achievement, or -1 if never satisfied. */
   firstEarnedIndex: (history: HistoryEntry[]) => number;
+  /** True for achievements that only make sense with 1/2/3 zone tracking
+   * on ("land 25 far-field 3s") — dropped entirely (not just unearned) for
+   * a player with no "2"/"3" shots on record, rather than shown as a dead
+   * goal they can never reach. */
+  requiresZoneData?: boolean;
 };
 
 const gamesPlayedMilestone =
@@ -109,6 +114,7 @@ const DEFINITIONS: Definition[] = [
     description: "Land 25 far-field 3s",
     ring: "mint",
     firstEarnedIndex: shotCountMilestone("3", 25),
+    requiresZoneData: true,
   },
   {
     id: "dead-eye",
@@ -117,6 +123,7 @@ const DEFINITIONS: Definition[] = [
     description: "Land 75 far-field 3s",
     ring: "mint",
     firstEarnedIndex: shotCountMilestone("3", 75),
+    requiresZoneData: true,
   },
   {
     id: "red-zone-regular",
@@ -152,7 +159,9 @@ export type AchievementResult = {
  * forward, which also gives "recently unlocked" ordering for free. */
 export async function getAchievements(userId: string): Promise<AchievementResult[]> {
   const history = await getPlayerHistory(userId);
-  return DEFINITIONS.map((def) => {
+  const hasZoneData = history.some((h) => h.shots.some((s) => s.fieldHit === "2" || s.fieldHit === "3"));
+
+  return DEFINITIONS.filter((def) => !def.requiresZoneData || hasZoneData).map((def) => {
     const idx = def.firstEarnedIndex(history);
     return {
       id: def.id,

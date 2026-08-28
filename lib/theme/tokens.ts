@@ -18,17 +18,44 @@ export const capRingPairs = {
 export type CapRingColor = keyof typeof capRingPairs;
 
 /** `background` value for a bottle-cap avatar ring: sunburst ridges (light
- * spokes over the dark fill) like an embossed crown cap. Matches the
- * mockup's 21-spoke repeat unit (17.143deg = 360deg / 21). */
+ * spokes over the dark fill) like an embossed crown cap, plus a soft
+ * top-left/bottom-right light-and-shadow wash so the crimped skirt reads as
+ * one lit, domed object instead of a flat repeating pattern — same light
+ * angle as `capFaceGradient`'s overlay. Matches the mockup's 21-spoke
+ * repeat unit (17.143deg = 360deg / 21). */
 export function capRingGradient(color: CapRingColor) {
   const { light, dark } = capRingPairs[color];
   return (
+    `radial-gradient(circle at 32% 24%,rgba(255,255,255,.32),rgba(255,255,255,0) 55%),` +
+    `radial-gradient(circle at 68% 80%,rgba(0,0,0,.28),rgba(0,0,0,0) 55%),` +
     `repeating-conic-gradient(from -8.571deg,` +
     `color-mix(in srgb,${dark},#000 26%) 0deg,${dark} 3.2deg,` +
     `${light} 7.6deg,color-mix(in srgb,${light},#fff 34%) 8.57deg,` +
     `${light} 9.6deg,${dark} 13.9deg,color-mix(in srgb,${dark},#000 26%) 17.143deg)`
   );
 }
+
+/** Crown-cap outer silhouette: a 21-tooth scalloped edge (same phase as the
+ * ring's flute highlights, so each bulge points outward right where its
+ * flute is brightest) instead of a plain circle — real crimped caps aren't
+ * round, they're fluted. Percentage-based, so one shape works for every
+ * avatar regardless of `size`; computed once rather than per render. */
+export const capClipPath = (() => {
+  const teeth = 21;
+  const samplesPerTooth = 10;
+  const troughRatio = 0.06;
+  const steps = teeth * samplesPerTooth;
+  const points: string[] = [];
+  for (let i = 0; i < steps; i++) {
+    const angle = (i / steps) * Math.PI * 2;
+    const wave = (1 + Math.cos(angle * teeth)) / 2;
+    const r = 0.5 * (1 - troughRatio * (1 - wave));
+    const x = 50 + r * 100 * Math.sin(angle);
+    const y = 50 - r * 100 * Math.cos(angle);
+    points.push(`${x.toFixed(2)}% ${y.toFixed(2)}%`);
+  }
+  return `polygon(${points.join(",")})`;
+})();
 
 /** Glossy highlight overlay + radial "face" painted inside the ring —
  * gives the cap top a photographic highlight instead of a flat fill. */

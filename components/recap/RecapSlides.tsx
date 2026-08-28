@@ -5,8 +5,52 @@ import Link from "next/link";
 import { recapSlideThemes, displayHero, type RecapSlide } from "@/lib/theme/tokens";
 import { StatCounter } from "@/components/ui";
 import type { RecapData } from "@/lib/db/recap";
+import { shareRecapCard, type RecapCardContent } from "@/lib/recap-card";
 
 const ORDER: RecapSlide[] = ["showedUp", "biggestWin", "bestDuo", "redZones"];
+
+/** Mirrors the slide's own JSX content (below) as flat text a canvas can
+ * draw — kept in one place so the shared image never drifts from what's
+ * on screen. */
+function cardContentFor(key: RecapSlide, data: RecapData, crewName: string): RecapCardContent {
+  const kicker = `${crewName} · ${data.label}`;
+  switch (key) {
+    case "showedUp":
+      return {
+        kicker,
+        headline: "The crew showed up",
+        bigNumber: String(data.showedUp.games),
+        subtext: `games logged, across ${data.showedUp.nights} ${data.showedUp.nights === 1 ? "night" : "nights"}`,
+      };
+    case "biggestWin":
+      return data.biggestWin
+        ? {
+            kicker,
+            headline: `Biggest blowout — ${data.biggestWin.winnerNames}`,
+            bigNumber: String(data.biggestWin.margin),
+            subtext: `point margin over ${data.biggestWin.loserNames}`,
+          }
+        : { kicker, headline: "Biggest blowout", bigNumber: "–", subtext: "No games logged yet." };
+    case "bestDuo":
+      return data.bestDuo
+        ? {
+            kicker,
+            headline: `Best partner — ${data.bestDuo.names}`,
+            bigNumber: String(data.bestDuo.wins),
+            subtext: `wins together · ${data.bestDuo.wins}–${data.bestDuo.losses}`,
+          }
+        : { kicker, headline: "Best partner", bigNumber: "–", subtext: "No partner pairing yet." };
+    case "redZones":
+      return data.redZones
+        ? {
+            kicker,
+            headline: `Red zone regular — ${data.redZones.name}`,
+            bigNumber: String(data.redZones.count),
+            subtext: "chugs taken",
+          }
+        : { kicker, headline: "Red zone regular", bigNumber: "–", subtext: "Nobody's hit the red zone yet." };
+  }
+}
 
 export function RecapSlides({
   crewId,
@@ -14,6 +58,7 @@ export function RecapSlides({
   data,
 }: Readonly<{ crewId: string; crewName: string; data: RecapData }>) {
   const [index, setIndex] = useState(0);
+  const [sharing, setSharing] = useState(false);
   const key = ORDER[index];
   const theme = recapSlideThemes[key];
 
@@ -22,6 +67,16 @@ export function RecapSlides({
   }
   function prev() {
     setIndex((i) => Math.max(i - 1, 0));
+  }
+
+  async function share() {
+    if (sharing) return;
+    setSharing(true);
+    try {
+      await shareRecapCard(key, cardContentFor(key, data, crewName));
+    } finally {
+      setSharing(false);
+    }
   }
 
   return (
@@ -36,13 +91,24 @@ export function RecapSlides({
         ))}
       </div>
 
-      <Link
-        href={`/crews/${crewId}`}
-        aria-label="Close recap"
-        className="relative z-10 self-end mr-5 mt-3 w-9 h-9 flex items-center justify-center text-2xl leading-none"
-      >
-        ×
-      </Link>
+      <div className="relative z-10 flex items-center justify-end gap-2 mr-5 mt-3">
+        <button
+          type="button"
+          onClick={share}
+          disabled={sharing}
+          className="h-9 px-3.5 rounded-pill font-heading font-bold text-[11px] tracking-[1.2px] uppercase disabled:opacity-50"
+          style={{ background: theme.buttonBg, color: theme.buttonFg }}
+        >
+          {sharing ? "…" : "Share"}
+        </button>
+        <Link
+          href={`/crews/${crewId}`}
+          aria-label="Close recap"
+          className="w-9 h-9 flex items-center justify-center text-2xl leading-none"
+        >
+          ×
+        </Link>
+      </div>
 
       <div className="relative flex-1 flex flex-col items-center justify-center px-6 text-center gap-3 pointer-events-none">
         <div className="font-mono font-semibold text-[11px] tracking-[0.2em] uppercase" style={{ color: theme.accent }}>

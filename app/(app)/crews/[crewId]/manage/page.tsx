@@ -4,8 +4,14 @@ import { db } from "@/lib/db";
 import { groups, groupMembers } from "@/lib/db/schema";
 import { requireSession, requireGroupOwner } from "@/lib/db/authz";
 import { initialsFor } from "@/lib/format";
-import { AvatarChip, BackButton, Card, ConfirmForm, PrimaryButton } from "@/components/ui";
-import { renameCrewAction, regenerateInviteCodeAction, removeCrewMemberAction, deleteCrewAction } from "./actions";
+import { AutoSubmitToggle, AvatarChip, BackButton, Card, ConfirmForm, InfoButton, PrimaryButton } from "@/components/ui";
+import {
+  renameCrewAction,
+  regenerateInviteCodeAction,
+  removeCrewMemberAction,
+  deleteCrewAction,
+  setTrackShotZonesAction,
+} from "./actions";
 
 export default async function ManageCrewPage({ params }: { params: Promise<{ crewId: string }> }) {
   const { crewId } = await params;
@@ -29,6 +35,7 @@ export default async function ManageCrewPage({ params }: { params: Promise<{ cre
   const renameAction = renameCrewAction.bind(null, crewId);
   const regenerateAction = regenerateInviteCodeAction.bind(null, crewId);
   const deleteAction = deleteCrewAction.bind(null, crewId);
+  const trackShotZonesAction = setTrackShotZonesAction.bind(null, crewId);
 
   return (
     <div className="min-h-screen bg-surface flex flex-col px-5 pt-14 pb-28 gap-6">
@@ -71,6 +78,24 @@ export default async function ManageCrewPage({ params }: { params: Promise<{ cre
           </PrimaryButton>
         </form>
       </Card>
+
+      <form action={trackShotZonesAction}>
+        <Card variant="flat" className="flex items-center justify-between gap-3">
+          <div className="min-w-0 flex items-center gap-2">
+            <div className="font-heading font-bold text-label-kicker tracking-kicker uppercase text-cream/40">
+              Track shot zones
+            </div>
+            <InfoButton ariaLabel="About tracking shot zones">
+              Log which of the 1/2/3 fields a cap lands in, not just mama or miss. Off keeps logging to a single tap.
+            </InfoButton>
+          </div>
+          <AutoSubmitToggle
+            name="trackShotZones"
+            defaultChecked={group.trackShotZones}
+            ariaLabel="Track shot zones"
+          />
+        </Card>
+      </form>
 
       <div className="flex flex-col gap-2.5">
         <div className="font-heading font-bold text-label-kicker tracking-kicker uppercase text-cream/40">

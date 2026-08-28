@@ -19,3 +19,4 @@ export { PlusIcon } from './PlusIcon';
 export { LockIcon } from './LockIcon';
 export { FilterIcon } from './FilterIcon';
 export { InfoIcon } from './InfoIcon';
+export { FlameIcon } from './FlameIcon';

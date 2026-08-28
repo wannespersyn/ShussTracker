@@ -5,6 +5,7 @@ import {
   uuid,
   timestamp,
   integer,
+  boolean,
   date,
   primaryKey,
   unique,
@@ -27,6 +28,14 @@ export const users = pgTable("user", {
   emailVerified: timestamp("email_verified", { mode: "date" }),
   image: text("avatar_url"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+  // A guest is a normal `user` row (games/shots/stats all work unchanged)
+  // added by a crew member for someone without an account yet — no email,
+  // no Auth.js account/session row. `claimToken` is set only while a guest
+  // is unclaimed; claiming reassigns every FK that points at the guest's
+  // id onto the claimer's real account and deletes the guest row (see
+  // lib/db/guests.ts), so the token only ever needs to resolve once.
+  isGuest: boolean("is_guest").notNull().default(false),
+  claimToken: text("claim_token").unique(),
 });
 
 export const accounts = pgTable(
@@ -97,6 +106,13 @@ export const groups = pgTable("group", {
     .notNull()
     .references(() => users.id),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+  // Off by default — most crews never actually pin down which of the 1/2/3
+  // field zones a cap landed in mid-game, they just log the mama hits. A
+  // crew can opt into full zone tracking here; stats/achievements that need
+  // that granularity fall back to a collapsed hit/miss/mama view (see
+  // lib/db/stats.ts, lib/db/achievements.ts) whenever the underlying games
+  // don't actually have "2"/"3" shots recorded, regardless of this flag.
+  trackShotZones: boolean("track_shot_zones").notNull().default(false),
 });
 
 export const groupMembers = pgTable(
@@ -177,6 +193,70 @@ export const shots = pgTable("shot", {
     .references(() => gameTeamPlayers.id, { onDelete: "cascade" }),
   fieldHit: fieldHitEnum("field_hit").notNull(),
   timestamp: timestamp("timestamp").notNull().defaultNow(),
+});
+
+/* -----------------------------------------------------------------------
+ * Crew activity — trash talk on a logged game. A fixed, small reaction set
+ * (rather than free-form emoji) keeps the picker simple and the tally
+ * meaningful; one row per (game, user, reaction) so a tap toggles it.
+ * --------------------------------------------------------------------- */
+
+export const reactionEnum = pgEnum("reaction", ["fire", "laugh", "beer", "skull"]);
+
+export const gameComments = pgTable("game_comment", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  gameId: uuid("game_id")
+    .notNull()
+    .references(() => games.id, { onDelete: "cascade" }),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  text: text("text").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const gameReactions = pgTable(
+  "game_reaction",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    gameId: uuid("game_id")
+      .notNull()
+      .references(() => games.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    reaction: reactionEnum("reaction").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [unique().on(t.gameId, t.userId, t.reaction)],
+);
+
+/* -----------------------------------------------------------------------
+ * Rivalries — a pinned "beef" between two sides within a crew. Each side is
+ * 1 player (a solo rivalry, matching a 2-player mat) or 2 players (a duo
+ * rivalry, matching a 4/8-player mat) — `player2Id` null means solo. The
+ * running score itself isn't stored here; it's computed live from game
+ * history (lib/db/rivalries.ts), same as every other stat in this app, by
+ * finding games where one side's exact player set faced the other's.
+ * --------------------------------------------------------------------- */
+
+export const rivalries = pgTable("rivalry", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  groupId: uuid("group_id")
+    .notNull()
+    .references(() => groups.id, { onDelete: "cascade" }),
+  createdBy: uuid("created_by")
+    .notNull()
+    .references(() => users.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  aPlayer1Id: uuid("a_player1_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  aPlayer2Id: uuid("a_player2_id").references(() => users.id, { onDelete: "cascade" }),
+  bPlayer1Id: uuid("b_player1_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  bPlayer2Id: uuid("b_player2_id").references(() => users.id, { onDelete: "cascade" }),
 });
 
 /* -----------------------------------------------------------------------
@@ -279,10 +359,19 @@ export const groupsRelations = relations(groups, ({ many, one }) => ({
   members: many(groupMembers),
   events: many(events),
   games: many(games),
+  rivalries: many(rivalries),
   createdByUser: one(users, {
     fields: [groups.createdBy],
     references: [users.id],
   }),
+}));
+
+export const rivalriesRelations = relations(rivalries, ({ one }) => ({
+  group: one(groups, { fields: [rivalries.groupId], references: [groups.id] }),
+  aPlayer1: one(users, { fields: [rivalries.aPlayer1Id], references: [users.id], relationName: "rivalryAPlayer1" }),
+  aPlayer2: one(users, { fields: [rivalries.aPlayer2Id], references: [users.id], relationName: "rivalryAPlayer2" }),
+  bPlayer1: one(users, { fields: [rivalries.bPlayer1Id], references: [users.id], relationName: "rivalryBPlayer1" }),
+  bPlayer2: one(users, { fields: [rivalries.bPlayer2Id], references: [users.id], relationName: "rivalryBPlayer2" }),
 }));
 
 export const groupMembersRelations = relations(groupMembers, ({ one }) => ({
@@ -314,6 +403,18 @@ export const gamesRelations = relations(games, ({ one, many }) => ({
     references: [events.id],
   }),
   teams: many(gameTeams),
+  comments: many(gameComments),
+  reactions: many(gameReactions),
+}));
+
+export const gameCommentsRelations = relations(gameComments, ({ one }) => ({
+  game: one(games, { fields: [gameComments.gameId], references: [games.id] }),
+  user: one(users, { fields: [gameComments.userId], references: [users.id] }),
+}));
+
+export const gameReactionsRelations = relations(gameReactions, ({ one }) => ({
+  game: one(games, { fields: [gameReactions.gameId], references: [games.id] }),
+  user: one(users, { fields: [gameReactions.userId], references: [users.id] }),
 }));
 
 export const gameTeamsRelations = relations(gameTeams, ({ one, many }) => ({

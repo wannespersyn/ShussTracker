@@ -3,24 +3,30 @@
 import { useMemo, useState } from "react";
 import { BackButton, LinkButton, PrimaryButton } from "@/components/ui";
 import { DuoPairingBoard } from "@/components/teams/DuoPairingBoard";
-import { TEAM_COLORS, shuffleIntoDuos, toTeamPlayers, type Duo, type RosterPlayer } from "@/lib/teams";
+import { balanceIntoDuos, TEAM_COLORS, shuffleIntoDuos, toTeamPlayers, type Duo, type RosterPlayer } from "@/lib/teams";
 import { capRingGradient } from "@/lib/theme/tokens";
 import { cn } from "@/lib/cn";
 
 /** Random team picker ("chwazi" — the finger-picking randomizer game this
  * is named after). Select who's in, shuffle into duos, then hand the
- * result off to a casual game or a tournament via query params. */
+ * result off to a casual game or a tournament via query params.
+ *
+ * `ratings` (crew Elo, keyed by userId) is optional — passing it in enables
+ * the "balance by skill" toggle, which pairs strongest-with-weakest instead
+ * of pure random so nobody's duo is a runaway stack or a guaranteed loss. */
 export function ChwaziPicker({
   groupId,
   eventId,
   roster,
-}: Readonly<{ groupId: string; eventId?: string; roster: RosterPlayer[] }>) {
+  ratings = {},
+}: Readonly<{ groupId: string; eventId?: string; roster: RosterPlayer[]; ratings?: Record<string, number> }>) {
   const players = useMemo(() => toTeamPlayers(roster), [roster]);
   const [selectedIds, setSelectedIds] = useState<string[]>(() =>
     players.length % 2 === 0 ? players.map((p) => p.id) : [],
   );
   const [phase, setPhase] = useState<"select" | "shuffling" | "result">("select");
   const [teams, setTeams] = useState<Duo[] | null>(null);
+  const [balanced, setBalanced] = useState(false);
 
   const canShuffle = selectedIds.length >= 4 && selectedIds.length % 2 === 0;
 
@@ -32,7 +38,8 @@ export function ChwaziPicker({
     if (!canShuffle) return;
     setPhase("shuffling");
     setTimeout(() => {
-      setTeams(shuffleIntoDuos(players.filter((p) => selectedIds.includes(p.id))));
+      const picked = players.filter((p) => selectedIds.includes(p.id));
+      setTeams(balanced ? balanceIntoDuos(picked, ratings) : shuffleIntoDuos(picked));
       setPhase("result");
     }, 900);
   }
@@ -77,7 +84,39 @@ export function ChwaziPicker({
               );
             })}
           </div>
-          <PrimaryButton className="mt-auto h-16 w-full" size="lg" disabled={!canShuffle} onClick={chwazi}>
+
+          <button
+            type="button"
+            onClick={() => setBalanced((v) => !v)}
+            className={cn(
+              "mt-auto flex items-center justify-between h-13 px-4 rounded-md border-2",
+              balanced ? "bg-gold/12 border-gold/45" : "bg-cream/5 border-cream/10",
+            )}
+          >
+            <span className="text-left">
+              <span className={cn("block font-heading font-bold text-sm", balanced ? "text-gold" : "text-cream/70")}>
+                Balance by skill
+              </span>
+              <span className="block font-body text-[12px] text-cream/45 mt-0.5">
+                {balanced ? "Strongest paired with weakest" : "Pure random — the classic chwazi"}
+              </span>
+            </span>
+            <span
+              className={cn(
+                "w-11 h-6.5 rounded-pill relative shrink-0",
+                balanced ? "bg-gold" : "bg-cream/15",
+              )}
+            >
+              <span
+                className={cn(
+                  "absolute top-1 left-1 w-4.5 h-4.5 rounded-pill bg-cream transition-transform",
+                  balanced && "translate-x-4.5",
+                )}
+              />
+            </span>
+          </button>
+
+          <PrimaryButton className="h-16 w-full" size="lg" disabled={!canShuffle} onClick={chwazi}>
             Chwazi!
           </PrimaryButton>
         </>

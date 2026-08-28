@@ -29,6 +29,27 @@
       "when": 1787213619493,
       "tag": "0003_legal_yellow_claw",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1787846844036,
+      "tag": "0004_salty_rictor",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1787848039781,
+      "tag": "0005_confused_zaladane",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787848728952,
+      "tag": "0006_woozy_natasha_romanoff",
+      "breakpoints": true
     }
   ]
 }

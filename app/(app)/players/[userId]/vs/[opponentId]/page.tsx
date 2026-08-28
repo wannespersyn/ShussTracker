@@ -3,12 +3,13 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { requireSession, requireSharesCrew } from "@/lib/db/authz";
-import { getHeadToHead, type HeadToHeadMeeting } from "@/lib/db/h2h";
+import { getHeadToHead } from "@/lib/db/h2h";
 import { getPlayerStatsSummary } from "@/lib/db/stats";
 import { initialsFor } from "@/lib/format";
 import { displayHero } from "@/lib/theme/tokens";
 import { cn } from "@/lib/cn";
 import { AvatarChip, BackButton, Card, StatCounter } from "@/components/ui";
+import { rivalryInsight } from "@/lib/rivalry-insight";
 
 type SideBySideRow = { name: string; a: string; b: string; aw: number; bw: number };
 
@@ -31,23 +32,6 @@ function sideBySideRows(
     },
     { name: "Mama hits", a: String(aStats.riskZone), b: String(bStats.riskZone), ...bar(aStats.riskZone, bStats.riskZone) },
   ];
-}
-
-function rivalryInsight(meetings: HeadToHeadMeeting[], aName: string, bName: string, aWins: number, bWins: number) {
-  if (meetings.length < 2) return null;
-  let streak = 1;
-  for (let i = 1; i < meetings.length; i++) {
-    if (meetings[i].aWon === meetings[0].aWon) streak++;
-    else break;
-  }
-  if (streak >= 2) {
-    const winner = meetings[0].aWon ? aName.split(" ")[0] : bName.split(" ")[0];
-    return { big: streak, text: `${winner} has won ${streak} straight meetings in this rivalry.` };
-  }
-  const gap = Math.abs(aWins - bWins);
-  if (gap === 0) return { big: meetings.length, text: `Dead even after ${meetings.length} meetings.` };
-  const trailing = aWins < bWins ? aName.split(" ")[0] : bName.split(" ")[0];
-  return { big: gap, text: `${trailing} needs ${gap} more win${gap === 1 ? "" : "s"} to level this up.` };
 }
 
 export default async function HeadToHeadPage({
@@ -83,7 +67,7 @@ export default async function HeadToHeadPage({
   const aPct = total > 0 ? Math.round((h2h.aWins * 100) / total) : 50;
   const sideBySide = sideBySideRows(aStats, bStats);
   const lastFive = h2h.meetings.slice(0, 5);
-  const insight = rivalryInsight(h2h.meetings, aName, bName, h2h.aWins, h2h.bWins);
+  const insight = rivalryInsight(h2h.meetings, aName.split(" ")[0], bName.split(" ")[0], h2h.aWins, h2h.bWins);
 
   return (
     <div className="min-h-screen bg-surface flex flex-col px-5 pt-14 pb-28 gap-6">

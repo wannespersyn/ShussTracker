@@ -8,7 +8,7 @@ type PrimaryButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
    * ghost: dashed border, Barlow Condensed label type, lowest emphasis
    * (log-a-game "Shuffle the duos"). */
   variant?: "gold" | "inverted" | "outline" | "ghost";
-  /** md: 58px (most CTAs, 7px shadow lip). lg: 62px (onboarding hero
+  /** md: 50px (most CTAs, 7px shadow lip). lg: 54px (onboarding hero
    * CTA, 8px shadow lip). */
   size?: "md" | "lg";
   children: ReactNode;
@@ -25,7 +25,7 @@ export function primaryButtonClasses({
   return cn(
     "rounded-cta transition-transform duration-100 inline-flex items-center justify-center active:scale-[0.98]",
     "disabled:opacity-40 disabled:pointer-events-none",
-    size === "lg" ? "h-15.5 text-2xl" : "h-14.5 text-xl",
+    size === "lg" ? "h-13.5 px-7 text-xl" : "h-12.5 px-6 text-lg",
     variant !== "ghost" && "font-display uppercase tracking-[1.2px]",
     variant === "gold" && cn("bg-gold text-ink", size === "lg" ? "shadow-cta-lg" : "shadow-cta"),
     variant === "inverted" && "bg-ink text-cream shadow-cta-inverted",

@@ -46,13 +46,26 @@ export function DuoPairingBoard({
     setSelectedPlayerId(null);
   }
 
+  function renameTeam(teamId: string, label: string) {
+    onChange(teams.map((t) => (t.id === teamId ? { ...t, label } : t)));
+  }
+
   return (
     <div className="flex flex-col gap-3.5">
-      {teams.map((t) => (
+      {teams.map((t, i) => (
         <div key={t.id} className="rounded-lg bg-cream/5 border border-cream/10 p-3.5 pb-4">
           <div className="flex items-center gap-2 mb-2.5">
-            <div className="w-3.5 h-3.5 rounded-pill" style={{ background: capRingPairs[t.color].light }} />
-            <div className="font-mono font-semibold text-[10px] tracking-kicker uppercase text-cream/70">{t.label}</div>
+            <div className="w-3.5 h-3.5 rounded-pill shrink-0" style={{ background: capRingPairs[t.color].light }} />
+            <input
+              type="text"
+              value={t.label}
+              onChange={(e) => renameTeam(t.id, e.target.value)}
+              onBlur={(e) => {
+                if (e.target.value.trim() === "") renameTeam(t.id, `Team ${i + 1}`);
+              }}
+              placeholder={`Team ${i + 1}`}
+              className="flex-1 min-w-0 bg-transparent border-none outline-none font-mono font-semibold text-[10px] tracking-kicker uppercase text-cream/70 focus:text-cream"
+            />
           </div>
           <div className="flex gap-2.5">
             {t.players.map((p) => (

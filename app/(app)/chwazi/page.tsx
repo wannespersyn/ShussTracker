@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { groupMembers } from "@/lib/db/schema";
 import { requireSession } from "@/lib/db/authz";
+import { getCrewEloLeaderboard } from "@/lib/db/crews";
 import { ChwaziPicker } from "@/components/chwazi/ChwaziPicker";
 import { Card } from "@/components/ui";
 import { ChevronRightIcon } from "@/components/ui/icons";
@@ -59,11 +60,15 @@ export default async function ChwaziPage({
     );
   }
 
-  const members = await db.query.groupMembers.findMany({
-    where: eq(groupMembers.groupId, selected.groupId),
-    with: { user: true },
-  });
+  const [members, elo] = await Promise.all([
+    db.query.groupMembers.findMany({
+      where: eq(groupMembers.groupId, selected.groupId),
+      with: { user: true },
+    }),
+    getCrewEloLeaderboard(selected.groupId),
+  ]);
   const roster = members.map((m) => ({ id: m.user.id, name: m.user.name ?? "Player" }));
+  const ratings = Object.fromEntries(elo.map((e) => [e.userId, e.rating]));
 
-  return <ChwaziPicker groupId={selected.groupId} eventId={eventId} roster={roster} />;
+  return <ChwaziPicker groupId={selected.groupId} eventId={eventId} roster={roster} ratings={ratings} />;
 }

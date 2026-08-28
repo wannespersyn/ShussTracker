@@ -1,9 +1,78 @@
 import { AvatarChip, Card } from "@/components/ui";
+import { FlameIcon } from "@/components/ui/icons";
 import { initialsFor } from "@/lib/format";
 import { cn } from "@/lib/cn";
-import type { PlayerStatsSummary as Summary } from "@/lib/db/stats";
+import { ON_FIRE_STREAK, type PlayerStatsSummary as Summary } from "@/lib/db/stats";
 
 const RING_CIRCUMFERENCE = 2 * Math.PI * 40;
+
+/** Win-streak visual tiers — the flame and number get bigger and hotter,
+ * a flame-colored ring hugs the hero card's actual border (a CSS
+ * padding + mask trick, so it always sits flush on the edge and follows
+ * the real corner radius — no SVG coordinate math to get wrong), a few
+ * small flame icons sit on top of it for texture, and the card picks up
+ * a pulsing glow, the longer the streak runs. Ordered hottest-first so
+ * the first match wins; the last tier (min: 1) catches every streak so
+ * `find` always resolves. `thickness: 0` means no border fire yet —
+ * just the flame + number. Past red (real flames top out there), the
+ * top two tiers borrow the "blue/white-hot" and "violet" ends of a
+ * blackbody curve so streaks can keep escalating past 10. */
+const STREAK_TIERS = [
+  { min: 20, color: "text-purple-bright", ember: "rgba(166,107,224,.95)", core: "#f5eaff", flameSize: "w-9 h-9", numberSize: "text-4xl", thickness: 4, flames: 6, animDur: 1.2, pulseDuration: 0.7 },
+  { min: 15, color: "text-blue-bright", ember: "rgba(79,168,232,.9)", core: "#eaf6ff", flameSize: "w-8.5 h-8.5", numberSize: "text-4xl", thickness: 3.5, flames: 6, animDur: 1.5, pulseDuration: 0.9 },
+  { min: 10, color: "text-red-bright", ember: "rgba(224,91,78,.9)", core: "#ffe08a", flameSize: "w-8 h-8", numberSize: "text-3xl", thickness: 3, flames: 6, animDur: 1.8, pulseDuration: 1.1 },
+  { min: 7, color: "text-red-bright", ember: "rgba(224,91,78,.75)", core: "#ffd76a", flameSize: "w-7 h-7", numberSize: "text-3xl", thickness: 3, flames: 4, animDur: 2.2, pulseDuration: 1.8 },
+  { min: 5, color: "text-gold", ember: "rgba(232,179,60,.7)", core: "#fff0b0", flameSize: "w-6.5 h-6.5", numberSize: "text-2xl", thickness: 2.5, flames: 3, animDur: 2.8, pulseDuration: 2.4 },
+  { min: ON_FIRE_STREAK, color: "text-gold", ember: "rgba(232,179,60,.55)", core: "#fff6cf", flameSize: "w-6 h-6", numberSize: "text-2xl", thickness: 2, flames: 2, animDur: 3.4, pulseDuration: undefined },
+  { min: 1, color: "text-cream/70", ember: "rgba(232,179,60,.2)", core: "#fff6cf", flameSize: "w-5 h-5", numberSize: "text-lg", thickness: 0, flames: 0, animDur: 0, pulseDuration: undefined },
+] as const;
+
+/** Fixed spots for the flame accents that sit on the ring — bottom edge
+ * first (fire "sits" there), spreading to the sides for hotter tiers.
+ * Kept a few px inside the card since it clips overflow. */
+const FLAME_SPOTS = [
+  { key: "a", style: { left: "14%", bottom: "3px" }, size: "w-4 h-4", delay: "0s" },
+  { key: "b", style: { left: "42%", bottom: "5px" }, size: "w-5 h-5", delay: "0.3s" },
+  { key: "c", style: { left: "70%", bottom: "3px" }, size: "w-4 h-4", delay: "0.15s" },
+  { key: "d", style: { right: "4px", bottom: "22%" }, size: "w-3.5 h-3.5", delay: "0.45s" },
+  { key: "e", style: { left: "4px", bottom: "22%" }, size: "w-3.5 h-3.5", delay: "0.6s" },
+  { key: "f", style: { left: "88%", bottom: "4px" }, size: "w-3.5 h-3.5", delay: "0.2s" },
+] as const;
+
+/** A flame-colored ring hugging the card's real border via `padding` +
+ * a two-layer `mask` (content-box vs. border-box, XOR'd together) — the
+ * classic CSS gradient-border trick. It always follows the element's
+ * actual size and `border-radius`, unlike an SVG overlay with its own
+ * coordinate space. The color drifts slowly along a repeating diagonal
+ * gradient for a gentle simmer, not a glitchy flicker. */
+function FireBorder({ tier }: Readonly<{ tier: (typeof STREAK_TIERS)[number] }>) {
+  return (
+    <>
+      <div
+        aria-hidden
+        className="absolute inset-0 rounded-xl pointer-events-none animate-fire-flow"
+        style={
+          {
+            padding: tier.thickness,
+            background: `repeating-linear-gradient(45deg, ${tier.ember} 0px, ${tier.core} 8px, ${tier.ember} 16px)`,
+            animationDuration: `${tier.animDur}s`,
+            WebkitMaskImage: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+            WebkitMaskComposite: "xor",
+            maskImage: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+            maskComposite: "exclude",
+          } as React.CSSProperties
+        }
+      />
+      {FLAME_SPOTS.slice(0, tier.flames).map((spot) => (
+        <FlameIcon
+          key={spot.key}
+          className={cn(spot.size, "absolute pointer-events-none", tier.color)}
+          style={{ ...spot.style, animation: "flicker 1.3s ease-in-out infinite", animationDelay: spot.delay }}
+        />
+      ))}
+    </>
+  );
+}
 
 /** The win-rate hero / stat-grid / shot-distribution / best-partner /
  * recent-games card cluster — shared by Home ("you") and a player's
@@ -21,19 +90,30 @@ export function PlayerStatsSummary({
   isSelf = true,
   hideShotDist = false,
 }: Readonly<{ summary: Summary; displayName: string; isSelf?: boolean; hideShotDist?: boolean }>) {
-  const { totalGames, wins, winRate, streak, riskZone, shotDist, bestDuo, recentGames } = summary;
+  const { totalGames, wins, winRate, streak, longestStreak, riskZone, shotDist, bestDuo, recentGames } = summary;
   const firstName = displayName.split(" ")[0];
 
   if (totalGames === 0) return null;
 
   const ringOffset = (winRate / 100) * RING_CIRCUMFERENCE;
+  const streakTier = streak > 0 ? STREAK_TIERS.find((t) => streak >= t.min)! : undefined;
 
   return (
     <>
-      <Card variant="hero" className="relative overflow-hidden">
+      <Card
+        variant="hero"
+        className="relative overflow-hidden"
+        style={
+          streakTier?.pulseDuration
+            ? ({
+                "--ember-color": streakTier.ember,
+                animation: `emberPulse ${streakTier.pulseDuration}s ease-in-out infinite`,
+              } as React.CSSProperties)
+            : undefined
+        }
+      >
         <div
           className="absolute -right-13 -top-13 w-42.5 h-42.5 rounded-pill pointer-events-none"
-          style={{ background: "radial-gradient(circle, rgba(232,179,60,.22), transparent 68%)" }}
         />
         <div className="relative flex items-start justify-between">
           <div>
@@ -44,10 +124,24 @@ export function PlayerStatsSummary({
               <span className="font-display text-display-xl text-gold">{winRate}</span>
               <span className="font-display text-[38px] text-gold">%</span>
             </div>
-            <div className="flex gap-1.75 mt-3">
-              {streak > 0 && (
-                <span className="font-mono font-semibold text-[10px] tracking-[0.08em] text-ink bg-gold rounded-pill px-2.25 py-1.5">
-                  W{streak} STREAK
+            <div className="flex flex-wrap items-center gap-1.75 mt-3">
+              {streakTier && (
+                <span className="inline-flex items-center gap-1 shrink-0">
+                  <FlameIcon
+                    className={cn(streakTier.flameSize, "shrink-0", streakTier.color)}
+                    style={{ animation: "flicker 1.3s ease-in-out infinite" }}
+                  />
+                  <span className={cn("font-display leading-none", streakTier.numberSize, streakTier.color)}>
+                    {streak}
+                  </span>
+                </span>
+              )}
+              {longestStreak > 1 && longestStreak !== streak && (
+                <span className="inline-flex items-center gap-1 font-mono font-semibold text-[10px] tracking-[0.08em] text-cream/70 bg-cream/10 rounded-pill px-2.25 py-1.5">
+                  {longestStreak >= ON_FIRE_STREAK && (
+                    <FlameIcon className="w-2.75 h-2.75 shrink-0 text-cream/60" />
+                  )}
+                  Longest Win Streak: {longestStreak}
                 </span>
               )}
             </div>

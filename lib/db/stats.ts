@@ -24,13 +24,24 @@ export async function getShotDistribution(
   const scoring = (counts.get("1") ?? 0) + (counts.get("2") ?? 0) + (counts.get("3") ?? 0);
   const makeRate = total > 0 ? Math.round((scoring / total) * 100) : 0;
 
-  const order = [
-    { fieldHit: "3", label: "FAR" },
-    { fieldHit: "2", label: "MID" },
-    { fieldHit: "1", label: "NEAR" },
-    { fieldHit: "mama", label: "RISK" },
-    { fieldHit: "miss", label: "MISS" },
-  ];
+  // Collapse NEAR/MID/FAR into a single HIT bucket whenever this player has
+  // no "2"/"3" shots on record — either their crew never tracks zones, or
+  // they haven't played since it was turned on. No point showing two bars
+  // permanently pinned at zero.
+  const hasZoneData = (counts.get("2") ?? 0) > 0 || (counts.get("3") ?? 0) > 0;
+  const order = hasZoneData
+    ? [
+        { fieldHit: "3", label: "FAR" },
+        { fieldHit: "2", label: "MID" },
+        { fieldHit: "1", label: "NEAR" },
+        { fieldHit: "mama", label: "RISK" },
+        { fieldHit: "miss", label: "MISS" },
+      ]
+    : [
+        { fieldHit: "1", label: "HIT" },
+        { fieldHit: "mama", label: "RISK" },
+        { fieldHit: "miss", label: "MISS" },
+      ];
   const max = Math.max(1, ...order.map((o) => counts.get(o.fieldHit) ?? 0));
   const bars = order.map((o) => {
     const count = counts.get(o.fieldHit) ?? 0;
@@ -133,12 +144,18 @@ export async function getRecentGamesDetail(userId: string, limit = 3): Promise<R
   });
 }
 
+/** Win streaks of this length or longer earn the "on fire" badge — matches
+ * the "On A Roll" achievement threshold in lib/db/achievements.ts. */
+export const ON_FIRE_STREAK = 3;
+
 export type PlayerStatsSummary = {
   totalGames: number;
   wins: number;
   losses: number;
   winRate: number;
   streak: number;
+  longestStreak: number;
+  onFire: boolean;
   riskZone: number;
   shotDist: { makeRate: number; bars: ShotDistributionEntry[] } | null;
   bestDuo: BestDuo | null;
@@ -168,6 +185,18 @@ export async function getPlayerStatsSummary(userId: string): Promise<PlayerStats
     else break;
   }
 
+  let longestStreak = 0;
+  let running = 0;
+  for (let i = byRecent.length - 1; i >= 0; i--) {
+    if (byRecent[i].gameTeam.finalRank === 1) {
+      running++;
+      longestStreak = Math.max(longestStreak, running);
+    } else {
+      running = 0;
+    }
+  }
+  const onFire = streak >= ON_FIRE_STREAK;
+
   const riskZone = byRecent.reduce((sum, g) => sum + g.shots.filter((s) => s.fieldHit === "mama").length, 0);
 
   const [shotDist, bestDuo, recentGames] =
@@ -175,7 +204,7 @@ export async function getPlayerStatsSummary(userId: string): Promise<PlayerStats
       ? await Promise.all([getShotDistribution(userId), getBestDuo(userId), getRecentGamesDetail(userId, 3)])
       : [null, null, []];
 
-  return { totalGames, wins, losses, winRate, streak, riskZone, shotDist, bestDuo, recentGames };
+  return { totalGames, wins, losses, winRate, streak, longestStreak, onFire, riskZone, shotDist, bestDuo, recentGames };
 }
 
 export type StatsPerson = { id: string; name: string };
@@ -196,6 +225,10 @@ export type StatsExplorerData = {
   crews: StatsCrew[];
   events: StatsEvent[];
   games: StatsGame[];
+  /** True once any game in scope has a "2" or "3" shot on record — lets the
+   * explorer collapse the far/mid/near breakdown into a single HIT filter
+   * when nobody here has ever tracked shot zones. */
+  hasZoneData: boolean;
 };
 
 function tallyShots(playerShots: { fieldHit: string }[]): StatsFieldCounts {
@@ -222,7 +255,7 @@ export async function getStatsExplorerData(userId: string): Promise<StatsExplore
     with: { group: { with: { members: { with: { user: true } } } } },
   });
   if (memberships.length === 0) {
-    return { people: [], crews: [], events: [], games: [] };
+    return { people: [], crews: [], events: [], games: [], hasZoneData: false };
   }
 
   const groupIds = memberships.map((m) => m.groupId);
@@ -263,5 +296,9 @@ export async function getStatsExplorerData(userId: string): Promise<StatsExplore
     }),
   }));
 
-  return { people: [...peopleById.values()], crews, events: eventList, games: gameList };
+  const hasZoneData = gameList.some((g) =>
+    g.teams.some((t) => Object.values(t.shots).some((s) => s.mid > 0 || s.far > 0)),
+  );
+
+  return { people: [...peopleById.values()], crews, events: eventList, games: gameList, hasZoneData };
 }

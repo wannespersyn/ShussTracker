@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
+import { runAtomic } from "@/lib/db/batch";
 import { tournaments, tournamentEntrants, tournamentMatches } from "@/lib/db/schema";
 
 export type TournamentFormat = "single_elim" | "double_elim" | "round_robin";
@@ -301,8 +302,8 @@ export async function createTournament(
     matchInserts = buildRoundRobinSchedule(tournamentId, entrantIds);
   }
 
-  const [firstStatement, ...restStatements] = [
-    db.insert(tournaments).values({
+  await runAtomic((executor) => [
+    executor.insert(tournaments).values({
       id: tournamentId,
       groupId,
       ...(eventId ? { eventId } : {}),
@@ -312,11 +313,10 @@ export async function createTournament(
       createdBy,
     }),
     ...entrantPairs.map(([player1Id, player2Id], i) =>
-      db.insert(tournamentEntrants).values({ id: entrantIds[i], tournamentId, seed: i + 1, player1Id, player2Id }),
+      executor.insert(tournamentEntrants).values({ id: entrantIds[i], tournamentId, seed: i + 1, player1Id, player2Id }),
     ),
-    ...matchInserts.map((m) => db.insert(tournamentMatches).values(m)),
-  ];
-  await db.batch([firstStatement, ...restStatements]);
+    ...matchInserts.map((m) => executor.insert(tournamentMatches).values(m)),
+  ]);
 
   return tournamentId;
 }

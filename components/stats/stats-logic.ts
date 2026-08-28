@@ -25,6 +25,20 @@ export const FIELDS: { key: FieldKey; label: string; word: string }[] = [
   { key: "miss", label: "MISS", word: "misses" },
 ];
 
+/** FIELDS collapsed to HIT/RED ZONE/MISS when nothing in scope has ever
+ * tracked which of the 1/2/3 zones a cap landed in — see
+ * `StatsExplorerData.hasZoneData`. Reuses the "near" key to carry the
+ * combined hit count, since a crew that never tracks zones logs every hit
+ * as a "1". */
+export function visibleFields(data: StatsExplorerData): { key: FieldKey; label: string; word: string }[] {
+  if (data.hasZoneData) return FIELDS;
+  return [
+    { key: "near", label: "HIT", word: "hits" },
+    { key: "risk", label: "RED ZONE", word: "red-zone hits" },
+    { key: "miss", label: "MISS", word: "misses" },
+  ];
+}
+
 export function defaultFilters(currentUserId: string): Filters {
   return { person: currentUserId, event: null, duo: null, crew: null, mat: null, period: "all", field: null };
 }
@@ -150,7 +164,7 @@ export function chipLabel(dim: DimKey, f: Filters, data: StatsExplorerData, curr
     case "period":
       return f.period === "all" ? "All-time" : f.period === "season" ? "Last 3 months" : "This month";
     case "field":
-      return f.field ? FIELDS.find((x) => x.key === f.field)!.label : "Field type";
+      return f.field ? visibleFields(data).find((x) => x.key === f.field)!.label : "Field type";
   }
 }
 
@@ -232,7 +246,7 @@ export function sheetOptions(dim: DimKey, f: Filters, data: StatsExplorerData, c
     case "field":
       return [
         { val: null, label: "Everything", meta: "", on: !f.field },
-        ...FIELDS.map((x) => ({
+        ...visibleFields(data).map((x) => ({
           val: x.key,
           label: x.key === "miss" ? "Misses" : x.key === "risk" ? "Red zone" : x.label,
           meta: x.word,

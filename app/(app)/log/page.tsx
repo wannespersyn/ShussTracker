@@ -1,20 +1,62 @@
 import Link from "next/link";
 import { eq } from "drizzle-orm";
+import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
-import { groupMembers } from "@/lib/db/schema";
-import { requireSession } from "@/lib/db/authz";
+import { groupMembers, groups } from "@/lib/db/schema";
+import { requireSession, requireGroupMember } from "@/lib/db/authz";
 import { getGroupEvents } from "@/lib/db/events";
+import { getGameForRematch } from "@/lib/db/games";
 import { LogGameWizard } from "@/components/log/LogGameWizard";
 import { BackButton, Card } from "@/components/ui";
 import { ChevronRightIcon } from "@/components/ui/icons/ChevronRightIcon";
+import { TEAM_COLORS, type Duo } from "@/lib/teams";
+import { initialsFor } from "@/lib/format";
 
 export default async function LogGamePage({
   searchParams,
 }: Readonly<{
-  searchParams: Promise<{ crewId?: string; eventId?: string; teams?: string; casual?: string }>;
+  searchParams: Promise<{ crewId?: string; eventId?: string; teams?: string; casual?: string; rematch?: string }>;
 }>) {
   const session = await requireSession();
-  const { crewId, eventId, teams, casual } = await searchParams;
+  const { crewId, eventId, teams, casual, rematch } = await searchParams;
+
+  // Rematch — same crew, same teams, fresh game. Self-contained: it skips
+  // the crew/night picking below entirely since the original game already
+  // pins down the crew, the event, and who's on which team.
+  if (rematch) {
+    const source = await getGameForRematch(rematch);
+    if (!source?.groupId) notFound();
+    try {
+      await requireGroupMember(session.user.id, source.groupId);
+    } catch {
+      notFound();
+    }
+
+    const rematchGroup = await db.query.groups.findFirst({ where: eq(groups.id, source.groupId) });
+
+    const lockedTeams: Duo[] = source.teams.map((t, i) => {
+      const ring = TEAM_COLORS[i % TEAM_COLORS.length];
+      return {
+        id: `team-${i}`,
+        label: t.label,
+        color: ring,
+        players: t.players.map((p) => ({ id: p.id, name: p.name, initials: initialsFor(p.name), ring })),
+      };
+    });
+    const rematchRoster = lockedTeams.flatMap((t) => t.players.map((p) => ({ id: p.id, name: p.name })));
+
+    return (
+      <LogGameWizard
+        groupId={source.groupId}
+        eventId={source.eventId ?? undefined}
+        roster={rematchRoster}
+        lockedTeams={lockedTeams}
+        backHref={`/game/${rematch}`}
+        trackShotZones={rematchGroup?.trackShotZones ?? false}
+      />
+    );
+  }
+
   const presetPlayerIds = teams ? teams.split(",").filter(Boolean) : undefined;
   const teamsQuery = teams ? `&teams=${teams}` : "";
 
@@ -128,10 +170,13 @@ export default async function LogGamePage({
     }
   }
 
-  const members = await db.query.groupMembers.findMany({
-    where: eq(groupMembers.groupId, selected.groupId),
-    with: { user: true },
-  });
+  const [members, group] = await Promise.all([
+    db.query.groupMembers.findMany({
+      where: eq(groupMembers.groupId, selected.groupId),
+      with: { user: true },
+    }),
+    db.query.groups.findFirst({ where: eq(groups.id, selected.groupId) }),
+  ]);
 
   const roster = members.map((m) => ({
     id: m.user.id,
@@ -150,6 +195,7 @@ export default async function LogGamePage({
       roster={roster}
       presetPlayerIds={presetPlayerIds}
       backHref={wizardBackHref}
+      trackShotZones={group?.trackShotZones ?? false}
     />
   );
 }

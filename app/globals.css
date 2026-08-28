@@ -38,6 +38,10 @@
   /* Mint — positive/secondary accent (streak deltas, points-up) */
   --color-mint: #8fbf9c;
 
+  /* Blue/purple — top win-streak tiers (hotter than red), PlayerStatsSummary only */
+  --color-blue-bright: #4fa8e8;
+  --color-purple-bright: #a66be0;
+
   /* Log-mat shot zones (near -> far field, brighter = closer) */
   --color-field-near: #1f8f68;
   --color-field-mid: #167058;
@@ -95,6 +99,9 @@
   --color-cream: var(--color-cream);
 
   --color-mint: var(--color-mint);
+
+  --color-blue-bright: var(--color-blue-bright);
+  --color-purple-bright: var(--color-purple-bright);
 
   --color-field-near: var(--color-field-near);
   --color-field-mid: var(--color-field-mid);
@@ -163,6 +170,9 @@
   --animate-push-in: pushIn 0.22s ease-out;
   --animate-fade-in: fadeIn 0.2s ease-out;
   --animate-sheet-up: sheetUp 0.22s ease-out;
+  --animate-flicker: flicker 1.3s ease-in-out infinite;
+  --animate-ember-pulse: emberPulse 2s ease-in-out infinite;
+  --animate-fire-flow: fireFlow 5s linear infinite;
 }
 
 @layer base {
@@ -291,5 +301,41 @@
   }
   to {
     transform: translateY(0);
+  }
+}
+@keyframes flicker {
+  0%,
+  100% {
+    transform: scale(1) rotate(-3deg);
+    opacity: 1;
+  }
+  25% {
+    transform: scale(1.1) rotate(3deg);
+    opacity: 0.85;
+  }
+  50% {
+    transform: scale(0.92) rotate(-2deg);
+    opacity: 1;
+  }
+  75% {
+    transform: scale(1.06) rotate(2deg);
+    opacity: 0.9;
+  }
+}
+@keyframes emberPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 10px var(--ember-color, transparent);
+  }
+  50% {
+    box-shadow: 0 0 28px var(--ember-color, transparent);
+  }
+}
+@keyframes fireFlow {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 32px 0;
   }
 }

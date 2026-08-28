@@ -2,6 +2,7 @@ import { eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { gameTeamPlayers, games } from "@/lib/db/schema";
 import { scoreForPlayers as scoreFor } from "@/lib/scoring";
+import { wilsonLowerBound } from "@/lib/ranking";
 
 export type HeadToHeadMeeting = {
   gameId: string;
@@ -65,4 +66,57 @@ export async function getHeadToHead(userIdA: string, userIdB: string): Promise<H
     .sort((x, y) => y.playedAt.getTime() - x.playedAt.getTime());
 
   return { aWins, bWins, meetings };
+}
+
+export type NemesisResult = { opponentId: string; opponentName: string; wins: number; losses: number };
+
+/** The single opponent a player has the worst record against — ranked by
+ * Wilson lower bound of their LOSS rate (so a fluke 0-2 doesn't outrank a
+ * grinding 3-11), and requires at least 2 meetings before crowning one, so
+ * a single unlucky game doesn't hand someone a nemesis. Null if nobody
+ * qualifies yet. */
+export async function getNemesis(userId: string): Promise<NemesisResult | null> {
+  const myRows = await db.query.gameTeamPlayers.findMany({
+    where: eq(gameTeamPlayers.userId, userId),
+    with: { gameTeam: { with: { game: true } } },
+  });
+  if (myRows.length === 0) return null;
+
+  const myTeamIdByGame = new Map(myRows.map((r) => [r.gameTeam.game.id, r.gameTeamId]));
+  const gameIds = [...myTeamIdByGame.keys()];
+
+  const fullGames = await db.query.games.findMany({
+    where: inArray(games.id, gameIds),
+    with: { teams: { with: { players: { with: { user: true } } } } },
+  });
+
+  const tally = new Map<string, { name: string; wins: number; losses: number }>();
+  for (const game of fullGames) {
+    const myTeamId = myTeamIdByGame.get(game.id);
+    const myTeam = game.teams.find((t) => t.id === myTeamId);
+    if (!myTeam) continue;
+    const myWon = myTeam.finalRank === 1;
+    for (const team of game.teams) {
+      if (team.id === myTeamId) continue;
+      for (const p of team.players) {
+        const entry = tally.get(p.userId) ?? { name: p.user.name ?? "Player", wins: 0, losses: 0 };
+        if (myWon) entry.wins++;
+        else entry.losses++;
+        tally.set(p.userId, entry);
+      }
+    }
+  }
+
+  let nemesis: NemesisResult | null = null;
+  let worstScore = -1;
+  for (const [opponentId, d] of tally) {
+    const total = d.wins + d.losses;
+    if (total < 2) continue;
+    const score = wilsonLowerBound(d.losses, total);
+    if (score > worstScore) {
+      worstScore = score;
+      nemesis = { opponentId, opponentName: d.name, wins: d.wins, losses: d.losses };
+    }
+  }
+  return nemesis;
 }

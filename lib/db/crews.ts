@@ -1,8 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
+import { runAtomic } from "@/lib/db/batch";
 import { groups, groupMembers, games } from "@/lib/db/schema";
 import { wilsonLowerBound } from "@/lib/ranking";
+import { computeEloRatings, ELO_BASE } from "@/lib/elo";
+import { generateCode } from "@/lib/codes";
 
 function isToday(date: Date) {
   const now = new Date();
@@ -13,16 +16,7 @@ function isToday(date: Date) {
   );
 }
 
-// Uppercase, no 0/O/1/I — hard to mistype when read off a phone screen.
-const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-
-function generateInviteCode() {
-  let code = "";
-  for (let i = 0; i < 6; i++) {
-    code += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
-  }
-  return code;
-}
+const generateInviteCode = generateCode;
 
 export async function createCrewForUser(userId: string, name: string) {
   const groupId = randomUUID();
@@ -33,9 +27,9 @@ export async function createCrewForUser(userId: string, name: string) {
     inviteCode = generateInviteCode();
   }
 
-  await db.batch([
-    db.insert(groups).values({ id: groupId, name, inviteCode, createdBy: userId }),
-    db.insert(groupMembers).values({ groupId, userId }),
+  await runAtomic((executor) => [
+    executor.insert(groups).values({ id: groupId, name, inviteCode, createdBy: userId }),
+    executor.insert(groupMembers).values({ groupId, userId }),
   ]);
 
   return groupId;
@@ -65,6 +59,10 @@ export async function joinCrewByCode(
 
 export async function renameCrew(groupId: string, name: string) {
   await db.update(groups).set({ name }).where(eq(groups.id, groupId));
+}
+
+export async function setTrackShotZones(groupId: string, trackShotZones: boolean) {
+  await db.update(groups).set({ trackShotZones }).where(eq(groups.id, groupId));
 }
 
 export async function regenerateInviteCode(groupId: string): Promise<string> {
@@ -141,6 +139,48 @@ export async function getCrewLeaderboard(
         b.wins - a.wins ||
         b.gamesPlayed - a.gamesPlayed,
     );
+}
+
+export type CrewEloEntry = {
+  userId: string;
+  name: string;
+  rating: number;
+  gamesPlayed: number;
+};
+
+/** Per-member Elo rating for a crew, ranked highest first — accounts for
+ * who you beat (and who they'd already beaten), not just a raw win tally.
+ * See lib/elo.ts for the rating math. Members who haven't played yet get
+ * the base rating and sort to the bottom, tied on games played. */
+export async function getCrewEloLeaderboard(groupId: string): Promise<CrewEloEntry[]> {
+  const members = await db.query.groupMembers.findMany({
+    where: eq(groupMembers.groupId, groupId),
+    with: { user: true },
+  });
+
+  const groupGames = await db.query.games.findMany({
+    where: eq(games.groupId, groupId),
+    with: { teams: { with: { players: true } } },
+  });
+
+  const ratings = computeEloRatings(
+    groupGames.map((g) => ({
+      playedAt: g.playedAt,
+      teams: g.teams.map((t) => ({ playerIds: t.players.map((p) => p.userId), finalRank: t.finalRank })),
+    })),
+  );
+
+  return members
+    .map((m) => {
+      const r = ratings.get(m.userId);
+      return {
+        userId: m.userId,
+        name: m.user.name ?? "Player",
+        rating: r?.rating ?? ELO_BASE,
+        gamesPlayed: r?.gamesPlayed ?? 0,
+      };
+    })
+    .sort((a, b) => b.rating - a.rating || b.gamesPlayed - a.gamesPlayed);
 }
 
 export type CrewRedZoneEntry = {

@@ -9,7 +9,6 @@ import { cn } from "@/lib/cn";
 import type { StatsExplorerData, StatsPerson } from "@/lib/db/stats";
 import {
   DIMS,
-  FIELDS,
   activeDims,
   chipLabel,
   computeRankedList,
@@ -21,6 +20,7 @@ import {
   sheetOptions,
   sumShots,
   totalOf,
+  visibleFields,
   winLoss,
   type DimKey,
   type Filters,
@@ -90,7 +90,8 @@ export function StatsExplorer({ data, currentUserId }: Readonly<{ data: StatsExp
     setExpandedDim(null);
   }
 
-  const fieldMeta = f.field ? FIELDS.find((x) => x.key === f.field)! : null;
+  const fields = useMemo(() => visibleFields(data), [data]);
+  const fieldMeta = f.field ? fields.find((x) => x.key === f.field)! : null;
   const isRisk = f.field === "risk";
 
   return (
@@ -196,7 +197,7 @@ export function StatsExplorer({ data, currentUserId }: Readonly<{ data: StatsExp
                   {total} flicks · tap to filter
                 </div>
               </div>
-              {FIELDS.map((fld) => {
+              {fields.map((fld) => {
                 const n = counts[fld.key];
                 const max = Math.max(1, counts.far, counts.mid, counts.near, counts.risk, counts.miss);
                 const dim = f.field && f.field !== fld.key;

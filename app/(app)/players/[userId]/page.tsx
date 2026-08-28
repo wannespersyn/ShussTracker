@@ -7,6 +7,7 @@ import { requireSession, requireSharesCrew } from "@/lib/db/authz";
 import { getPlayerStatsSummary } from "@/lib/db/stats";
 import { getPlayerCrews, getPlayerOpponents } from "@/lib/db/players";
 import { getAchievements } from "@/lib/db/achievements";
+import { getNemesis } from "@/lib/db/h2h";
 import { initialsFor } from "@/lib/format";
 import { AvatarChip, BackButton, Badge, Card } from "@/components/ui";
 import { PlayerStatsSummary } from "@/components/players/PlayerStatsSummary";
@@ -27,11 +28,12 @@ export default async function PlayerProfilePage({ params }: { params: Promise<{ 
     notFound();
   }
 
-  const [summary, crews, opponents, achievements] = await Promise.all([
+  const [summary, crews, opponents, achievements, nemesis] = await Promise.all([
     getPlayerStatsSummary(viewedId),
     getPlayerCrews(viewedId),
     getPlayerOpponents(viewedId),
     getAchievements(viewedId),
+    getNemesis(viewedId),
   ]);
 
   const name = player.name ?? "Player";
@@ -89,6 +91,28 @@ export default async function PlayerProfilePage({ params }: { params: Promise<{ 
           </div>
         )}
       </div>
+
+      {nemesis && (
+        <Link href={`/players/${viewedId}/vs/${nemesis.opponentId}`}>
+          <Card variant="flat" className="flex items-center gap-3.5 border-red/30">
+            <AvatarChip initials={initialsFor(nemesis.opponentName)} ring="red" size={42} />
+            <div className="flex-1 min-w-0">
+              <div className="font-heading font-semibold text-[10.5px] tracking-kicker uppercase text-red-pale">
+                Nemesis
+              </div>
+              <div className="font-heading font-semibold text-heading text-cream leading-[1.2] mt-0.5 truncate">
+                {nemesis.opponentName}
+              </div>
+              <div className="font-mono text-[10px] text-cream/42 mt-0.5">
+                {nemesis.wins}W–{nemesis.losses}L {isSelf ? "for you" : `for ${name.split(" ")[0]}`}
+              </div>
+            </div>
+            <div className="font-display text-2xl text-red-bright shrink-0">
+              {Math.round((nemesis.losses / (nemesis.wins + nemesis.losses)) * 100)}%
+            </div>
+          </Card>
+        </Link>
+      )}
 
       {opponents.length > 0 && (
         <div className="flex flex-col gap-2.5">
