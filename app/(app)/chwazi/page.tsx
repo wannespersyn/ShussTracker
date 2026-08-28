@@ -10,9 +10,10 @@ import { ChevronRightIcon } from "@/components/ui/icons";
 
 export default async function ChwaziPage({
   searchParams,
-}: Readonly<{ searchParams: Promise<{ crewId?: string; eventId?: string }> }>) {
+}: Readonly<{ searchParams: Promise<{ crewId?: string; eventId?: string; count?: string }> }>) {
   const session = await requireSession();
-  const { crewId, eventId } = await searchParams;
+  const { crewId, eventId, count } = await searchParams;
+  const requiredCount = count ? Number(count) : undefined;
 
   const memberships = await db.query.groupMembers.findMany({
     where: eq(groupMembers.userId, session.user.id),
@@ -33,6 +34,8 @@ export default async function ChwaziPage({
   const selected = memberships.length === 1 ? memberships[0] : memberships.find((m) => m.groupId === crewId);
 
   if (!selected) {
+    const eventQuery = eventId ? `&eventId=${eventId}` : "";
+    const countQuery = count ? `&count=${count}` : "";
     return (
       <div className="min-h-screen bg-surface flex flex-col px-5 pt-14 pb-28 gap-6">
         <header>
@@ -43,7 +46,7 @@ export default async function ChwaziPage({
         </header>
         <div className="flex flex-col gap-3">
           {memberships.map((m) => (
-            <Link key={m.groupId} href={`/chwazi?crewId=${m.groupId}`}>
+            <Link key={m.groupId} href={`/chwazi?crewId=${m.groupId}${eventQuery}${countQuery}`}>
               <Card className="flex items-center justify-between">
                 <div>
                   <div className="font-display text-xl text-cream">{m.group.name}</div>
@@ -70,5 +73,13 @@ export default async function ChwaziPage({
   const roster = members.map((m) => ({ id: m.user.id, name: m.user.name ?? "Player" }));
   const ratings = Object.fromEntries(elo.map((e) => [e.userId, e.rating]));
 
-  return <ChwaziPicker groupId={selected.groupId} eventId={eventId} roster={roster} ratings={ratings} />;
+  return (
+    <ChwaziPicker
+      groupId={selected.groupId}
+      eventId={eventId}
+      roster={roster}
+      ratings={ratings}
+      requiredCount={requiredCount}
+    />
+  );
 }

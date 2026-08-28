@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { BackButton, PrimaryButton } from "@/components/ui";
+import { BackButton, LinkButton, PrimaryButton } from "@/components/ui";
 import { DuoPairingBoard } from "@/components/teams/DuoPairingBoard";
 import { pairIntoDuos, shuffleIntoDuos, toTeamPlayers, type Duo, type RosterPlayer, type TeamPlayer } from "@/lib/teams";
 import { cn } from "@/lib/cn";
@@ -90,6 +90,8 @@ export function TournamentSetup({
   const [format, setFormat] = useState<TournamentFormat>("single_elim");
 
   const canShuffle = selectedIds.length >= 4 && selectedIds.length % 2 === 0;
+  const eventQuery = eventId ? `&eventId=${eventId}` : "";
+  const chwaziHref = `/chwazi?crewId=${groupId}${eventQuery}`;
   const formatOptions = useMemo(() => formatOptionsFor(teams?.length ?? 0), [teams]);
   const selectedFormatOption = formatOptions.find((f) => f.value === format);
   const canStart = Boolean(teams) && teams!.length >= 2 && !selectedFormatOption?.disabledReason;
@@ -160,9 +162,14 @@ export function TournamentSetup({
               );
             })}
           </div>
-          <PrimaryButton className="mt-auto h-16 w-full" size="lg" disabled={!canShuffle} onClick={shuffle}>
-            Shuffle into duos
-          </PrimaryButton>
+          <div className="mt-auto flex flex-col gap-2.5">
+            <PrimaryButton className="h-16 w-full" size="lg" disabled={!canShuffle} onClick={shuffle}>
+              Shuffle into duos
+            </PrimaryButton>
+            <LinkButton href={chwaziHref} variant="outline">
+              Or use Chwazi (balance by skill)
+            </LinkButton>
+          </div>
         </>
       ) : (
         <>

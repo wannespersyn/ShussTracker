@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { capRingGradient, capRingPairs, type CapRingColor } from "@/lib/theme/tokens";
 import { shortNamesFor } from "@/lib/format";
 import { cn } from "@/lib/cn";
-import { BackButton, PrimaryButton } from "@/components/ui";
+import { BackButton, LinkButton, PrimaryButton } from "@/components/ui";
 import { DuoPairingBoard } from "@/components/teams/DuoPairingBoard";
 import { pairIntoDuos, pairIntoSolos, shuffleIntoDuos, toTeamPlayers, type Duo, type RosterPlayer, type TeamPlayer } from "@/lib/teams";
 import { logGame } from "@/app/(app)/log/actions";
@@ -77,7 +77,7 @@ export function LogGameWizard({
   // (2 teams of 1) apart from a 4-player mat (2 teams of 2).
   const initialPlayerCount = initialTeams?.reduce((n, t) => n + t.players.length, 0) ?? 0;
 
-  const [step, setStep] = useState(lockedTeams ? 2 : initialTeams ? 1 : 0);
+  const [step, setStep] = useState(initialTeams ? 2 : 0);
   const [matType, setMatType] = useState<"2" | "4" | "8" | null>(
     initialPlayerCount === 2 ? "2" : initialPlayerCount === 8 ? "8" : initialPlayerCount === 4 ? "4" : null,
   );
@@ -95,6 +95,11 @@ export function LogGameWizard({
   const gamePlayers = teams?.flatMap((t) => t.players) ?? [];
   const needed = matType === "8" ? 8 : matType === "2" ? 2 : 4;
   const notEnoughPlayers = matType !== null && players.length < needed;
+  const eventQuery = eventId ? `&eventId=${eventId}` : "";
+  // Only offered once a mat size is picked (so Chwazi knows how many
+  // players to draw) and only for duo mats — a 2-player mat is head-to-head
+  // with no team to decide, so there's nothing for Chwazi to pick.
+  const chwaziHref = matType && matType !== "2" ? `/chwazi?crewId=${groupId}${eventQuery}&count=${needed}` : null;
 
   function pickMat(type: "2" | "4" | "8") {
     setMatType(type);
@@ -155,7 +160,15 @@ export function LogGameWizard({
           setStep(3);
           return;
         }
-        setTeams(shuffleIntoDuos(picked));
+        // Honor a Chwazi-decided pairing (skill-balanced or otherwise) as
+        // long as the player selection hasn't changed since — only reshuffle
+        // fresh when there's no preset or the picks have actually moved.
+        const pickedIds = new Set(picked.map((p) => p.id));
+        const presetStillValid =
+          presetTeams !== null &&
+          presetTeams.reduce((n, t) => n + t.players.length, 0) === picked.length &&
+          presetTeams.every((t) => t.players.every((p) => pickedIds.has(p.id)));
+        setTeams(presetStillValid ? presetTeams : shuffleIntoDuos(picked));
       }
       if (step === 2) setActiveShooterId(teams?.[0]?.players[0]?.id ?? null);
       setStep((s) => s + 1);
@@ -298,6 +311,11 @@ export function LogGameWizard({
                 })}
               </div>
             </div>
+          )}
+          {chwaziHref && (
+            <LinkButton href={chwaziHref} variant="outline" className="mt-auto">
+              Let Chwazi pick teams instead
+            </LinkButton>
           )}
         </div>
       )}

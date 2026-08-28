@@ -19,19 +19,34 @@ export function ChwaziPicker({
   eventId,
   roster,
   ratings = {},
-}: Readonly<{ groupId: string; eventId?: string; roster: RosterPlayer[]; ratings?: Record<string, number> }>) {
+  requiredCount,
+}: Readonly<{
+  groupId: string;
+  eventId?: string;
+  roster: RosterPlayer[];
+  ratings?: Record<string, number>;
+  /** Locks selection to an exact player count — set when Chwazi is invoked
+   * from a flow that's already fixed the mat size (the log wizard's duo
+   * mats), so there's nothing to pick beyond who's actually playing.
+   * Omitted (e.g. tournament entrants), selection is any even number ≥ 4. */
+  requiredCount?: number;
+}>) {
   const players = useMemo(() => toTeamPlayers(roster), [roster]);
-  const [selectedIds, setSelectedIds] = useState<string[]>(() =>
-    players.length % 2 === 0 ? players.map((p) => p.id) : [],
-  );
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [phase, setPhase] = useState<"select" | "shuffling" | "result">("select");
   const [teams, setTeams] = useState<Duo[] | null>(null);
   const [balanced, setBalanced] = useState(false);
 
-  const canShuffle = selectedIds.length >= 4 && selectedIds.length % 2 === 0;
+  const canShuffle = requiredCount
+    ? selectedIds.length === requiredCount
+    : selectedIds.length >= 4 && selectedIds.length % 2 === 0;
 
   function toggle(id: string) {
-    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+    setSelectedIds((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      if (requiredCount && prev.length >= requiredCount) return prev;
+      return [...prev, id];
+    });
   }
 
   function chwazi() {
@@ -64,7 +79,9 @@ export function ChwaziPicker({
       {phase === "select" && (
         <>
           <div className="font-body text-body-sm text-cream/55">
-            Who&apos;s in? Pick an even number of players — {selectedIds.length} selected.
+            {requiredCount
+              ? `Who's playing? Pick ${requiredCount} (${selectedIds.length}/${requiredCount}).`
+              : `Who's in? Pick an even number of players — ${selectedIds.length} selected.`}
           </div>
           <div className="flex flex-wrap gap-2">
             {players.map((p) => {
@@ -145,11 +162,6 @@ export function ChwaziPicker({
           <DuoPairingBoard players={teams.flatMap((t) => t.players)} teams={teams} onChange={setTeams} />
           <div className="mt-auto flex flex-col gap-2.5">
             <LinkButton href={logHref}>Log a game with these teams</LinkButton>
-            {teams.length >= 2 && (
-              <LinkButton href={tournamentHref} variant="outline">
-                Start a tournament with these teams
-              </LinkButton>
-            )}
           </div>
         </>
       )}
