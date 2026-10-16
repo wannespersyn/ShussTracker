@@ -86,6 +86,7 @@ export type FeedGame = {
   id: string;
   playedAt: Date;
   matType: "2" | "4" | "8";
+  photoUrl: string | null;
   teams: { label: string; finalRank: number | null; playerNames: string[] }[];
   commentCount: number;
   reactions: ReactionTally[];
@@ -110,6 +111,7 @@ export async function getCrewActivityFeed(groupId: string, viewerId: string, lim
       id: g.id,
       playedAt: g.playedAt,
       matType: g.matType,
+      photoUrl: g.photoUrl,
       teams: [...g.teams]
         .sort((a, b) => (a.finalRank ?? 99) - (b.finalRank ?? 99))
         .map((t) => ({
