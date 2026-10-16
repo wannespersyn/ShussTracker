@@ -34,7 +34,10 @@ function labelCollidingGroup(sub: NameEntry[], result: Record<string, string>) {
  * first name + full last name if the initial still ties. */
 export function shortNamesFor(people: { id: string; name: string }[]): Record<string, string> {
   const parsed: NameEntry[] = people.map((p) => {
-    const [first, ...rest] = p.name.trim().split(/\s+/);
+    const [rawFirst, ...rest] = p.name.trim().split(/\s+/);
+    // Short leading words ("De 12de man") are part of a nickname, keep it whole.
+    if (rawFirst.length <= 3 && rest.length > 0) return { id: p.id, first: p.name.trim(), last: "" };
+    const first = rawFirst.charAt(0).toUpperCase() + rawFirst.slice(1);
     return { id: p.id, first, last: rest.join(" ") };
   });
 

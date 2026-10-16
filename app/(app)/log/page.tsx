@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { groupMembers, groups } from "@/lib/db/schema";
 import { requireSession, requireGroupMember } from "@/lib/db/authz";
-import { getGroupEvents } from "@/lib/db/events";
+import { getCrewInsights } from "@/lib/db/crew-insights";
 import { getGameForRematch } from "@/lib/db/games";
 import { LogGameWizard } from "@/components/log/LogGameWizard";
 import { BackButton, Card } from "@/components/ui";
@@ -117,58 +117,7 @@ export default async function LogGamePage({
     );
   }
 
-  // A crew with game nights on record gets asked which one this game
-  // belongs to — "casual" explicitly skips straight to the wizard. Also
-  // doubles as where the wizard's own back button returns to.
-  const events = await getGroupEvents(selected.groupId);
-  const nightPickerHref = `/log?crewId=${selected.groupId}`;
   const crewPickerHref = memberships.length > 1 ? "/log" : "/home";
-
-  if (!eventId && !casual) {
-    if (events.length > 0) {
-      return (
-        <div className="min-h-screen bg-surface flex flex-col px-5 pt-14 pb-28 gap-6">
-          <header className="flex items-center gap-3.5">
-            <BackButton href={crewPickerHref} />
-            <div>
-              <div className="font-heading font-bold text-label-kicker tracking-kicker uppercase text-cream/45">
-                New game
-              </div>
-              <div className="font-display text-display-sm text-cream mt-1">Which night?</div>
-            </div>
-          </header>
-          <div className="flex flex-col gap-3">
-            <Link href={`/log?crewId=${selected.groupId}&casual=1${teamsQuery}`}>
-              <Card className="flex items-center justify-between">
-                <div>
-                  <div className="font-display text-xl text-cream">Casual game</div>
-                  <div className="font-body text-body-sm text-cream/50">Not part of a crew night</div>
-                </div>
-                <div className="font-display text-2xl text-gold/70"><ChevronRightIcon className="w-6 h-6" /></div>
-              </Card>
-            </Link>
-            {events.slice(0, 5).map((e) => {
-              const d = new Date(e.date);
-              return (
-                <Link key={e.id} href={`/log?crewId=${selected.groupId}&eventId=${e.id}${teamsQuery}`}>
-                  <Card className="flex items-center justify-between">
-                    <div>
-                      <div className="font-display text-xl text-cream">{e.name}</div>
-                      <div className="font-body text-body-sm text-cream/50">
-                        {d.toLocaleDateString(undefined, { month: "short", day: "numeric" })} ·{" "}
-                        {e.gamesCount} {e.gamesCount === 1 ? "game" : "games"}
-                      </div>
-                    </div>
-                    <div className="font-display text-2xl text-gold/70"><ChevronRightIcon className="w-6 h-6" /></div>
-                  </Card>
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-      );
-    }
-  }
 
   const [members, group] = await Promise.all([
     db.query.groupMembers.findMany({
@@ -183,10 +132,10 @@ export default async function LogGamePage({
     name: m.user.name ?? "Player",
   }));
 
-  // The wizard's back button should retrace whichever screen led here: the
-  // night picker if the crew has nights on record, otherwise straight back
-  // to the crew picker (or home, for a single-crew user).
-  const wizardBackHref = events.length > 0 ? nightPickerHref : crewPickerHref;
+  const insights = await getCrewInsights(selected.groupId);
+  const ratings = Object.fromEntries(insights.players.map((p) => [p.userId, p.elo]));
+  const activity = new Map(insights.players.map((p) => [p.userId, p.games]));
+  roster.sort((a, b) => (activity.get(b.id) ?? 0) - (activity.get(a.id) ?? 0));
 
   return (
     <LogGameWizard
@@ -194,8 +143,9 @@ export default async function LogGamePage({
       eventId={eventId}
       roster={roster}
       presetPlayerIds={presetPlayerIds}
-      backHref={wizardBackHref}
+      backHref={crewPickerHref}
       trackShotZones={group?.trackShotZones ?? false}
+      ratings={ratings}
     />
   );
 }
