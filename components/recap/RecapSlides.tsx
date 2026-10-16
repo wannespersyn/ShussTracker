@@ -104,7 +104,7 @@ export function RecapSlides({
           <div
             key={k}
             className="flex-1 h-1 rounded-pill"
-            style={{ background: i <= index ? theme.accent : "rgba(255,255,255,.25)" }}
+            style={{ background: theme.text, opacity: i <= index ? 1 : 0.25 }}
           />
         ))}
       </div>
@@ -122,7 +122,8 @@ export function RecapSlides({
         <Link
           href={`/crews/${crewId}`}
           aria-label="Close recap"
-          className="w-9 h-9 flex items-center justify-center text-2xl leading-none"
+          className="w-11 h-11 flex items-center justify-center text-3xl leading-none"
+          style={{ color: theme.text }}
         >
           ×
         </Link>
