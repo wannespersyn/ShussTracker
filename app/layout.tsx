@@ -1,21 +1,33 @@
 import type { Metadata, Viewport } from "next";
-import { Barlow, Barlow_Condensed } from "next/font/google";
+import localFont from "next/font/local";
 import { ServiceWorkerRegister } from "@/components/pwa/ServiceWorkerRegister";
 import { I18nProvider } from "@/lib/i18n/client";
 import { getDictionary } from "@/lib/i18n";
 import { getLocale, getTheme } from "@/lib/i18n/server";
 import "./globals.css";
 
-const barlow = Barlow({
+// Self-hosted (SIL OFL, see app/fonts/OFL-LICENSE.txt) so builds and the
+// offline PWA never depend on reaching Google Fonts.
+const barlow = localFont({
   variable: "--font-barlow",
-  weight: ["400", "500", "600", "700"],
-  subsets: ["latin"],
+  display: "swap",
+  src: [
+    { path: "./fonts/barlow-latin-400-normal.woff2", weight: "400" },
+    { path: "./fonts/barlow-latin-500-normal.woff2", weight: "500" },
+    { path: "./fonts/barlow-latin-600-normal.woff2", weight: "600" },
+    { path: "./fonts/barlow-latin-700-normal.woff2", weight: "700" },
+  ],
 });
 
-const barlowCondensed = Barlow_Condensed({
+const barlowCondensed = localFont({
   variable: "--font-barlow-condensed",
-  weight: ["500", "600", "700", "800"],
-  subsets: ["latin"],
+  display: "swap",
+  src: [
+    { path: "./fonts/barlow-condensed-latin-500-normal.woff2", weight: "500" },
+    { path: "./fonts/barlow-condensed-latin-600-normal.woff2", weight: "600" },
+    { path: "./fonts/barlow-condensed-latin-700-normal.woff2", weight: "700" },
+    { path: "./fonts/barlow-condensed-latin-800-normal.woff2", weight: "800" },
+  ],
 });
 
 export const metadata: Metadata = {
