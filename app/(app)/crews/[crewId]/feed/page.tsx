@@ -31,7 +31,7 @@ export default async function CrewFeedPage({ params }: Readonly<{ params: Promis
   const dayFmt = new Intl.DateTimeFormat(lang, { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
   const timeFmt = new Intl.DateTimeFormat(lang, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Brussels" });
 
-  const weekAgo = Date.now() - 7 * 24 * 3600 * 1000;
+  const weekAgo = weekAgoMs();
   const score = (g: FeedGame) => g.reactions.reduce((n, r) => n + r.count, 0) + g.commentCount;
   const gotw = feed.filter((g) => g.playedAt.getTime() > weekAgo && score(g) > 0).sort((a, b) => score(b) - score(a))[0];
 
@@ -171,6 +171,11 @@ export default async function CrewFeedPage({ params }: Readonly<{ params: Promis
       )}
     </Screen>
   );
+}
+
+/** Server-rendered per request, so "now" is fine here. */
+function weekAgoMs() {
+  return Date.now() - 7 * 24 * 3600 * 1000;
 }
 
 function Row({
