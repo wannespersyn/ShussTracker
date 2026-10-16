@@ -2,7 +2,7 @@
 
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
-import { LOCALE_COOKIE, THEME_COOKIE, isLocale, isTheme } from "@/lib/i18n/config";
+import { FLAIR_COOKIE, LOCALE_COOKIE, THEME_COOKIE, isLocale, isTheme } from "@/lib/i18n/config";
 
 const ONE_YEAR = 60 * 60 * 24 * 365;
 
@@ -19,5 +19,11 @@ export async function setLocaleAction(formData: FormData) {
   const value = String(formData.get("locale") ?? "");
   if (!isLocale(value)) return;
   (await cookies()).set(LOCALE_COOKIE, value, { maxAge: ONE_YEAR, path: "/", sameSite: "lax" });
+  revalidatePath("/", "layout");
+}
+
+export async function setFlairAction(formData: FormData) {
+  const value = formData.get("flair") === "on" ? "on" : "off";
+  (await cookies()).set(FLAIR_COOKIE, value, { maxAge: ONE_YEAR, path: "/", sameSite: "lax" });
   revalidatePath("/", "layout");
 }

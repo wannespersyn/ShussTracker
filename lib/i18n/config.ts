@@ -23,3 +23,5 @@ export const THEME_COOKIE = "theme";
 export function isTheme(value: string | undefined | null): value is Theme {
   return !!value && (THEMES as readonly string[]).includes(value);
 }
+
+export const FLAIR_COOKIE = "flair";

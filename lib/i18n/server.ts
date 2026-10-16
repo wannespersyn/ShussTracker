@@ -1,5 +1,5 @@
 import { cookies, headers } from "next/headers";
-import { DEFAULT_LOCALE, DEFAULT_THEME, LOCALE_COOKIE, LOCALES, THEME_COOKIE, isLocale, isTheme, type Locale, type Theme } from "./config";
+import { DEFAULT_LOCALE, DEFAULT_THEME, FLAIR_COOKIE, LOCALE_COOKIE, LOCALES, THEME_COOKIE, isLocale, isTheme, type Locale, type Theme } from "./config";
 import { getDictionary } from "./index";
 
 /** Cookie first; otherwise the first supported language in Accept-Language. */
@@ -22,4 +22,9 @@ export async function getTheme(): Promise<Theme> {
 
 export async function getT() {
   return getDictionary(await getLocale());
+}
+
+/** Streak flair (the app "heats up" on a win streak) — on unless turned off. */
+export async function getFlair(): Promise<boolean> {
+  return (await cookies()).get(FLAIR_COOKIE)?.value !== "off";
 }

@@ -98,6 +98,8 @@ export const fieldHitEnum = pgEnum("field_hit", [
   "miss",
 ]);
 
+export const crewPlanEnum = pgEnum("crew_plan", ["free", "founding", "pro"]);
+
 export const groups = pgTable("group", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
@@ -113,6 +115,10 @@ export const groups = pgTable("group", {
   // lib/db/stats.ts, lib/db/achievements.ts) whenever the underlying games
   // don't actually have "2"/"3" shots recorded, regardless of this flag.
   trackShotZones: boolean("track_shot_zones").notNull().default(false),
+  // Crew Pro. "founding" = crews that existed before v2 launched; they get
+  // Pro free until `proUntil`. No paywall is enforced yet (see lib/plan.ts).
+  plan: crewPlanEnum("plan").notNull().default("free"),
+  proUntil: timestamp("pro_until"),
 });
 
 export const groupMembers = pgTable(
@@ -349,6 +355,39 @@ export const tournamentMatches = pgTable(
 );
 
 /* -----------------------------------------------------------------------
+ * Feedback & feature requests — the in-app "help build Shussapp" inbox.
+ * Ideas are public within the app and can be upvoted; bugs/other are only
+ * visible to admins.
+ * --------------------------------------------------------------------- */
+
+export const feedbackTypeEnum = pgEnum("feedback_type", ["bug", "idea", "other"]);
+export const feedbackStatusEnum = pgEnum("feedback_status", ["new", "under_review", "planned", "in_progress", "done", "declined"]);
+
+export const feedback = pgTable("feedback", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+  groupId: uuid("group_id").references(() => groups.id, { onDelete: "set null" }),
+  type: feedbackTypeEnum("type").notNull(),
+  text: text("text").notNull(),
+  status: feedbackStatusEnum("status").notNull().default("new"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const feedbackVotes = pgTable(
+  "feedback_vote",
+  {
+    feedbackId: uuid("feedback_id")
+      .notNull()
+      .references(() => feedback.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.feedbackId, t.userId] })],
+);
+
+/* -----------------------------------------------------------------------
  * Relations (for the Drizzle relational query API)
  * --------------------------------------------------------------------- */
 
@@ -494,4 +533,15 @@ export const tournamentMatchesRelations = relations(tournamentMatches, ({ one })
     relationName: "matchWinnerEntrant",
   }),
   game: one(games, { fields: [tournamentMatches.gameId], references: [games.id] }),
+}));
+
+export const feedbackRelations = relations(feedback, ({ one, many }) => ({
+  user: one(users, { fields: [feedback.userId], references: [users.id] }),
+  group: one(groups, { fields: [feedback.groupId], references: [groups.id] }),
+  votes: many(feedbackVotes),
+}));
+
+export const feedbackVotesRelations = relations(feedbackVotes, ({ one }) => ({
+  feedback: one(feedback, { fields: [feedbackVotes.feedbackId], references: [feedback.id] }),
+  user: one(users, { fields: [feedbackVotes.userId], references: [users.id] }),
 }));

@@ -1,16 +1,18 @@
+import { isAdminEmail } from "@/lib/admin";
 import { requireSession } from "@/lib/db/authz";
 import { BackButton, Card, LinkButton, PrimaryButton, SegmentedForm } from "@/components/ui";
 import { signOutAction } from "@/app/(app)/actions";
-import { getLocale, getT, getTheme } from "@/lib/i18n/server";
+import Link from "next/link";
+import { getFlair, getLocale, getT, getTheme } from "@/lib/i18n/server";
 import { LOCALES, LOCALE_LABELS } from "@/lib/i18n/config";
 import { updateDisplayName } from "./actions";
-import { setLocaleAction, setThemeAction } from "./preferences-actions";
+import { setFlairAction, setLocaleAction, setThemeAction } from "./preferences-actions";
 
 export default async function SettingsPage() {
   const session = await requireSession();
   const name = session.user.name ?? "";
   const email = session.user.email ?? "";
-  const [t, theme, locale] = await Promise.all([getT(), getTheme(), getLocale()]);
+  const [t, theme, locale, flair] = await Promise.all([getT(), getTheme(), getLocale(), getFlair()]);
 
   return (
     <div className="min-h-screen bg-surface flex flex-col px-5 pt-14 pb-28 gap-6">
@@ -40,6 +42,23 @@ export default async function SettingsPage() {
           ]}
         />
       </section>
+
+      <form action={setFlairAction}>
+        <input type="hidden" name="flair" value={flair ? "off" : "on"} />
+        <button
+          type="submit"
+          aria-pressed={flair}
+          className="w-full flex items-center gap-3 min-h-15 px-4 py-2 rounded-lg bg-surface-panel border border-line text-left"
+        >
+          <span className="flex-1 flex flex-col">
+            <span className="font-body font-semibold text-[15px] text-cream">{t.settings.streakFlair}</span>
+            <span className="font-body text-xs text-cream/55">{t.settings.streakFlairSub}</span>
+          </span>
+          <span className={`w-12 h-7 rounded-pill p-0.75 flex ${flair ? "bg-amber justify-end" : "bg-surface-raised justify-start"}`}>
+            <span className={`w-5.5 h-5.5 rounded-pill ${flair ? "bg-ink" : "bg-cream/55"}`} />
+          </span>
+        </button>
+      </form>
 
       <section className="flex flex-col gap-2">
         <div className="font-heading font-semibold text-[12px] tracking-[0.14em] uppercase text-cream/55">
@@ -77,6 +96,23 @@ export default async function SettingsPage() {
         </div>
         <div className="font-body text-body text-cream mt-1">{email || "No email on file"}</div>
       </Card>
+
+      <section className="flex flex-col gap-2">
+        <div className="font-heading font-semibold text-[12px] tracking-[0.14em] uppercase text-cream/55">{t.settings.help}</div>
+        <div className="flex flex-col rounded-lg overflow-hidden bg-surface-panel border border-line">
+          <Link href="/feedback?type=bug" className="min-h-13 px-4 flex items-center justify-between font-body font-semibold text-[15px] text-cream">
+            {t.settings.feedback} <span className="text-cream/45">→</span>
+          </Link>
+          <Link href="/feedback?type=idea" className="min-h-13 px-4 flex items-center justify-between font-body font-semibold text-[15px] text-cream border-t border-line">
+            {t.settings.feature} <span className="text-cream/45">→</span>
+          </Link>
+          {isAdminEmail(email) && (
+            <Link href="/admin" className="min-h-13 px-4 flex items-center justify-between font-body font-semibold text-[15px] text-gold border-t border-line">
+              Admin <span className="text-cream/45">→</span>
+            </Link>
+          )}
+        </div>
+      </section>
 
       <LinkButton href="/crews" variant="ghost">
         Manage your crews

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireSession } from "@/lib/db/authz";
 import { getCrewInsights, getUserCrews } from "@/lib/db/crew-insights";
-import { getLocale, getT } from "@/lib/i18n/server";
+import { getFlair, getLocale, getT } from "@/lib/i18n/server";
 import { format } from "@/lib/i18n";
 import { firstName } from "@/lib/insights";
 import { cn } from "@/lib/cn";
@@ -12,7 +12,13 @@ import { Avatar, FormStrip, IconButton, Kicker, Panel, Screen, SectionHead, Stat
 export default async function HomePage({ searchParams }: Readonly<{ searchParams: Promise<{ crew?: string }> }>) {
   const session = await requireSession();
   const userId = session.user.id;
-  const [{ crew: crewParam }, crews, t, locale] = await Promise.all([searchParams, getUserCrews(userId), getT(), getLocale()]);
+  const [{ crew: crewParam }, crews, t, locale, flair] = await Promise.all([
+    searchParams,
+    getUserCrews(userId),
+    getT(),
+    getLocale(),
+    getFlair(),
+  ]);
   const crew = crews.find((c) => c.id === crewParam) ?? crews[0];
 
   const header = (
@@ -81,6 +87,20 @@ export default async function HomePage({ searchParams }: Readonly<{ searchParams
   return (
     <Screen>
       {header}
+
+      {flair && me?.streak?.kind === "W" && me.streak.n >= 3 && (
+        <section className="rounded-[22px] bg-[#ff7a2f] text-[#160a04] p-4.5 flex items-center gap-3.5" aria-label={t.home.onFire}>
+          <svg viewBox="0 0 24 24" className="w-14 h-14 shrink-0 motion-safe:animate-flicker" fill="currentColor" aria-hidden="true">
+            <path d="M12 2c1.2 4.4 5.5 6.4 5.5 12a5.5 5.5 0 0 1-11 0c0-3.4 2.2-4.6 2.2-7.6 1.1 1.1 2.2 2.2 3.3 2.2 0-2.2-1.1-4.4 0-6.6z" />
+          </svg>
+          <span className="flex flex-col">
+            <span className="font-display font-extrabold text-[42px] leading-[0.95] uppercase">{t.home.onFire}</span>
+            <span className="font-heading font-bold text-[17px] tracking-[0.03em] uppercase">
+              {format(t.home.onFireSub, { n: me.streak.n, b: me.bestWinStreak })}
+            </span>
+          </span>
+        </section>
+      )}
 
       {!me || me.games === 0 ? (
         <Panel className="text-center py-8 flex flex-col items-center gap-3">

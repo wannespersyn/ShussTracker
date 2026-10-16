@@ -2,8 +2,9 @@ import { requireSession } from "@/lib/db/authz";
 import { BackButton } from "@/components/ui";
 import { ClaimGuestForm } from "@/components/crews/ClaimGuestForm";
 
-export default async function ClaimGuestPage() {
+export default async function ClaimGuestPage({ searchParams }: Readonly<{ searchParams: Promise<{ code?: string }> }>) {
   await requireSession();
+  const { code } = await searchParams;
 
   return (
     <div className="min-h-screen bg-surface flex flex-col px-5 pt-14 pb-28 gap-8">
@@ -22,7 +23,7 @@ export default async function ClaimGuestPage() {
         already played gets folded into this account.
       </div>
 
-      <ClaimGuestForm />
+      <ClaimGuestForm defaultCode={code?.toUpperCase().slice(0, 6)} />
     </div>
   );
 }

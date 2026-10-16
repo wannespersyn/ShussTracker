@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { requireGroupMember, requireSession } from "@/lib/db/authz";
 import { getCrew, getCrewInsights } from "@/lib/db/crew-insights";
@@ -11,6 +12,7 @@ import { format } from "@/lib/i18n";
 import { firstName, type DuoInsight, type PlayerInsight } from "@/lib/insights";
 import { cn } from "@/lib/cn";
 import { wilsonLowerBound } from "@/lib/ranking";
+import { isPro } from "@/lib/plan";
 import { ConfirmForm } from "@/components/ui";
 import { ChevronRightIcon, PlusIcon, SettingsIcon, TrophyIcon } from "@/components/ui/icons";
 import { Chip, FormDots, IconButton, Kicker, MoveChip, Screen, SegmentLinks, TextTabs } from "@/components/v2";
@@ -42,6 +44,8 @@ export default async function CrewPage({
     getLocale(),
   ]);
   const isOwner = group.createdBy === userId;
+  const h = await headers();
+  const origin = `${h.get("x-forwarded-proto") ?? "https"}://${h.get("host") ?? "shussapp.vercel.app"}`;
   const showDuos = view === "duos";
   const ranked = insights.players.filter((p) => p.games > 0);
   const unplayed = insights.players.filter((p) => p.games === 0);
@@ -73,6 +77,14 @@ export default async function CrewPage({
             )}
           </div>
         </div>
+        {group.plan === "founding" && isPro(group) && (
+          <span className="self-start flex items-center gap-1.5 h-7 px-2.5 rounded-sm border border-gold text-gold font-heading font-bold text-[13px] tracking-[0.1em] uppercase">
+            <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="currentColor" aria-hidden="true">
+              <path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z" />
+            </svg>
+            {t.crew.founding}
+          </span>
+        )}
         <span className="font-body text-[13px] text-cream/55">
           {format(t.crew.meta, { p: ranked.length, g: insights.totalGames })}
           {since && ` · ${format(t.crew.since, { d: since })}`}
@@ -142,6 +154,16 @@ export default async function CrewPage({
                 </div>
               )}
             </div>
+            {g.claimToken && (
+              <a
+                href={`https://wa.me/?text=${encodeURIComponent(format(t.crew.claimMessage, { name: g.name, crew: group.name, url: `${origin}/claim?code=${g.claimToken}`, code: g.claimToken }))}`}
+                target="_blank"
+                rel="noreferrer"
+                className="h-9 px-3 rounded-pill bg-amber text-ink font-heading font-bold text-xs tracking-[0.06em] uppercase flex items-center"
+              >
+                {t.crew.sendClaim}
+              </a>
+            )}
             {isOwner && (
               <ConfirmForm action={removeGuestAction.bind(null, crewId, g.id)} confirmMessage={`Remove guest ${g.name}?`}>
                 <button type="submit" className="font-heading font-bold text-xs tracking-[0.1em] uppercase text-red">
