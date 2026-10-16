@@ -48,3 +48,25 @@ export async function toggleReactionAction(gameId: string, reaction: Reaction) {
   await toggleReaction(gameId, userId, reaction);
   revalidatePath(`/game/${gameId}`);
 }
+
+const MAX_PHOTO_BYTES = 4 * 1024 * 1024;
+
+/** Stores a (client-side downscaled) photo of the mat in Vercel Blob and
+ * links it to the game. Needs BLOB_READ_WRITE_TOKEN (Vercel → Storage →
+ * Blob → connect to project). */
+export async function uploadGamePhotoAction(gameId: string, formData: FormData): Promise<{ ok: boolean; error?: string }> {
+  const userId = await requireUserId();
+  await requireGameAccess(gameId, userId);
+
+  const file = formData.get("photo");
+  if (!(file instanceof File) || file.size === 0) return { ok: false, error: "No photo" };
+  if (!file.type.startsWith("image/")) return { ok: false, error: "Not an image" };
+  if (file.size > MAX_PHOTO_BYTES) return { ok: false, error: "Photo too large" };
+  if (!process.env.BLOB_READ_WRITE_TOKEN) return { ok: false, error: "Photo storage isn't set up yet" };
+
+  const { put } = await import("@vercel/blob");
+  const blob = await put(`games/${gameId}/${Date.now()}.jpg`, file, { access: "public", contentType: file.type });
+  await db.update(games).set({ photoUrl: blob.url }).where(eq(games.id, gameId));
+  revalidatePath(`/game/${gameId}`);
+  return { ok: true };
+}

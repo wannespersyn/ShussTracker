@@ -155,6 +155,8 @@ export const games = pgTable("game", {
   playedAt: timestamp("played_at").notNull().defaultNow(),
   location: text("location"),
   matType: matTypeEnum("mat_type").notNull(),
+  // Photo of the mat (Vercel Blob URL), shown on the game page, feed and recap.
+  photoUrl: text("photo_url"),
 });
 
 export const gameTeams = pgTable("game_team", {

@@ -74,6 +74,8 @@ export type CrewInsights = {
   sessions: SessionInsight[];
   totalGames: number;
   firstGameAt: Date | null;
+  /** Elo change per game per player: gameElo[gameId][userId]. */
+  gameElo: Record<string, Record<string, number>>;
 };
 
 const TZ = "Europe/Brussels";
@@ -135,6 +137,7 @@ export function buildCrewInsights(
     duos: Map<string, { names: string; wins: number; losses: number }>;
   };
   const nights = new Map<string, NightAcc>();
+  const gameElo: Record<string, Record<string, number>> = {};
 
   for (const game of games) {
     const teams = game.teams.filter((t) => t.rank != null && t.players.length > 0);
@@ -206,6 +209,7 @@ export function buildCrewInsights(
       }
     }
 
+    gameElo[game.id] = Object.fromEntries([...deltas].map(([id, d]) => [id, Math.round(d)]));
     for (const [id, delta] of deltas) {
       if (game.playedAt.getTime() <= weekAgo) ratingWeekAgo.set(id, ratingOf(id) + delta);
       rating.set(id, ratingOf(id) + delta);
@@ -316,6 +320,7 @@ export function buildCrewInsights(
     sessions,
     totalGames: games.length,
     firstGameAt: games[0]?.playedAt ?? null,
+    gameElo,
   };
 }
 

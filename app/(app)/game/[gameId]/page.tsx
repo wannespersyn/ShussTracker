@@ -1,28 +1,32 @@
+import Link from "next/link";
 import { eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { games } from "@/lib/db/schema";
 import { requireSession, requireGroupMember } from "@/lib/db/authz";
-import { getGameActivity, REACTION_GLYPH, REACTIONS } from "@/lib/db/activity";
-import { Card, LinkButton } from "@/components/ui";
+import { getGameActivity, REACTIONS } from "@/lib/db/activity";
+import { getCrewInsights } from "@/lib/db/crew-insights";
+import { getLocale, getT } from "@/lib/i18n/server";
+import { format } from "@/lib/i18n";
+import { firstName } from "@/lib/insights";
 import { cn } from "@/lib/cn";
-import { addCommentAction, deleteCommentAction, toggleReactionAction } from "./actions";
+import { Avatar, Kicker, Screen } from "@/components/v2";
+import { PhotoUpload } from "@/components/game/PhotoUpload";
+import { ReactionIcon, REACTION_LABEL } from "@/components/game/ReactionIcon";
+import { addCommentAction, deleteCommentAction, toggleReactionAction, uploadGamePhotoAction } from "./actions";
 
-const FIELD_HITS = ["3", "2", "1", "mama", "miss"] as const;
+const ORD = ["1ST", "2ND", "3RD", "4TH"];
 
-export default async function GameReplayPage({ params }: { params: Promise<{ gameId: string }> }) {
+export default async function GamePage({ params }: Readonly<{ params: Promise<{ gameId: string }> }>) {
   const { gameId } = await params;
   const session = await requireSession();
   const userId = session.user.id;
 
   const game = await db.query.games.findFirst({
     where: eq(games.id, gameId),
-    with: {
-      teams: { with: { players: { with: { user: true, shots: true } } } },
-    },
+    with: { teams: { with: { players: { with: { user: true, shots: true } } } } },
   });
   if (!game) notFound();
-
   if (game.groupId) {
     try {
       await requireGroupMember(userId, game.groupId);
@@ -33,151 +37,198 @@ export default async function GameReplayPage({ params }: { params: Promise<{ gam
     notFound();
   }
 
-  const activity = await getGameActivity(gameId, userId);
-
+  const [activity, insights, t, locale] = await Promise.all([
+    getGameActivity(gameId, userId),
+    game.groupId ? getCrewInsights(game.groupId) : Promise.resolve(null),
+    getT(),
+    getLocale(),
+  ]);
+  const elo = insights?.gameElo[gameId] ?? {};
   const teams = [...game.teams].sort((a, b) => (a.finalRank ?? 99) - (b.finalRank ?? 99));
-  const allShots = game.teams.flatMap((t) => t.players.flatMap((p) => p.shots));
-  const hasZoneData = allShots.some((s) => s.fieldHit === "2" || s.fieldHit === "3");
-  const tallyFieldHits = hasZoneData ? FIELD_HITS : (["1", "mama", "miss"] as const);
-  const tally = tallyFieldHits.map((fh) => ({
-    fieldHit: fh,
-    label: fh === "mama" ? "RISK" : fh === "miss" ? "MISS" : hasZoneData ? fh : "HIT",
-    n: allShots.filter((s) => s.fieldHit === fh).length,
-  }));
+  const multi = teams.length > 2;
+  const when = new Intl.DateTimeFormat(locale === "nl" ? "nl-BE" : "en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Europe/Brussels",
+  }).format(game.playedAt);
+  const matLabel = game.matType === "2" ? "1V1" : `${game.matType}-MAT`;
+  const zoneTracked = game.teams.some((tm) => tm.players.some((p) => p.shots.some((s) => s.fieldHit !== "mama")));
 
   return (
-    <div className="min-h-screen bg-surface flex flex-col px-5 pt-14 pb-28 gap-6">
-      <header>
-        <div className="font-heading font-bold text-label-kicker tracking-kicker uppercase text-cream/45">
-          Game recap
-        </div>
-        <div className="font-display text-display-sm text-cream mt-1">{game.matType}-player mat</div>
-        <div className="font-body text-body-sm text-cream/45 mt-1">
-          {new Date(game.playedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
-        </div>
+    <Screen>
+      <header className="flex items-center justify-between h-11">
+        <Link
+          href={game.groupId ? `/crews/${game.groupId}/feed` : "/home"}
+          aria-label={t.common.back}
+          className="w-11 h-11 rounded-pill bg-surface-panel border border-line text-cream flex items-center justify-center"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+            <path d="M15 6l-6 6 6 6" />
+          </svg>
+        </Link>
+        <span className="flex flex-col items-center">
+          <span className="font-heading font-extrabold text-xl tracking-[0.08em]">{matLabel}</span>
+          <span className="font-body text-xs text-cream/55">{when}</span>
+        </span>
+        <span className="w-11" />
       </header>
 
-      <div className="flex flex-col gap-3">
-        {teams.map((t) => {
-          const isWinner = t.finalRank === 1;
+      <div
+        className={cn(
+          "relative rounded-[18px] overflow-hidden border border-line flex items-end justify-end p-3",
+          game.photoUrl ? "h-56" : "h-28 bg-[repeating-linear-gradient(135deg,var(--color-surface-deep)_0_14px,var(--color-surface-raised)_14px_28px)]",
+        )}
+      >
+        {game.photoUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={game.photoUrl} alt={t.game.photoAlt} className="absolute inset-0 w-full h-full object-cover" />
+        )}
+        <div className="relative">
+          <PhotoUpload
+            action={uploadGamePhotoAction.bind(null, gameId)}
+            hasPhoto={!!game.photoUrl}
+            label={t.game.addPhoto}
+            changeLabel={t.game.changePhoto}
+          />
+        </div>
+      </div>
+
+      <section className="rounded-[18px] bg-surface-deep border border-line overflow-hidden" aria-label={t.game.result}>
+        {teams.map((tm, i) => {
+          const won = tm.finalRank === 1;
+          const teamMama = tm.players.reduce((n, p) => n + p.shots.filter((s) => s.fieldHit === "mama").length, 0);
+          const d = elo[tm.players[0]?.userId ?? ""];
           return (
-            <Card key={t.id} variant={isWinner ? "gold" : "default"} className="flex items-center gap-3.5">
-              <div
+            <div key={tm.id} className={cn("flex items-center gap-3 px-3.5 py-3", i > 0 && "border-t border-line")}>
+              <span
                 className={cn(
-                  "w-11.5 h-11.5 shrink-0 rounded-pill flex items-center justify-center font-mono font-semibold text-xl",
-                  isWinner ? "bg-gold text-ink" : "bg-cream/10 text-cream",
+                  "w-9 h-9 shrink-0 rounded-sm flex items-center justify-center font-display font-extrabold",
+                  multi ? "text-[13px]" : "text-[17px]",
+                  won ? "bg-amber text-ink" : "bg-surface-raised text-cream/55",
                 )}
               >
-                {t.finalRank ?? "–"}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="font-heading font-semibold text-heading text-cream truncate">
-                  {t.players.map((p) => p.user.name ?? "Player").join(" & ")}
+                {multi ? ORD[(tm.finalRank ?? i + 1) - 1] : won ? "W" : "L"}
+              </span>
+              <span className="flex-1 min-w-0 flex flex-col">
+                <span className="font-heading font-bold text-[19px] uppercase truncate">
+                  {tm.players.map((p) => firstName(p.user.name ?? "Player")).join(" & ")}
+                </span>
+                <span className="font-body text-xs text-cream/55 truncate">
+                  {tm.players
+                    .map((p) => {
+                      const m = p.shots.filter((s) => s.fieldHit === "mama").length;
+                      return m > 0 ? `${firstName(p.user.name ?? "")} ${m} mama` : null;
+                    })
+                    .filter(Boolean)
+                    .join(" · ") || "—"}
+                </span>
+              </span>
+              <span className="flex flex-col items-end">
+                {teamMama > 0 && <span className="font-heading font-bold text-[15px] text-red">{teamMama} MAMA</span>}
+                {d !== undefined && (
+                  <span className={cn("font-heading font-bold text-[15px]", d >= 0 ? "text-mint" : "text-red")}>
+                    {d >= 0 ? "+" : "−"}
+                    {Math.abs(d)} ELO
+                  </span>
+                )}
+              </span>
+            </div>
+          );
+        })}
+      </section>
+
+      {zoneTracked && (
+        <div className="grid grid-cols-5 gap-1.5">
+          {(["1", "2", "3", "mama", "miss"] as const).map((fh) => {
+            const n = game.teams.reduce((acc, tm) => acc + tm.players.reduce((a, p) => a + p.shots.filter((s) => s.fieldHit === fh).length, 0), 0);
+            return (
+              <div key={fh} className="rounded-sm bg-surface-deep border border-line py-2 text-center">
+                <div className={cn("font-display font-extrabold text-xl", fh === "mama" ? "text-red" : "text-cream")}>{n}</div>
+                <div className="font-body font-semibold text-[10px] uppercase tracking-[0.08em] text-cream/55">
+                  {fh === "mama" ? "Mama" : fh === "miss" ? "Miss" : `Field ${fh}`}
                 </div>
-                <div className="font-mono font-medium text-[10px] tracking-widest uppercase text-cream/45 mt-1">
-                  {t.teamLabel}
-                </div>
               </div>
-            </Card>
+            );
+          })}
+        </div>
+      )}
+
+      <div role="group" aria-label={t.game.reactions} className="grid grid-cols-4 gap-2">
+        {REACTIONS.map((r) => {
+          const tally = activity.reactions.find((x) => x.reaction === r)!;
+          return (
+            <form key={r} action={toggleReactionAction.bind(null, gameId, r)}>
+              <button
+                type="submit"
+                aria-pressed={tally.reactedByMe}
+                aria-label={REACTION_LABEL[r]}
+                className={cn(
+                  "w-full h-12 rounded-[14px] border-2 flex items-center justify-center gap-1.5",
+                  tally.reactedByMe ? "bg-amber/15 border-gold text-gold" : "bg-surface-deep border-line text-cream/75",
+                )}
+              >
+                <ReactionIcon reaction={r} />
+                <span className="font-display font-bold text-[17px]">{tally.count}</span>
+              </button>
+            </form>
           );
         })}
       </div>
 
-      {allShots.length > 0 && (
-        <div className="flex flex-col gap-2.5">
-          <div className="font-heading font-bold text-label-kicker tracking-kicker uppercase text-cream/40">
-            Shot tally
-          </div>
-          <div className="flex gap-2">
-            {tally.map((t) => (
-              <div key={t.fieldHit} className="flex-1 text-center py-3 rounded-md bg-cream/5">
-                <div className="font-mono font-semibold text-2xl text-cream">{t.n}</div>
-                <div className="font-heading font-semibold text-[11px] tracking-[1.2px] text-cream/45 uppercase">
-                  {t.label}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="flex flex-col gap-3">
-        <div className="font-heading font-bold text-label-kicker tracking-kicker uppercase text-cream/40">
-          Reactions
-        </div>
-        <div className="flex gap-2">
-          {REACTIONS.map((r) => {
-            const t = activity.reactions.find((x) => x.reaction === r)!;
-            const react = toggleReactionAction.bind(null, gameId, r);
-            return (
-              <form key={r} action={react}>
-                <button
-                  type="submit"
-                  className={cn(
-                    "h-11 px-3.5 rounded-pill flex items-center gap-1.5 border-2 font-mono font-semibold text-sm",
-                    t.reactedByMe ? "bg-gold/14 border-gold/45 text-gold" : "bg-cream/5 border-cream/10 text-cream/70",
-                  )}
-                >
-                  <span>{REACTION_GLYPH[r]}</span>
-                  {t.count > 0 && <span>{t.count}</span>}
+      <section className="flex flex-col gap-2.5" aria-label={t.game.trashTalk}>
+        <Kicker>{format(t.game.trashTalkN, { n: activity.comments.length })}</Kicker>
+        {activity.comments.length === 0 && <p className="font-body text-sm text-cream/55">{t.game.noComments}</p>}
+        {activity.comments.map((c) => (
+          <div key={c.id} className="flex gap-2.5">
+            <Avatar name={c.userName} />
+            <div className="flex-1 min-w-0 flex flex-col gap-0.5 px-3 py-2 rounded-[4px_14px_14px_14px] bg-surface-deep">
+              <span className="font-body font-bold text-xs">
+                {firstName(c.userName)}{" "}
+                <span className="font-medium text-cream/55">
+                  ·{" "}
+                  {new Intl.DateTimeFormat(locale === "nl" ? "nl-BE" : "en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Brussels" }).format(c.createdAt)}
+                </span>
+              </span>
+              <span className="font-body text-sm leading-[1.35] text-pretty">{c.text}</span>
+            </div>
+            {c.userId === userId && (
+              <form action={deleteCommentAction.bind(null, gameId, c.id)} className="self-center">
+                <button type="submit" aria-label={t.game.delete} className="w-8 h-8 text-cream/40">
+                  ✕
                 </button>
               </form>
-            );
-          })}
-        </div>
-
-        <div className="font-heading font-bold text-label-kicker tracking-kicker uppercase text-cream/40 mt-2">
-          Trash talk
-        </div>
-        <div className="flex flex-col gap-2">
-          {activity.comments.length === 0 && (
-            <div className="font-body text-body-sm text-cream/45">No comments yet — say something.</div>
-          )}
-          {activity.comments.map((c) => {
-            const del = deleteCommentAction.bind(null, gameId, c.id);
-            return (
-              <div key={c.id} className="rounded-lg bg-cream/5 border border-cream/10 px-3.5 py-2.75">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-heading font-semibold text-[13px] text-cream">{c.userName}</span>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-[10px] text-cream/35">
-                      {new Date(c.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-                    </span>
-                    {c.userId === userId && (
-                      <form action={del}>
-                        <button type="submit" className="font-heading font-bold text-[10px] tracking-[1px] uppercase text-cream/30">
-                          Delete
-                        </button>
-                      </form>
-                    )}
-                  </div>
-                </div>
-                <div className="font-body text-[14px] text-cream/75 mt-1 text-pretty">{c.text}</div>
-              </div>
-            );
-          })}
-        </div>
+            )}
+          </div>
+        ))}
         <form action={addCommentAction.bind(null, gameId)} className="flex gap-2">
           <input
             type="text"
             name="text"
             required
             maxLength={500}
-            placeholder="Say something…"
-            className="flex-1 h-12 rounded-md bg-cream/8 px-3.5 font-body text-[14px] text-cream placeholder:text-cream/40 outline-none border-2 border-transparent focus:border-gold/40"
+            placeholder={t.game.placeholder}
+            aria-label={t.game.placeholder}
+            className="flex-1 h-12.5 rounded-pill bg-surface-panel border border-line px-4.5 font-body text-[15px] text-cream placeholder:text-cream/40 outline-none focus:border-gold/60"
           />
-          <button type="submit" className="h-12 px-4 rounded-md bg-gold font-heading font-bold text-sm text-ink">
-            Post
+          <button type="submit" aria-label={t.game.send} className="w-12.5 h-12.5 rounded-pill bg-amber text-ink flex items-center justify-center">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true">
+              <path d="M4 12l16-8-6 16-3-7z" />
+            </svg>
           </button>
         </form>
-      </div>
+      </section>
 
-      <div className="mt-auto flex flex-col gap-2.5">
-        {game.groupId && <LinkButton href={`/log?rematch=${game.id}`}>Rematch</LinkButton>}
-        <LinkButton href="/home" variant="outline">
-          Back home
-        </LinkButton>
-      </div>
-    </div>
+      {game.groupId && (
+        <Link
+          href={`/log?rematch=${game.id}`}
+          className="h-13 rounded-lg border-2 border-gold text-gold flex items-center justify-center font-heading font-extrabold text-lg tracking-[0.06em] uppercase"
+        >
+          {t.game.rematch}
+        </Link>
+      )}
+    </Screen>
   );
 }
