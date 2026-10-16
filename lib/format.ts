@@ -1,6 +1,7 @@
 export function initialsFor(name: string) {
   const parts = name.trim().split(/\s+/);
-  return (parts.length > 1 ? parts[0][0] + parts[1][0] : name.slice(0, 2)).toUpperCase();
+  const useTwo = parts.length > 1 && /^[a-z]/i.test(parts[1]);
+  return (useTwo ? parts[0][0] + parts[1][0] : name.replace(/\s/g, "").slice(0, 2)).toUpperCase();
 }
 
 type NameEntry = { id: string; first: string; last: string };

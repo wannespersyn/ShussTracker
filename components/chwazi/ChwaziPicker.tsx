@@ -1,10 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { BackButton, LinkButton, PrimaryButton } from "@/components/ui";
+import Link from "next/link";
+import { BackButton } from "@/components/ui";
 import { DuoPairingBoard } from "@/components/teams/DuoPairingBoard";
-import { balanceIntoDuos, TEAM_COLORS, shuffleIntoDuos, toTeamPlayers, type Duo, type RosterPlayer } from "@/lib/teams";
-import { capRingGradient } from "@/lib/theme/tokens";
+import { balanceIntoDuos, shuffleIntoDuos, toTeamPlayers, type Duo, type RosterPlayer } from "@/lib/teams";
 import { cn } from "@/lib/cn";
 
 /** Random team picker ("chwazi" — the finger-picking randomizer game this
@@ -62,28 +62,32 @@ export function ChwaziPicker({
   const flatIds = teams?.flatMap((t) => t.players.map((p) => p.id)).join(",") ?? "";
   const eventQuery = eventId ? `&eventId=${eventId}` : "";
   const logHref = `/log?crewId=${groupId}${eventQuery}&teams=${flatIds}`;
-  const tournamentHref = `/tournaments/new?crewId=${groupId}${eventQuery}&entrants=${flatIds}`;
+
+  const shortNames = Object.fromEntries(players.map((p) => [p.id, p.name.trim().split(/\s+/)[0].length <= 3 ? p.name : p.name.trim().split(/\s+/)[0].replace(/^./, (c) => c.toUpperCase())]));
+  const need = requiredCount ?? null;
+  const countReady = canShuffle;
 
   return (
-    <div className="relative min-h-screen bg-surface flex flex-col px-5 pt-14 pb-28 gap-6">
-      <header className="flex items-center gap-3.5">
+    <div className="relative min-h-screen bg-surface flex flex-col gap-3.5 px-5 pt-4.5 pb-8 w-full max-w-xl mx-auto">
+      <header className="flex items-center gap-3 h-11">
         <BackButton href={`/crews/${groupId}`} />
-        <div>
-          <div className="font-heading font-bold text-label-kicker tracking-kicker uppercase text-cream/45">
-            Chwazi
-          </div>
-          <div className="font-display text-display-sm text-cream mt-1">Pick teams</div>
+        <div className="flex-1 flex flex-col">
+          <span className="font-heading font-extrabold text-[26px] tracking-[0.06em] leading-none">CHWAZI</span>
+          <span className="font-body text-xs text-cream/55">
+            {phase === "result" ? (balanced ? "Balanced by Elo" : "Pure luck") : "Pick who plays — Chwazi makes the teams"}
+          </span>
         </div>
       </header>
 
       {phase === "select" && (
         <>
-          <div className="font-body text-body-sm text-cream/55">
-            {requiredCount
-              ? `Who's playing? Pick ${requiredCount} (${selectedIds.length}/${requiredCount}).`
-              : `Who's in? Pick an even number of players — ${selectedIds.length} selected.`}
+          <div className="flex justify-between items-baseline">
+            <span className="font-heading font-semibold text-[12px] tracking-[0.14em] uppercase text-cream/55">Who&apos;s playing?</span>
+            <span className={cn("font-display font-extrabold text-lg", countReady ? "text-gold" : "text-cream/55")}>
+              {need ? `${selectedIds.length} / ${need}` : selectedIds.length}
+            </span>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="grid grid-cols-3 gap-2">
             {players.map((p) => {
               const picked = selectedIds.includes(p.id);
               return (
@@ -91,12 +95,22 @@ export function ChwaziPicker({
                   key={p.id}
                   type="button"
                   onClick={() => toggle(p.id)}
+                  aria-pressed={picked}
                   className={cn(
-                    "px-4 h-11 rounded-md font-heading font-bold text-sm",
-                    picked ? "bg-gold text-ink" : "bg-cream/8 text-cream/70",
+                    "min-h-20 rounded-[14px] flex flex-col items-center justify-center gap-1 px-1 py-2 border-2 text-cream",
+                    picked ? "bg-surface-raised border-gold" : "bg-surface-deep border-transparent",
                   )}
                 >
-                  {p.name}
+                  <span
+                    className={cn(
+                      "w-9 h-9 rounded-pill flex items-center justify-center font-heading font-extrabold text-sm",
+                      picked ? "bg-amber text-ink" : "bg-surface-raised text-cream/75",
+                    )}
+                  >
+                    {p.initials}
+                  </span>
+                  <span className="font-body font-semibold text-[13px] max-w-full truncate">{shortNames[p.id]}</span>
+                  {ratings[p.id] !== undefined && <span className="font-body text-[11px] text-cream/55">{Math.round(ratings[p.id])}</span>}
                 </button>
               );
             })}
@@ -105,64 +119,58 @@ export function ChwaziPicker({
           <button
             type="button"
             onClick={() => setBalanced((v) => !v)}
-            className={cn(
-              "mt-auto flex items-center justify-between h-13 px-4 rounded-md border-2",
-              balanced ? "bg-gold/12 border-gold/45" : "bg-cream/5 border-cream/10",
-            )}
+            aria-pressed={balanced}
+            className="flex items-center gap-3 min-h-15 px-3.5 py-2 rounded-[14px] bg-surface-deep border border-line text-left"
           >
-            <span className="text-left">
-              <span className={cn("block font-heading font-bold text-sm", balanced ? "text-gold" : "text-cream/70")}>
-                Balance by skill
-              </span>
-              <span className="block font-body text-[12px] text-cream/45 mt-0.5">
-                {balanced ? "Strongest paired with weakest" : "Pure random — the classic chwazi"}
-              </span>
+            <span className="flex-1 flex flex-col">
+              <span className="font-body font-semibold text-[15px]">Balance by Elo</span>
+              <span className="font-body text-xs text-cream/55">Strongest with weakest — no stacked duos</span>
             </span>
-            <span
-              className={cn(
-                "w-11 h-6.5 rounded-pill relative shrink-0",
-                balanced ? "bg-gold" : "bg-cream/15",
-              )}
-            >
-              <span
-                className={cn(
-                  "absolute top-1 left-1 w-4.5 h-4.5 rounded-pill bg-cream transition-transform",
-                  balanced && "translate-x-4.5",
-                )}
-              />
+            <span className={cn("w-12 h-7 rounded-pill p-0.75 flex shrink-0", balanced ? "bg-amber justify-end" : "bg-surface-raised justify-start")}>
+              <span className={cn("w-5.5 h-5.5 rounded-pill", balanced ? "bg-ink" : "bg-cream/55")} />
             </span>
           </button>
 
-          <PrimaryButton className="h-16 w-full" size="lg" disabled={!canShuffle} onClick={chwazi}>
-            Chwazi!
-          </PrimaryButton>
+          <button
+            type="button"
+            disabled={!canShuffle}
+            onClick={chwazi}
+            className="h-16 rounded-[18px] bg-amber text-ink font-heading font-extrabold text-[26px] tracking-[0.1em] disabled:bg-surface-raised disabled:text-cream/40"
+          >
+            {canShuffle ? "CHWAZI!" : need ? `PICK ${need - selectedIds.length} MORE` : "PICK AN EVEN NUMBER"}
+          </button>
         </>
       )}
 
       {phase === "shuffling" && (
-        <div className="flex-1 flex flex-col items-center justify-center gap-4">
+        <div className="flex-1 flex flex-col items-center justify-center gap-4 py-24">
           <div className="flex gap-3">
-            {TEAM_COLORS.map((color, i) => (
-              <div
-                key={color}
-                className="w-12 h-12 rounded-pill animate-pop"
-                style={{ background: capRingGradient(color), animationDelay: `${i * 90}ms` }}
-              />
+            {["var(--color-amber-fill)", "#4fd1ff", "var(--color-red)", "var(--color-mint)"].map((c, i) => (
+              <div key={c} className="w-12 h-12 rounded-pill animate-pop" style={{ background: c, animationDelay: `${i * 90}ms` }} />
             ))}
           </div>
-          <div className="font-heading font-bold text-[13px] tracking-[2px] uppercase text-cream/50">
-            Shuffling…
-          </div>
+          <div className="font-heading font-bold text-[13px] tracking-[0.2em] uppercase text-cream/55">Shuffling…</div>
         </div>
       )}
 
       {phase === "result" && teams && (
         <>
-          <div className="font-body text-body-sm text-cream/55">Tap two names to swap, or shuffle again.</div>
           <DuoPairingBoard players={teams.flatMap((t) => t.players)} teams={teams} onChange={setTeams} />
-          <div className="mt-auto flex flex-col gap-2.5">
-            <LinkButton href={logHref}>Log a game with these teams</LinkButton>
+          <div className="grid grid-cols-[1fr_1.6fr] gap-2.5">
+            <button
+              type="button"
+              onClick={chwazi}
+              className="h-14 rounded-[16px] border-2 border-gold text-gold font-heading font-extrabold text-lg tracking-[0.06em]"
+            >
+              RESHUFFLE
+            </button>
+            <Link href={logHref} className="h-14 rounded-[16px] bg-amber text-ink flex items-center justify-center font-heading font-extrabold text-lg tracking-[0.06em]">
+              LOG THIS GAME
+            </Link>
           </div>
+          <button type="button" onClick={() => setPhase("select")} className="h-11 font-body font-semibold text-sm text-cream/55">
+            Change players
+          </button>
         </>
       )}
     </div>
