@@ -30,7 +30,7 @@ export async function getCrewRecap(groupId: string): Promise<RecapData> {
   const scoped = useAllTime ? allGames : thisYearGames;
   const label = useAllTime ? "All-time" : String(currentYear);
 
-  const nightKeys = new Set(scoped.map((g) => g.eventId ?? new Date(g.playedAt).toDateString()));
+  const nightKeys = new Set(scoped.map((g) => new Date(g.playedAt).toDateString()));
 
   let biggestWin: RecapData["biggestWin"] = null;
   const duoTally = new Map<string, { names: string; wins: number; losses: number }>();

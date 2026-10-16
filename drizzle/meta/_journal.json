@@ -64,6 +64,13 @@
       "when": 1792178470267,
       "tag": "0008_plans_feedback",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792178958563,
+      "tag": "0009_drop_events_rivalries",
+      "breakpoints": true
     }
   ]
 }

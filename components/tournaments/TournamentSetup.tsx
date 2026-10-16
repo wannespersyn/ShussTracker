@@ -67,10 +67,9 @@ function formatOptionsFor(duoCount: number): FormatOption[] {
 
 export function TournamentSetup({
   groupId,
-  eventId,
   roster,
   presetEntrantIds,
-}: Readonly<{ groupId: string; eventId?: string; roster: RosterPlayer[]; presetEntrantIds?: string[] }>) {
+}: Readonly<{ groupId: string; roster: RosterPlayer[]; presetEntrantIds?: string[] }>) {
   const [isPending, startTransition] = useTransition();
   const players = useMemo<TeamPlayer[]>(() => toTeamPlayers(roster), [roster]);
 
@@ -90,8 +89,7 @@ export function TournamentSetup({
   const [format, setFormat] = useState<TournamentFormat>("single_elim");
 
   const canShuffle = selectedIds.length >= 4 && selectedIds.length % 2 === 0;
-  const eventQuery = eventId ? `&eventId=${eventId}` : "";
-  const chwaziHref = `/chwazi?crewId=${groupId}${eventQuery}`;
+  const chwaziHref = `/chwazi?crewId=${groupId}`;
   const formatOptions = useMemo(() => formatOptionsFor(teams?.length ?? 0), [teams]);
   const selectedFormatOption = formatOptions.find((f) => f.value === format);
   const canStart = Boolean(teams) && teams!.length >= 2 && !selectedFormatOption?.disabledReason;
@@ -111,7 +109,6 @@ export function TournamentSetup({
     startTransition(() => {
       createTournamentAction({
         groupId,
-        eventId,
         name: name.trim() || "Tournament",
         format,
         entrantPairs: teams.map((t) => [t.players[0]!.id, t.players[1]!.id] as [string, string]),

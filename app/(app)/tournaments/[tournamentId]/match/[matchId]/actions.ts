@@ -30,7 +30,6 @@ export async function playTournamentMatch(input: PlayTournamentMatchInput) {
 
   const { gameId } = await createGameRecord({
     groupId: match.tournament.groupId,
-    eventId: match.tournament.eventId ?? undefined,
     createdBy: userId,
     matType: "4",
     teams: [

@@ -1,13 +1,12 @@
-import type { StatsCrew, StatsEvent, StatsExplorerData, StatsFieldCounts, StatsGame, StatsPerson } from "@/lib/db/stats";
+import type { StatsCrew, StatsExplorerData, StatsFieldCounts, StatsGame, StatsPerson } from "@/lib/db/stats";
 import { wilsonLowerBound } from "@/lib/ranking";
 
 export type FieldKey = "far" | "mid" | "near" | "risk" | "miss";
 export type PeriodKey = "all" | "season" | "month";
-export type DimKey = "person" | "event" | "duo" | "crew" | "mat" | "period" | "field";
+export type DimKey = "person" | "duo" | "crew" | "mat" | "period" | "field";
 
 export type Filters = {
   person: string; // userId, or "ALL"
-  event: string | null;
   duo: string | null; // "idA+idB", sorted
   crew: string | null;
   mat: "4" | "8" | null;
@@ -15,7 +14,7 @@ export type Filters = {
   field: FieldKey | null;
 };
 
-export const DIMS: DimKey[] = ["person", "event", "duo", "crew", "mat", "period", "field"];
+export const DIMS: DimKey[] = ["person", "duo", "crew", "mat", "period", "field"];
 
 export const FIELDS: { key: FieldKey; label: string; word: string }[] = [
   { key: "far", label: "3S", word: "far-field 3s" },
@@ -40,7 +39,7 @@ export function visibleFields(data: StatsExplorerData): { key: FieldKey; label: 
 }
 
 export function defaultFilters(currentUserId: string): Filters {
-  return { person: currentUserId, event: null, duo: null, crew: null, mat: null, period: "all", field: null };
+  return { person: currentUserId, duo: null, crew: null, mat: null, period: "all", field: null };
 }
 
 export function duoKey(a: string, b: string) {
@@ -78,7 +77,6 @@ function matchesPeriod(playedAtIso: string, period: PeriodKey): boolean {
 export function filterGames(games: StatsGame[], f: Filters): StatsGame[] {
   return games.filter((g) => {
     if (f.crew && g.crewId !== f.crew) return false;
-    if (f.event && g.eventId !== f.event) return false;
     if (f.mat && g.matType !== f.mat) return false;
     if (!matchesPeriod(g.playedAt, f.period)) return false;
     if (f.duo) {
@@ -153,8 +151,6 @@ export function chipLabel(dim: DimKey, f: Filters, data: StatsExplorerData, curr
       return f.person === "ALL"
         ? "Everyone"
         : nameFor(data.people, f.person) + (f.person === currentUserId ? " · you" : "");
-    case "event":
-      return f.event ? (data.events.find((e) => e.id === f.event)?.name ?? "Event") : "Event";
     case "duo":
       return f.duo ? f.duo.split("+").map((id) => firstName(nameFor(data.people, id))).join(" & ") : "Duo";
     case "crew":
@@ -173,8 +169,7 @@ export function summaryLine(f: Filters, data: StatsExplorerData, currentUserId: 
   if (f.duo) bits.push(f.duo.split("+").map((id) => nameFor(data.people, id)).join(" & "));
   else if (f.person !== "ALL") bits.push(nameFor(data.people, f.person).toUpperCase() + (f.person === currentUserId ? " (you)" : ""));
   else bits.push("EVERYONE");
-  if (f.event) bits.push(data.events.find((e) => e.id === f.event)?.name ?? "");
-  if (f.crew && !f.event) bits.push(data.crews.find((c) => c.id === f.crew)?.name ?? "");
+  if (f.crew) bits.push(data.crews.find((c) => c.id === f.crew)?.name ?? "");
   bits.push(f.mat ? `${f.mat}-player mat` : "all mat types");
   bits.push(f.period === "all" ? "all-time" : f.period === "season" ? "last 3 months" : "this month");
   if (f.field) bits.push("only " + FIELDS.find((x) => x.key === f.field)!.word);
@@ -194,18 +189,6 @@ export function sheetOptions(dim: DimKey, f: Filters, data: StatsExplorerData, c
           meta: "",
           on: f.person === p.id,
         })),
-      ];
-    case "event":
-      return [
-        { val: null, label: "Every night", meta: "", on: !f.event },
-        ...[...data.events]
-          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-          .map((e) => ({
-            val: e.id,
-            label: e.name,
-            meta: data.crews.find((c) => c.id === e.crewId)?.name ?? "",
-            on: f.event === e.id,
-          })),
       ];
     case "duo": {
       const me = f.person !== "ALL" ? f.person : currentUserId;
@@ -274,45 +257,8 @@ export function computeRankedList(
   allGames: StatsGame[],
   people: StatsPerson[],
   crews: StatsCrew[],
-  events: StatsEvent[],
   currentUserId: string,
 ): RankedList {
-  if (f.event) {
-    const agg = new Map<string, { w: number; l: number; pts: number }>();
-    sel.forEach((g) =>
-      g.teams.forEach((t) => {
-        const key = duoKey(t.userIds[0], t.userIds[1]);
-        const entry = agg.get(key) ?? { w: 0, l: 0, pts: 0 };
-        if (t.won) entry.w++;
-        else entry.l++;
-        entry.pts += t.points;
-        agg.set(key, entry);
-      }),
-    );
-    const rows: RankedRow[] = [...agg.entries()]
-      .sort((a, b) => b[1].pts - a[1].pts)
-      .slice(0, 6)
-      .map(([key, d], i) => {
-        const ids = key.split("+");
-        return {
-          rank: i + 1,
-          userIds: ids,
-          name: ids.map((id) => firstName(nameFor(people, id))).join(" & ").toUpperCase(),
-          sub: `${d.w}–${d.l} · ${d.pts} pts on the night`,
-          val: String(d.pts),
-          valSub: "POINTS",
-          hot: f.duo === key,
-        };
-      });
-    const eventName = events.find((e) => e.id === f.event)?.name ?? "that night";
-    return {
-      title: `STANDINGS — ${eventName.toUpperCase()}`,
-      sub: "Every duo that showed up" + (f.mat ? ` on the ${f.mat}-player mat` : ""),
-      metric: "POINTS",
-      rows,
-    };
-  }
-
   if (f.crew) {
     const agg = new Map<string, { w: number; l: number; risk: number }>();
     sel.forEach((g) =>

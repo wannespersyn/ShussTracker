@@ -15,14 +15,14 @@ import { initialsFor } from "@/lib/format";
 export default async function LogGamePage({
   searchParams,
 }: Readonly<{
-  searchParams: Promise<{ crewId?: string; eventId?: string; teams?: string; casual?: string; rematch?: string }>;
+  searchParams: Promise<{ crewId?: string; teams?: string; casual?: string; rematch?: string }>;
 }>) {
   const session = await requireSession();
-  const { crewId, eventId, teams, casual, rematch } = await searchParams;
+  const { crewId, teams, casual, rematch } = await searchParams;
 
   // Rematch — same crew, same teams, fresh game. Self-contained: it skips
   // the crew/night picking below entirely since the original game already
-  // pins down the crew, the event, and who's on which team.
+  // pins down the crew, and who's on which team.
   if (rematch) {
     const source = await getGameForRematch(rematch);
     if (!source?.groupId) notFound();
@@ -48,7 +48,6 @@ export default async function LogGamePage({
     return (
       <LogGameWizard
         groupId={source.groupId}
-        eventId={source.eventId ?? undefined}
         roster={rematchRoster}
         lockedTeams={lockedTeams}
         backHref={`/game/${rematch}`}
@@ -97,9 +96,8 @@ export default async function LogGamePage({
         </header>
         <div className="flex flex-col gap-3">
           {memberships.map((m) => {
-            const eventQuery = eventId ? `&eventId=${eventId}` : "";
             return (
-              <Link key={m.groupId} href={`/log?crewId=${m.groupId}${eventQuery}${teamsQuery}`}>
+              <Link key={m.groupId} href={`/log?crewId=${m.groupId}${teamsQuery}`}>
                 <Card className="flex items-center justify-between">
                   <div>
                     <div className="font-display text-xl text-cream">{m.group.name}</div>
@@ -140,7 +138,6 @@ export default async function LogGamePage({
   return (
     <LogGameWizard
       groupId={selected.groupId}
-      eventId={eventId}
       roster={roster}
       presetPlayerIds={presetPlayerIds}
       backHref={crewPickerHref}

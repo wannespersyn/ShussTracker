@@ -37,7 +37,6 @@ const needFor = (m: Mat) => (m === "8" ? 8 : m === "2" ? 2 : 4);
  * Locked teams (tournament match, rematch) and Chwazi presets start on 2. */
 export function LogGameWizard({
   groupId,
-  eventId,
   roster,
   presetPlayerIds,
   lockedTeams,
@@ -47,7 +46,6 @@ export function LogGameWizard({
   ratings = {},
 }: Readonly<{
   groupId?: string;
-  eventId?: string;
   roster: RosterPlayer[];
   presetPlayerIds?: string[];
   lockedTeams?: Duo[];
@@ -151,7 +149,7 @@ export function LogGameWizard({
         onComplete({ matType: mat, teams: finalTeams, shotsByPlayer });
         return;
       }
-      logGame({ groupId: groupId!, eventId, matType: mat, teams: finalTeams, shotsByPlayer });
+      logGame({ groupId: groupId!, matType: mat, teams: finalTeams, shotsByPlayer });
     });
   }
 
@@ -163,7 +161,7 @@ export function LogGameWizard({
     router.push(backHref);
   }
 
-  const chwaziHref = groupId ? `/chwazi?crewId=${groupId}${eventId ? `&eventId=${eventId}` : ""}&count=${need}` : null;
+  const chwaziHref = groupId ? `/chwazi?crewId=${groupId}&count=${need}` : null;
   const winnerTeam = teams?.find((x) => x.id === finalOrder[0]);
 
   return (

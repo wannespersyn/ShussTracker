@@ -11,7 +11,6 @@ export type GameTeamInput = { label: string; playerIds: string[]; finalRank: num
 
 export type CreateGameInput = {
   groupId: string;
-  eventId?: string;
   createdBy: string;
   matType: "2" | "4" | "8";
   teams: GameTeamInput[];
@@ -45,7 +44,6 @@ export async function createGameRecord(
     executor.insert(games).values({
       id: gameId,
       groupId: input.groupId,
-      ...(input.eventId ? { eventId: input.eventId } : {}),
       createdBy: input.createdBy,
       matType: input.matType,
     }),
@@ -91,7 +89,6 @@ export async function createGameRecord(
 
 export type RematchSource = {
   groupId: string | null;
-  eventId: string | null;
   createdBy: string;
   teams: { label: string; players: { id: string; name: string }[] }[];
 };
@@ -108,7 +105,6 @@ export async function getGameForRematch(gameId: string): Promise<RematchSource |
 
   return {
     groupId: game.groupId,
-    eventId: game.eventId,
     createdBy: game.createdBy,
     teams: game.teams.map((t) => ({
       label: t.teamLabel,

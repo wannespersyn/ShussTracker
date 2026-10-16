@@ -3,7 +3,6 @@
 import { redirect } from "next/navigation";
 import { requireUserId, requireGroupMember } from "@/lib/db/authz";
 import { createCrewForUser, joinCrewByCode, removeCrewMember } from "@/lib/db/crews";
-import { createEvent } from "@/lib/db/events";
 
 function stringField(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -39,13 +38,3 @@ export async function leaveCrew(groupId: string) {
   redirect("/crews");
 }
 
-export async function createEventAction(groupId: string, formData: FormData) {
-  const userId = await requireUserId();
-  await requireGroupMember(userId, groupId);
-
-  const name = stringField(formData, "name").trim() || "Game night";
-  const date = stringField(formData, "date").trim() || new Date().toISOString().slice(0, 10);
-
-  const eventId = await createEvent(groupId, userId, name, date);
-  redirect(`/events/${eventId}`);
-}

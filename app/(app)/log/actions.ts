@@ -6,7 +6,6 @@ import { createGameRecord, type FieldHit } from "@/lib/db/games";
 
 export type LogGameInput = {
   groupId: string;
-  eventId?: string;
   matType: "2" | "4" | "8";
   teams: { label: string; playerIds: string[]; finalRank: number }[];
   shotsByPlayer: { playerId: string; fieldHit: FieldHit }[];

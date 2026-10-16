@@ -57,8 +57,8 @@ export function StatsExplorer({ data, currentUserId }: Readonly<{ data: StatsExp
   const acc = total > 0 ? Math.round((hits * 100) / total) : 0;
 
   const ranked = useMemo(
-    () => computeRankedList(f, sel, data.games, data.people, data.crews, data.events, currentUserId),
-    [f, sel, data.games, data.people, data.crews, data.events, currentUserId],
+    () => computeRankedList(f, sel, data.games, data.people, data.crews, currentUserId),
+    [f, sel, data.games, data.people, data.crews, currentUserId],
   );
 
   function setDim(dim: DimKey, val: string | null) {
@@ -152,7 +152,7 @@ export function StatsExplorer({ data, currentUserId }: Readonly<{ data: StatsExp
               </div>
               <div className="font-mono font-semibold text-[26px] text-cream mt-1.5">{sel.length}</div>
               <div className="font-body text-[12.5px] text-cream/42 mt-0.5">
-                {f.event ? "on this night" : f.duo ? "as a pairing" : "in this slice"}
+                {f.duo ? "as a pairing" : "in this slice"}
               </div>
             </div>
             <div
@@ -341,7 +341,6 @@ function RankedRowView({ row, people }: Readonly<{ row: RankedRow; people: Stats
 
 const DIM_LABELS: Record<DimKey, string> = {
   person: "Person",
-  event: "Event",
   duo: "Duo",
   crew: "Crew",
   mat: "Mat type",

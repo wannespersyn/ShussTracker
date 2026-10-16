@@ -80,7 +80,7 @@ export const verificationTokens = pgTable(
 
 /* -----------------------------------------------------------------------
  * Game domain — from the brief's data model. Games/shots can exist with
- * a null group/event (casual logging is allowed, not required).
+ * a null group (casual logging is allowed, not required).
  *
  * There is no Postgres RLS here (that's a Supabase-auth pattern tied to
  * `auth.uid()` JWT claims flowing into the DB session, which Neon/Auth.js
@@ -135,24 +135,9 @@ export const groupMembers = pgTable(
   (t) => [primaryKey({ columns: [t.groupId, t.userId] })],
 );
 
-export const events = pgTable("event", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  groupId: uuid("group_id").references(() => groups.id, {
-    onDelete: "set null",
-  }),
-  name: text("name").notNull(),
-  date: date("date").notNull(),
-  createdBy: uuid("created_by")
-    .notNull()
-    .references(() => users.id),
-});
-
 export const games = pgTable("game", {
   id: uuid("id").primaryKey().defaultRandom(),
   groupId: uuid("group_id").references(() => groups.id, {
-    onDelete: "set null",
-  }),
-  eventId: uuid("event_id").references(() => events.id, {
     onDelete: "set null",
   }),
   createdBy: uuid("created_by")
@@ -240,34 +225,6 @@ export const gameReactions = pgTable(
 );
 
 /* -----------------------------------------------------------------------
- * Rivalries — a pinned "beef" between two sides within a crew. Each side is
- * 1 player (a solo rivalry, matching a 2-player mat) or 2 players (a duo
- * rivalry, matching a 4/8-player mat) — `player2Id` null means solo. The
- * running score itself isn't stored here; it's computed live from game
- * history (lib/db/rivalries.ts), same as every other stat in this app, by
- * finding games where one side's exact player set faced the other's.
- * --------------------------------------------------------------------- */
-
-export const rivalries = pgTable("rivalry", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  groupId: uuid("group_id")
-    .notNull()
-    .references(() => groups.id, { onDelete: "cascade" }),
-  createdBy: uuid("created_by")
-    .notNull()
-    .references(() => users.id),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  aPlayer1Id: uuid("a_player1_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  aPlayer2Id: uuid("a_player2_id").references(() => users.id, { onDelete: "cascade" }),
-  bPlayer1Id: uuid("b_player1_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  bPlayer2Id: uuid("b_player2_id").references(() => users.id, { onDelete: "cascade" }),
-});
-
-/* -----------------------------------------------------------------------
  * Tournament domain — a bracket or schedule over a crew's members, seeded
  * as fixed duos ("entrants") at creation time. A played match's result is
  * a normal game/gameTeams/shots row (so tournament games count toward
@@ -282,7 +239,6 @@ export const tournaments = pgTable("tournament", {
   groupId: uuid("group_id")
     .notNull()
     .references(() => groups.id, { onDelete: "cascade" }),
-  eventId: uuid("event_id").references(() => events.id, { onDelete: "set null" }),
   name: text("name").notNull(),
   format: tournamentFormatEnum("format").notNull().default("single_elim"),
   status: tournamentStatusEnum("status").notNull().default("setup"),
@@ -398,21 +354,11 @@ export const usersRelations = relations(users, ({ many }) => ({
 
 export const groupsRelations = relations(groups, ({ many, one }) => ({
   members: many(groupMembers),
-  events: many(events),
   games: many(games),
-  rivalries: many(rivalries),
   createdByUser: one(users, {
     fields: [groups.createdBy],
     references: [users.id],
   }),
-}));
-
-export const rivalriesRelations = relations(rivalries, ({ one }) => ({
-  group: one(groups, { fields: [rivalries.groupId], references: [groups.id] }),
-  aPlayer1: one(users, { fields: [rivalries.aPlayer1Id], references: [users.id], relationName: "rivalryAPlayer1" }),
-  aPlayer2: one(users, { fields: [rivalries.aPlayer2Id], references: [users.id], relationName: "rivalryAPlayer2" }),
-  bPlayer1: one(users, { fields: [rivalries.bPlayer1Id], references: [users.id], relationName: "rivalryBPlayer1" }),
-  bPlayer2: one(users, { fields: [rivalries.bPlayer2Id], references: [users.id], relationName: "rivalryBPlayer2" }),
 }));
 
 export const groupMembersRelations = relations(groupMembers, ({ one }) => ({
@@ -426,22 +372,10 @@ export const groupMembersRelations = relations(groupMembers, ({ one }) => ({
   }),
 }));
 
-export const eventsRelations = relations(events, ({ one, many }) => ({
-  group: one(groups, {
-    fields: [events.groupId],
-    references: [groups.id],
-  }),
-  games: many(games),
-}));
-
 export const gamesRelations = relations(games, ({ one, many }) => ({
   group: one(groups, {
     fields: [games.groupId],
     references: [groups.id],
-  }),
-  event: one(events, {
-    fields: [games.eventId],
-    references: [events.id],
   }),
   teams: many(gameTeams),
   comments: many(gameComments),
@@ -490,7 +424,6 @@ export const shotsRelations = relations(shots, ({ one }) => ({
 
 export const tournamentsRelations = relations(tournaments, ({ one, many }) => ({
   group: one(groups, { fields: [tournaments.groupId], references: [groups.id] }),
-  event: one(events, { fields: [tournaments.eventId], references: [events.id] }),
   entrants: many(tournamentEntrants),
   matches: many(tournamentMatches),
 }));

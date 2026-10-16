@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { runAtomic } from "@/lib/db/batch";
-import { users, groupMembers, gameTeamPlayers, tournamentEntrants, rivalries } from "@/lib/db/schema";
+import { users, groupMembers, gameTeamPlayers, tournamentEntrants } from "@/lib/db/schema";
 import { generateCode } from "@/lib/codes";
 
 async function generateUniqueClaimCode(): Promise<string> {
@@ -81,10 +81,6 @@ export async function claimGuest(guestId: string, realUserId: string) {
     executor.update(gameTeamPlayers).set({ userId: realUserId }).where(eq(gameTeamPlayers.userId, guestId)),
     executor.update(tournamentEntrants).set({ player1Id: realUserId }).where(eq(tournamentEntrants.player1Id, guestId)),
     executor.update(tournamentEntrants).set({ player2Id: realUserId }).where(eq(tournamentEntrants.player2Id, guestId)),
-    executor.update(rivalries).set({ aPlayer1Id: realUserId }).where(eq(rivalries.aPlayer1Id, guestId)),
-    executor.update(rivalries).set({ aPlayer2Id: realUserId }).where(eq(rivalries.aPlayer2Id, guestId)),
-    executor.update(rivalries).set({ bPlayer1Id: realUserId }).where(eq(rivalries.bPlayer1Id, guestId)),
-    executor.update(rivalries).set({ bPlayer2Id: realUserId }).where(eq(rivalries.bPlayer2Id, guestId)),
     executor.delete(users).where(eq(users.id, guestId)),
   ]);
 }

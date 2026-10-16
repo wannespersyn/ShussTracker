@@ -16,13 +16,11 @@ import { cn } from "@/lib/cn";
  * of pure random so nobody's duo is a runaway stack or a guaranteed loss. */
 export function ChwaziPicker({
   groupId,
-  eventId,
   roster,
   ratings = {},
   requiredCount,
 }: Readonly<{
   groupId: string;
-  eventId?: string;
   roster: RosterPlayer[];
   ratings?: Record<string, number>;
   /** Locks selection to an exact player count — set when Chwazi is invoked
@@ -60,8 +58,7 @@ export function ChwaziPicker({
   }
 
   const flatIds = teams?.flatMap((t) => t.players.map((p) => p.id)).join(",") ?? "";
-  const eventQuery = eventId ? `&eventId=${eventId}` : "";
-  const logHref = `/log?crewId=${groupId}${eventQuery}&teams=${flatIds}`;
+  const logHref = `/log?crewId=${groupId}&teams=${flatIds}`;
 
   const shortNames = Object.fromEntries(players.map((p) => [p.id, p.name.trim().split(/\s+/)[0].length <= 3 ? p.name : p.name.trim().split(/\s+/)[0].replace(/^./, (c) => c.toUpperCase())]));
   const need = requiredCount ?? null;
