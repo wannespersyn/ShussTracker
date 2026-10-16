@@ -7,7 +7,7 @@ function DigitStrip({ digit, durationMs }: { digit: string; durationMs: number }
   // the `roll` keyframe (app/globals.css) translates exactly -10em.
   const strip = [...STRIP_DIGITS, digit];
   return (
-    <div className="relative overflow-hidden rounded-xs bg-black/22 px-1.5" style={{ height: "1em" }}>
+    <div className="relative overflow-hidden" style={{ height: "1em" }}>
       <div className="animate-roll" style={{ animationDuration: `${durationMs}ms` }}>
         {strip.map((d, i) => (
           <div key={i} style={{ height: "1em", lineHeight: "1em" }}>
@@ -15,7 +15,6 @@ function DigitStrip({ digit, durationMs }: { digit: string; durationMs: number }
           </div>
         ))}
       </div>
-      <div className="absolute left-0 right-0 top-1/2 h-[2px] bg-black/35" />
     </div>
   );
 }
@@ -29,12 +28,12 @@ type StatCounterProps = {
   className?: string;
 };
 
-/** Split-flap style numeric counter — the signature "big stat" treatment. */
+/** Rolling scoreboard counter — the signature "big stat" treatment. */
 export function StatCounter({ value, size = 46, durationMs = 1600, className }: StatCounterProps) {
   const chars = String(value).split("");
 
   return (
-    <div className={cn("flex items-baseline gap-[5px] font-display", className)} style={{ fontSize: size, lineHeight: 1 }}>
+    <div className={cn("flex items-baseline font-display font-extrabold tabular-nums", className)} style={{ fontSize: size, lineHeight: 1 }}>
       {chars.map((char, i) =>
         /[0-9]/.test(char) ? (
           <DigitStrip key={i} digit={char} durationMs={durationMs} />

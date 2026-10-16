@@ -1,12 +1,16 @@
 import { requireSession } from "@/lib/db/authz";
-import { BackButton, Card, LinkButton, PrimaryButton } from "@/components/ui";
+import { BackButton, Card, LinkButton, PrimaryButton, SegmentedForm } from "@/components/ui";
 import { signOutAction } from "@/app/(app)/actions";
+import { getLocale, getT, getTheme } from "@/lib/i18n/server";
+import { LOCALES, LOCALE_LABELS } from "@/lib/i18n/config";
 import { updateDisplayName } from "./actions";
+import { setLocaleAction, setThemeAction } from "./preferences-actions";
 
 export default async function SettingsPage() {
   const session = await requireSession();
   const name = session.user.name ?? "";
   const email = session.user.email ?? "";
+  const [t, theme, locale] = await Promise.all([getT(), getTheme(), getLocale()]);
 
   return (
     <div className="min-h-screen bg-surface flex flex-col px-5 pt-14 pb-28 gap-6">
@@ -16,9 +20,39 @@ export default async function SettingsPage() {
           <div className="font-heading font-bold text-label-kicker tracking-kicker uppercase text-cream/45">
             Account
           </div>
-          <div className="font-display text-display-sm text-cream mt-1">Settings</div>
+          <div className="font-display font-extrabold text-display-sm text-cream mt-1 uppercase">{t.settings.title}</div>
         </div>
       </header>
+
+      <section className="flex flex-col gap-2">
+        <div className="font-heading font-semibold text-[12px] tracking-[0.14em] uppercase text-cream/55">
+          {t.settings.appearance}
+        </div>
+        <SegmentedForm
+          action={setThemeAction}
+          name="theme"
+          value={theme}
+          ariaLabel={t.settings.appearance}
+          options={[
+            { value: "system", label: t.settings.themeSystem },
+            { value: "dark", label: t.settings.themeDark },
+            { value: "light", label: t.settings.themeLight },
+          ]}
+        />
+      </section>
+
+      <section className="flex flex-col gap-2">
+        <div className="font-heading font-semibold text-[12px] tracking-[0.14em] uppercase text-cream/55">
+          {t.settings.language}
+        </div>
+        <SegmentedForm
+          action={setLocaleAction}
+          name="locale"
+          value={locale}
+          ariaLabel={t.settings.language}
+          options={LOCALES.map((l) => ({ value: l, label: LOCALE_LABELS[l] }))}
+        />
+      </section>
 
       <form action={updateDisplayName} className="flex flex-col gap-2.5">
         <div className="font-mono font-medium text-[10px] tracking-widest uppercase text-cream/45">
@@ -50,7 +84,7 @@ export default async function SettingsPage() {
 
       <form action={signOutAction} className="mt-auto">
         <PrimaryButton type="submit" variant="outline" className="w-full">
-          Sign out
+          {t.settings.signOut}
         </PrimaryButton>
       </form>
     </div>

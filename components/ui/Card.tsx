@@ -14,11 +14,11 @@ export function Card({ variant = "default", className, children, ...props }: Car
     <div
       className={cn(
         "rounded-xl p-4",
-        variant === "default" && "bg-cream/5 border border-cream/10",
-        variant === "gold" && "bg-gold/10 border border-gold/30",
-        variant === "red" && "bg-red/12 border border-red/32",
-        variant === "hero" && "bg-gradient-hero border border-gold/28",
-        variant === "flat" && "bg-cream/4",
+        variant === "default" && "bg-surface-deep border border-line",
+        variant === "gold" && "bg-surface-raised border border-gold/40",
+        variant === "red" && "bg-red/10 border border-red/35",
+        variant === "hero" && "bg-surface-deep border border-line",
+        variant === "flat" && "bg-surface-deep",
         className,
       )}
       {...props}

@@ -1,78 +1,142 @@
 @import "tailwindcss";
 
 /* ---------------------------------------------------------------------
- * Shussapp design tokens
- * Extracted from Claude Design project "Shussapp Flow" (Shussapp
- * Flow.dc.html, 15 screens).
- * Do not add new colors/sizes/radii/shadows here without checking the
- * source designs first — everything downstream should reuse these.
+ * Shussapp v2 design tokens — "Scoreboard" redesign (Claude Design canvas
+ * "Shussapp v2 — Scoreboard redesign").
+ * Token NAMES are kept from v1 so every existing utility class (bg-surface,
+ * text-cream, bg-gold, …) re-skins automatically; the VALUES are new.
+ *   cream = primary text color (dark in light mode)
+ *   gold  = amber accent
+ * Themes: <html data-theme="dark|light|system">, set from the `theme` cookie
+ * in app/layout.tsx. "system" follows prefers-color-scheme.
  * ------------------------------------------------------------------- */
 
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* Backgrounds — flat near-black, layered dark -> light */
+  --color-ink: #111111; /* text on amber fills, deepest chrome */
+  --color-surface: #0b0d0c; /* screen background */
+  --color-surface-raised: #1d2224; /* raised tile (was gradient start) */
+  --color-surface-raised-end: #15191a;
+  --color-surface-alt: #1d2224;
+  --color-surface-alt-end: #15191a;
+  --color-surface-deep: #15191a; /* standard card / row fill */
+  --color-surface-panel: #15191a; /* nav, icon buttons, inputs */
+  --color-surface-bloom: #15191a;
+  --color-line: rgba(255, 255, 255, 0.08); /* hairline borders */
+
+  /* Amber — primary accent */
+  --color-gold: #ffb627;
+  --color-gold-hover: #ffd07a;
+  --color-gold-dark: #e09a00;
+  --color-gold-end: #c98200;
+
+  /* Red — mama / losses */
+  --color-red: #ff6b5b;
+  --color-red-bright: #ff6b5b;
+  --color-red-pale: #ff8a7c;
+  --color-red-end: #c2372a;
+
+  /* Text */
+  --color-cream: #f3f1ea;
+
+  /* Green — wins, Elo up */
+  --color-mint: #7fe0a8;
+
+  --color-blue-bright: #4fd1ff;
+  --color-purple-bright: #b48cff;
+
+  /* Shot zones (log mat) */
+  --color-field-near: #2a3033;
+  --color-field-mid: #232a2c;
+  --color-field-far: #1d2224;
+
+  /* Fonts (next/font variables in app/layout.tsx) */
+  --font-display: var(--font-barlow-condensed), sans-serif; /* big numbers, headlines */
+  --font-heading: var(--font-barlow-condensed), sans-serif; /* titles, tabs, buttons */
+  --font-body: var(--font-barlow), sans-serif; /* body copy */
+  --font-mono: var(--font-barlow-condensed), sans-serif; /* stat numbers + kickers (tabular) */
+
+  /* Radii — tighter, sportier */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-cta: 16px;
+  --radius-pill: 999px;
+
+  /* Flat look: no glow shadows, only subtle elevation */
+  --shadow-cta: none;
+  --shadow-cta-lg: none;
+  --shadow-cta-inverted: none;
+  --shadow-fab: none;
+  --shadow-elevation-sm: 0 4px 12px rgba(0, 0, 0, 0.3);
+  --shadow-elevation-md: 0 8px 20px rgba(0, 0, 0, 0.35);
+  --shadow-elevation-lg: 0 12px 28px rgba(0, 0, 0, 0.4);
+  --shadow-elevation-xl: 0 20px 48px rgba(0, 0, 0, 0.5);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --color-surface: #f4f2ec;
+  --color-surface-raised: #ece9e1;
+  --color-surface-raised-end: #ffffff;
+  --color-surface-alt: #ece9e1;
+  --color-surface-alt-end: #ffffff;
+  --color-surface-deep: #ffffff;
+  --color-surface-panel: #ffffff;
+  --color-surface-bloom: #ffffff;
+  --color-line: rgba(0, 0, 0, 0.1);
+  --color-gold: #b07400;
+  --color-gold-hover: #8a5a00;
+  --color-gold-dark: #8a5a00;
+  --color-red: #c2372a;
+  --color-red-bright: #c2372a;
+  --color-red-pale: #a52e23;
+  --color-cream: #141614;
+  --color-mint: #1e8a50;
+  --color-field-near: #e3dfd5;
+  --color-field-mid: #ece9e1;
+  --color-field-far: #f4f2ec;
+  --shadow-elevation-sm: 0 4px 12px rgba(0, 0, 0, 0.06);
+  --shadow-elevation-md: 0 8px 20px rgba(0, 0, 0, 0.08);
+}
+
+@media (prefers-color-scheme: light) {
+  :root[data-theme="system"] {
+    color-scheme: light;
+    --color-surface: #f4f2ec;
+    --color-surface-raised: #ece9e1;
+    --color-surface-raised-end: #ffffff;
+    --color-surface-alt: #ece9e1;
+    --color-surface-alt-end: #ffffff;
+    --color-surface-deep: #ffffff;
+    --color-surface-panel: #ffffff;
+    --color-surface-bloom: #ffffff;
+    --color-line: rgba(0, 0, 0, 0.1);
+    --color-gold: #b07400;
+    --color-gold-hover: #8a5a00;
+    --color-gold-dark: #8a5a00;
+    --color-red: #c2372a;
+    --color-red-bright: #c2372a;
+    --color-red-pale: #a52e23;
+    --color-cream: #141614;
+    --color-mint: #1e8a50;
+    --color-field-near: #e3dfd5;
+    --color-field-mid: #ece9e1;
+    --color-field-far: #f4f2ec;
+    --shadow-elevation-sm: 0 4px 12px rgba(0, 0, 0, 0.06);
+    --shadow-elevation-md: 0 8px 20px rgba(0, 0, 0, 0.08);
+  }
+}
+
+/* Amber fills keep the bright amber in every theme (text on them is ink),
+ * even where light mode darkens text-gold for contrast. */
 :root {
-  /* Backgrounds — near-black bottle-green, layered dark -> light */
-  --color-ink: #0a0c0a; /* deepest bg (status bar chrome, gold recap slide footer) */
-  --color-surface: #0b0f0c; /* primary screen bg, phone frame fill */
-  --color-surface-raised: #17211b; /* hero/card gradient start (160deg) */
-  --color-surface-raised-end: #0e1411; /* hero/card gradient end */
-  --color-surface-alt: #1d2a1f; /* selected-tile / leaderboard hero gradient start (155deg) */
-  --color-surface-alt-end: #0e1411; /* selected-tile / leaderboard hero gradient end */
-  --color-surface-deep: #131a16; /* standard card / row fill */
-  --color-surface-panel: #141a16; /* nav pill, icon buttons, input fill */
-  --color-surface-bloom: #14201a; /* radial bloom center: team picker mat, onboarding */
-
-  /* Gold — primary accent */
-  --color-gold: #e8b33c;
-  --color-gold-hover: #f5d077; /* link hover only */
-  --color-gold-dark: #c9992f; /* progress-bar gradient end, badge glow */
-  --color-gold-end: #b87a06; /* recap gold-slide gradient end */
-
-  /* Red — "mama" / threat accent */
-  --color-red: #c8342b;
-  --color-red-bright: #e05b4e; /* mama numbers, live badges, sign-out */
-  --color-red-pale: #f2a89e; /* thin-log warning copy, risk-zone label text */
-  --color-red-end: #a81c15; /* gradient end where needed */
-
-  /* Cream — primary text-on-dark */
-  --color-cream: #efe7d6;
-
-  /* Mint — positive/secondary accent (streak deltas, points-up) */
-  --color-mint: #8fbf9c;
-
-  /* Blue/purple — top win-streak tiers (hotter than red), PlayerStatsSummary only */
-  --color-blue-bright: #4fa8e8;
-  --color-purple-bright: #a66be0;
-
-  /* Log-mat shot zones (near -> far field, brighter = closer) */
-  --color-field-near: #1f8f68;
-  --color-field-mid: #167058;
-  --color-field-far: #12594a;
-
-  /* Fonts (wired to next/font variables in app/layout.tsx) */
-  --font-display: var(--font-anton), sans-serif; /* hero numbers, headlines, VS */
-  --font-heading: var(--font-archivo), sans-serif; /* names, section titles, buttons */
-  --font-body: var(--font-archivo), sans-serif; /* body copy */
-  --font-mono: var(--font-ibm-plex-mono), monospace; /* every stat number, timestamp, uppercase meta kicker */
-
-  /* Border radii */
-  --radius-xs: 4px; /* progress-bar segments, step dots */
-  --radius-sm: 9px; /* small icon buttons, plus/minus chips */
-  --radius-md: 13px; /* list rows, small cards, icon buttons */
-  --radius-lg: 18px; /* standard cards */
-  --radius-xl: 22px; /* hero cards, sheets */
-  --radius-cta: 28px; /* primary CTAs */
-  --radius-pill: 999px; /* segmented tabs, nav pill, circular avatars */
-
-  /* Soft ambient glow shadows — no offset "lip", blur only */
-  --shadow-cta: 0 10px 26px rgba(232, 179, 60, 0.24);
-  --shadow-cta-lg: 0 10px 26px rgba(232, 179, 60, 0.24);
-  --shadow-cta-inverted: 0 10px 22px rgba(0, 0, 0, 0.35);
-  --shadow-fab: 0 8px 22px rgba(232, 179, 60, 0.32);
-
-  /* Ambient elevation shadows (pure blur, no lip) */
-  --shadow-elevation-sm: 0 6px 14px rgba(0, 0, 0, 0.35);
-  --shadow-elevation-md: 0 8px 22px rgba(0, 0, 0, 0.4);
-  --shadow-elevation-lg: 0 12px 30px rgba(0, 0, 0, 0.45);
-  --shadow-elevation-xl: 0 20px 50px rgba(0, 0, 0, 0.55); /* max elevation */
+  --color-amber-fill: #ffb627;
 }
 
 @theme inline {
@@ -97,6 +161,8 @@
   --color-red-end: var(--color-red-end);
 
   --color-cream: var(--color-cream);
+  --color-line: var(--color-line);
+  --color-amber: var(--color-amber-fill);
 
   --color-mint: var(--color-mint);
 
@@ -180,6 +246,7 @@
     background: var(--color-surface);
     color: var(--color-cream);
     font-family: var(--font-body);
+    font-variant-numeric: tabular-nums;
   }
 
   a {
@@ -195,17 +262,17 @@
  * Kept as utilities (not tokens) because they combine 2+ properties. */
 @layer components {
   .bg-gradient-hero {
-    background: linear-gradient(160deg, var(--color-surface-raised) 0%, var(--color-surface-raised-end) 60%);
+    background: var(--color-surface-deep);
   }
   .bg-gradient-alt {
-    background: linear-gradient(155deg, var(--color-surface-alt), var(--color-surface-alt-end));
+    background: var(--color-surface-alt);
   }
   .bg-gradient-gold {
-    background: linear-gradient(120deg, var(--color-gold), var(--color-gold-dark));
+    background: var(--color-amber-fill);
   }
   .bg-gradient-event {
     /* live event / bracket header */
-    background: linear-gradient(160deg, var(--color-red), var(--color-red-end));
+    background: var(--color-red-end);
   }
   .bg-stripe-texture {
     /* diagonal hazard-stripe overlay used on red event/bracket headers */
@@ -213,12 +280,12 @@
   }
   .bg-ruled-texture {
     /* faint horizontal rule-line overlay: onboarding, empty state */
-    background-image: linear-gradient(rgba(239, 231, 214, 0.045) 1px, transparent 1px);
+    background-image: none;
     background-size: 100% 34px;
   }
   .bg-gradient-bloom {
     /* radial bloom wash: onboarding + team-picker mat background */
-    background: radial-gradient(120% 80% at 50% 0%, var(--color-surface-bloom) 0%, var(--color-surface) 55%, var(--color-ink) 100%);
+    background: var(--color-surface);
   }
 }
 
