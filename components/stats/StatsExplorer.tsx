@@ -51,6 +51,9 @@ export function StatsExplorer({ data, currentUserId }: Readonly<{ data: StatsExp
   const counts = useMemo(() => sumShots(sel, focal), [sel, focal]);
   const total = totalOf(counts);
   const hits = total - counts.miss;
+  // Crews that only log mama hits: "hit rate" would always read 100%, so
+  // show mama per game instead.
+  const onlyMama = total > 0 && counts.risk === total;
   const acc = total > 0 ? Math.round((hits * 100) / total) : 0;
 
   const ranked = useMemo(
@@ -164,13 +167,13 @@ export function StatsExplorer({ data, currentUserId }: Readonly<{ data: StatsExp
                   isRisk ? "text-red-pale" : "text-cream/45",
                 )}
               >
-                {fieldMeta ? `${fieldMeta.label} logged` : "Hit rate"}
+                {fieldMeta ? `${fieldMeta.label} logged` : onlyMama ? "Mama / game" : "Hit rate"}
               </div>
               <div className="flex items-baseline gap-1 mt-1.5">
                 <span className={cn("font-mono font-semibold text-[26px]", isRisk ? "text-red-bright" : "text-cream")}>
-                  {fieldMeta ? counts[fieldMeta.key] : acc}
+                  {fieldMeta ? counts[fieldMeta.key] : onlyMama ? (counts.risk / Math.max(1, sel.length)).toFixed(2) : acc}
                 </span>
-                {!fieldMeta && (
+                {!fieldMeta && !onlyMama && (
                   <span className={cn("font-mono font-semibold text-lg opacity-60", isRisk ? "text-red-bright" : "text-cream")}>
                     %
                   </span>
@@ -181,7 +184,9 @@ export function StatsExplorer({ data, currentUserId }: Readonly<{ data: StatsExp
                   ? total
                     ? `${Math.round((counts[fieldMeta.key] * 100) / total)}% of all flicks`
                     : "no flicks yet"
-                  : `${hits} of ${total} flicks`}
+                  : onlyMama
+                    ? `${counts.risk} mama in ${sel.length} games`
+                    : `${hits} of ${total} flicks`}
               </div>
             </div>
           </div>
