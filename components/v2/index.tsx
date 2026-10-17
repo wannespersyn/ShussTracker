@@ -6,7 +6,14 @@ import { cn } from "@/lib/cn";
 
 export function Screen({ children, className, nav = true }: Readonly<{ children: ReactNode; className?: string; nav?: boolean }>) {
   return (
-    <div className={cn("min-h-screen bg-surface flex flex-col gap-3.5 px-5 pt-4.5 w-full max-w-xl mx-auto", nav ? "pb-30" : "pb-8", className)}>
+    <div
+      className={cn(
+        "min-h-screen bg-surface flex flex-col px-5 pt-4.5 w-full max-w-xl mx-auto",
+        !/\bgap-/.test(className ?? "") && "gap-3.5",
+        !/\bpb-/.test(className ?? "") && (nav ? "pb-30" : "pb-8"),
+        className,
+      )}
+    >
       {children}
     </div>
   );
@@ -14,7 +21,7 @@ export function Screen({ children, className, nav = true }: Readonly<{ children:
 
 export function Kicker({ children, className }: Readonly<{ children: ReactNode; className?: string }>) {
   return (
-    <span className={cn("font-heading font-semibold text-[12px] tracking-[0.14em] uppercase text-cream/55", className)}>{children}</span>
+    <span className={cn("font-heading font-semibold text-[12px] tracking-[0.14em] uppercase text-muted", className)}>{children}</span>
   );
 }
 
@@ -33,26 +40,27 @@ export function SectionHead({ title, href, linkLabel }: Readonly<{ title: ReactN
 
 export function Panel({ children, className, accent = false }: Readonly<{ children: ReactNode; className?: string; accent?: boolean }>) {
   return (
-    <section className={cn("rounded-[18px] bg-surface-deep border p-4", accent ? "border-gold/50" : "border-line", className)}>
+    <section className={cn("rounded-[20px] bg-surface-deep border px-4.5 py-4", accent ? "border-gold/50" : "border-line", className)}>
       {children}
     </section>
   );
 }
 
-export function StatGrid({ items, className }: Readonly<{ items: { label: string; value: ReactNode; tone?: "gold" | "red" | "plain" }[]; className?: string }>) {
+export function StatGrid({ items, className, size = 26, flat = false }: Readonly<{ items: { label: string; value: ReactNode; tone?: "gold" | "red" | "plain" }[]; className?: string; size?: number; flat?: boolean }>) {
   return (
     <div
       className={cn("grid gap-px rounded-md overflow-hidden bg-line", className)}
       style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}
     >
       {items.map((it) => (
-        <div key={it.label} className="bg-surface-raised px-3 py-2.5 flex flex-col gap-0.5 min-w-0">
-          <span className="font-body font-semibold text-[11px] tracking-[0.08em] uppercase text-cream/55 truncate">{it.label}</span>
+        <div key={it.label} className={cn("flex flex-col gap-0.5 min-w-0", flat ? "bg-surface-deep px-2.5 py-3" : "bg-surface-raised px-3 py-2.5")}>
+          <span className={cn("font-body font-semibold tracking-[0.08em] uppercase text-muted truncate", flat ? "text-[10px]" : "text-[11px]")}>{it.label}</span>
           <span
             className={cn(
-              "font-display font-bold text-[26px] leading-none tabular-nums",
+              "font-display font-bold leading-none tabular-nums",
               it.tone === "gold" ? "text-gold" : it.tone === "red" ? "text-red" : "text-cream",
             )}
+            style={{ fontSize: size }}
           >
             {it.value}
           </span>
@@ -63,7 +71,7 @@ export function StatGrid({ items, className }: Readonly<{ items: { label: string
 }
 
 /** W/L result tiles (last N results, oldest first). */
-export function FormStrip({ form, slots = 10 }: Readonly<{ form: ("W" | "L")[]; slots?: number }>) {
+export function FormStrip({ form, slots = 10, hot = 0 }: Readonly<{ form: ("W" | "L")[]; slots?: number; /** Trailing wins to light up (streak); other wins dim. */ hot?: number }>) {
   const padded: ("W" | "L" | null)[] = [...Array(Math.max(0, slots - form.length)).fill(null), ...form.slice(-slots)];
   return (
     <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${slots}, minmax(0, 1fr))` }} aria-label={`Last ${form.length}: ${form.join(" ")}`} role="img">
@@ -72,7 +80,13 @@ export function FormStrip({ form, slots = 10 }: Readonly<{ form: ("W" | "L")[]; 
           key={i}
           className={cn(
             "h-7.5 rounded-[6px] flex items-center justify-center font-display font-extrabold text-sm",
-            r === "W" ? "bg-amber text-ink" : r === "L" ? "bg-surface-raised text-cream/55" : "bg-surface-raised/40",
+            r === "W"
+              ? hot && i < slots - hot
+                ? "bg-[#5a3a2a] text-cream"
+                : "bg-amber text-ink"
+              : r === "L"
+                ? "bg-chip text-muted"
+                : "bg-chip/40",
           )}
         >
           {r ?? ""}
@@ -88,7 +102,7 @@ export function FormDots({ form }: Readonly<{ form: ("W" | "L")[] }>) {
   return (
     <span className="flex gap-0.5" role="img" aria-label={`Last ${form.length}: ${form.join(" ")}`}>
       {form.map((r, i) => (
-        <span key={i} className={cn("w-1.5 h-1.5 rounded-pill", r === "W" ? "bg-mint" : "bg-cream/25")} />
+        <span key={i} className={cn("w-1.5 h-1.5 rounded-pill", r === "W" ? "bg-mint" : "bg-[#4a5150]")} />
       ))}
     </span>
   );
@@ -100,13 +114,13 @@ export function Chip({ tone, children }: Readonly<{ tone: ChipTone; children: Re
   return (
     <span
       className={cn(
-        "shrink-0 h-4.5 px-1.5 rounded-[5px] inline-flex items-center font-heading font-bold text-[12px] tracking-[0.04em] whitespace-nowrap",
-        tone === "up" && "bg-mint/15 text-mint",
-        tone === "down" && "bg-red/15 text-red",
-        tone === "same" && "bg-surface-raised text-cream/55",
+        "shrink-0 h-4.5 px-1.5 rounded-[5px] inline-flex items-center font-heading font-bold text-[12px] tracking-[0.04em] uppercase whitespace-nowrap",
+        tone === "up" && "bg-mint/14 text-mint",
+        tone === "down" && "bg-red-pale/15 text-red-pale",
+        tone === "same" && "bg-chip text-muted",
         tone === "hot" && "bg-amber text-ink",
-        tone === "guest" && "bg-surface-raised text-cream/75 border border-dashed border-cream/30",
-        tone === "info" && "bg-surface-raised text-cream/75",
+        tone === "guest" && "bg-chip text-soft border border-dashed border-cream/30",
+        tone === "info" && "bg-chip text-soft",
       )}
     >
       {children}
@@ -142,13 +156,13 @@ export function Sparkline({ values, width = 320, height = 84, label }: Readonly<
   );
 }
 
-export function Avatar({ name, size = 32, highlight = false, className }: Readonly<{ name: string; size?: number; highlight?: boolean; className?: string }>) {
+export function Avatar({ name, size = 32, fontSize, highlight = false, className }: Readonly<{ name: string; size?: number; fontSize?: number; highlight?: boolean; className?: string }>) {
   const parts = name.trim().split(/\s+/);
   const initials = (parts.length > 1 && /^[a-z]/i.test(parts[1]) ? parts[0][0] + parts[1][0] : name.replace(/\s/g, "").slice(0, 2)).toUpperCase();
   return (
     <span
-      className={cn("shrink-0 rounded-pill bg-surface-raised inline-flex items-center justify-center font-heading font-bold text-cream", className)}
-      style={{ width: size, height: size, fontSize: Math.round(size * 0.36), boxShadow: highlight ? `inset 0 0 0 2px var(--color-gold)` : undefined }}
+      className={cn("shrink-0 rounded-pill bg-chip inline-flex items-center justify-center font-body font-bold text-cream", className)}
+      style={{ width: size, height: size, fontSize: fontSize ?? Math.round(size * 0.375), boxShadow: highlight ? `inset 0 0 0 2px var(--color-gold)` : undefined }}
     >
       {initials}
     </span>
@@ -160,7 +174,7 @@ export function IconButton({ href, label, children }: Readonly<{ href: string; l
     <Link
       href={href}
       aria-label={label}
-      className="w-11 h-11 rounded-pill bg-surface-panel border border-line text-cream flex items-center justify-center [&>svg]:w-4.5 [&>svg]:h-4.5"
+      className="w-11 h-11 rounded-pill bg-surface-panel border border-line-strong text-cream flex items-center justify-center [&>svg]:w-4.5 [&>svg]:h-4.5"
     >
       {children}
     </Link>
@@ -178,7 +192,7 @@ export function TextTabs({ tabs }: Readonly<{ tabs: { href: string; label: strin
           aria-current={t.active ? "page" : undefined}
           className={cn(
             "h-10 flex items-center font-heading font-bold text-base tracking-[0.08em] uppercase",
-            t.active ? "text-cream shadow-[inset_0_-3px_0_var(--color-gold)]" : "text-cream/55",
+            t.active ? "text-cream shadow-[inset_0_-3px_0_var(--color-gold)]" : "text-muted",
           )}
         >
           {t.label}
@@ -199,7 +213,7 @@ export function SegmentLinks({ options }: Readonly<{ options: { href: string; la
           aria-current={o.active ? "page" : undefined}
           className={cn(
             "h-10.5 rounded-sm flex items-center justify-center font-heading font-bold text-base tracking-[0.08em] uppercase",
-            o.active ? "bg-amber text-ink" : "text-cream/55",
+            o.active ? "bg-amber text-ink" : "text-muted",
           )}
         >
           {o.label}

@@ -121,7 +121,7 @@ export function TournamentSetup({
       <header className="flex items-center gap-3.5">
         <BackButton href={`/crews/${groupId}`} />
         <div>
-          <div className="font-heading font-bold text-label-kicker tracking-kicker uppercase text-cream/45">
+          <div className="font-heading font-bold text-label-kicker tracking-kicker uppercase text-muted">
             New tournament
           </div>
           <div className="font-display text-display-sm text-cream mt-1">Set the bracket</div>
@@ -133,12 +133,12 @@ export function TournamentSetup({
         value={name}
         onChange={(e) => setName(e.target.value)}
         placeholder="Tournament name"
-        className="h-13 rounded-lg bg-cream/8 px-4 font-body text-cream placeholder:text-cream/40 outline-none border-2 border-transparent focus:border-gold/40"
+        className="h-13 rounded-lg bg-cream/8 px-4 font-body text-cream placeholder:text-muted outline-none border-2 border-transparent focus:border-gold/40"
       />
 
       {!teams ? (
         <>
-          <div className="font-body text-body-sm text-cream/55">
+          <div className="font-body text-body-sm text-muted">
             Who&apos;s playing? Pick an even number — {selectedIds.length} selected.
           </div>
           <div className="flex flex-wrap gap-2">
@@ -151,7 +151,7 @@ export function TournamentSetup({
                   onClick={() => toggle(p.id)}
                   className={cn(
                     "px-4 h-11 rounded-md font-heading font-bold text-sm",
-                    picked ? "bg-gold text-ink" : "bg-cream/8 text-cream/70",
+                    picked ? "bg-gold text-ink" : "bg-cream/8 text-soft",
                   )}
                 >
                   {p.name}
@@ -170,13 +170,13 @@ export function TournamentSetup({
         </>
       ) : (
         <>
-          <div className="font-body text-body-sm text-cream/55">
+          <div className="font-body text-body-sm text-muted">
             {teams.length} duos. Tap two names to swap.
           </div>
           <DuoPairingBoard players={teams.flatMap((t) => t.players)} teams={teams} onChange={setTeams} />
 
           <div className="flex flex-col gap-2.5">
-            <div className="font-heading font-semibold text-[12px] tracking-kicker uppercase text-cream/55">
+            <div className="font-heading font-semibold text-[12px] tracking-kicker uppercase text-muted">
               Pick a format
             </div>
             <div className="flex flex-col gap-2.5">
@@ -223,8 +223,8 @@ function FormatTile({
           </span>
         )}
       </div>
-      <div className="font-body text-[14px] text-cream/70">{option.tagline}</div>
-      <div className="font-mono font-medium text-[11.5px] tracking-wide text-cream/45">{option.preview}</div>
+      <div className="font-body text-[14px] text-soft">{option.tagline}</div>
+      <div className="font-mono font-medium text-[11.5px] tracking-wide text-muted">{option.preview}</div>
       <div className={cn("font-body text-[13px] mt-0.5", disabled ? "text-red-pale" : "text-gold/80")}>
         {option.disabledReason ?? option.suggestion}
       </div>

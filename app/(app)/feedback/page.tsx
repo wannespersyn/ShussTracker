@@ -38,7 +38,7 @@ export default async function FeedbackPage({ searchParams }: Readonly<{ searchPa
         <Link
           href="/settings"
           aria-label={t.common.back}
-          className="w-11 h-11 rounded-pill bg-surface-panel border border-line text-cream flex items-center justify-center"
+          className="w-11 h-11 rounded-pill bg-surface-panel border border-line-strong text-cream flex items-center justify-center"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
             <path d="M15 6l-6 6 6 6" />
@@ -59,7 +59,7 @@ export default async function FeedbackPage({ searchParams }: Readonly<{ searchPa
             aria-current={k === type ? "page" : undefined}
             className={cn(
               "h-16 rounded-[14px] flex flex-col items-center justify-center gap-1 font-heading font-bold text-sm tracking-[0.08em] uppercase",
-              k === type ? "bg-amber text-ink" : "bg-surface-deep border border-line text-cream/55",
+              k === type ? "bg-amber text-ink" : "bg-surface-deep border border-line text-muted",
             )}
           >
             <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
@@ -73,7 +73,7 @@ export default async function FeedbackPage({ searchParams }: Readonly<{ searchPa
       <form action={submitFeedbackAction} className="flex flex-col gap-2.5">
         <input type="hidden" name="type" value={type} />
         {crews[0] && <input type="hidden" name="groupId" value={crews[0].id} />}
-        <label htmlFor="fb" className="font-heading font-semibold text-[12px] tracking-[0.14em] uppercase text-cream/55">
+        <label htmlFor="fb" className="font-heading font-semibold text-[12px] tracking-[0.14em] uppercase text-muted">
           {copy}
         </label>
         <textarea
@@ -84,7 +84,7 @@ export default async function FeedbackPage({ searchParams }: Readonly<{ searchPa
           maxLength={1000}
           rows={4}
           placeholder={placeholder}
-          className="rounded-[14px] bg-surface-panel border border-line px-3.5 py-3 font-body text-[15px] text-cream placeholder:text-cream/40 outline-none focus:border-gold/60 resize-none"
+          className="rounded-[14px] bg-surface-panel border border-cream/14 p-3.5 font-body text-[15px] leading-[1.2]! text-cream placeholder:text-[#6b746f] outline-none focus:border-gold/60 resize-none"
         />
         <button type="submit" className="h-12 rounded-md bg-amber text-ink font-heading font-extrabold text-[17px] tracking-[0.06em] uppercase">
           {t.feedback.send}
@@ -94,9 +94,9 @@ export default async function FeedbackPage({ searchParams }: Readonly<{ searchPa
       <section className="flex flex-col gap-2 mt-1" aria-label={t.feedback.mostWanted}>
         <div className="flex justify-between items-baseline">
           <Kicker>{t.feedback.mostWanted}</Kicker>
-          <span className="font-body text-xs text-cream/55">{t.feedback.topBuilt}</span>
+          <span className="font-body text-xs text-muted">{t.feedback.topBuilt}</span>
         </div>
-        {ideas.length === 0 && <p className="font-body text-sm text-cream/55">{t.feedback.noIdeas}</p>}
+        {ideas.length === 0 && <p className="font-body text-sm text-muted">{t.feedback.noIdeas}</p>}
         {ideas.map((i) => (
           <div key={i.id} className="flex items-center gap-3 pl-3.5 pr-2 py-2 rounded-[14px] bg-surface-deep border border-line">
             <span className="flex-1 min-w-0 flex flex-col">
@@ -104,7 +104,7 @@ export default async function FeedbackPage({ searchParams }: Readonly<{ searchPa
               <span
                 className={cn(
                   "font-heading font-bold text-xs tracking-[0.1em] uppercase",
-                  i.status === "in_progress" ? "text-mint" : i.status === "planned" ? "text-gold" : "text-cream/55",
+                  i.status === "in_progress" ? "text-mint" : i.status === "planned" ? "text-gold" : "text-muted",
                 )}
               >
                 {statusLabel[i.status]}
@@ -117,7 +117,7 @@ export default async function FeedbackPage({ searchParams }: Readonly<{ searchPa
                 aria-label={t.feedback.upvote}
                 className={cn(
                   "w-14 h-12 rounded-md flex flex-col items-center justify-center",
-                  i.votedByMe ? "bg-amber text-ink" : "bg-surface-raised border border-line text-cream/75",
+                  i.votedByMe ? "bg-amber text-ink" : "bg-surface-raised border border-line text-soft",
                 )}
               >
                 <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="3" aria-hidden="true">

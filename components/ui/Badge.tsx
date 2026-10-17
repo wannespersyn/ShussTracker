@@ -37,7 +37,7 @@ export function Badge({
         selected ? "bg-surface-raised border-gold/50" : "bg-transparent border-transparent",
       )}
     >
-      {locked && <LockIcon className="absolute top-2.5 right-2.5 w-2.75 h-2.75 text-cream/45" />}
+      {locked && <LockIcon className="absolute top-2.5 right-2.5 w-2.75 h-2.75 text-muted" />}
       <div
         className={cn(
           "w-16 h-16 rounded-lg flex items-center justify-center font-display font-extrabold text-[22px]",
@@ -54,7 +54,7 @@ export function Badge({
       >
         {name}
       </div>
-      <div className={cn("font-body text-caption leading-[1.2]", locked ? "text-cream/25" : "text-cream/55")}>
+      <div className={cn("font-body text-caption leading-[1.2]", locked ? "text-cream/25" : "text-muted")}>
         {sub}
       </div>
     </button>

@@ -11,14 +11,14 @@ export default async function ClaimGuestPage({ searchParams }: Readonly<{ search
       <header className="flex items-center gap-3.5">
         <BackButton href="/home" />
         <div>
-          <div className="font-heading font-bold text-label-kicker tracking-kicker uppercase text-cream/45">
+          <div className="font-heading font-bold text-label-kicker tracking-kicker uppercase text-muted">
             Guest players
           </div>
           <div className="font-display text-display-sm text-cream mt-1">Claim your stats</div>
         </div>
       </header>
 
-      <div className="font-body text-body-sm text-cream/55">
+      <div className="font-body text-body-sm text-muted">
         Been logged as a guest at a game night? Enter the code whoever added you can hand over, and every game you
         already played gets folded into this account.
       </div>

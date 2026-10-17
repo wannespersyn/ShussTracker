@@ -30,7 +30,7 @@ export function primaryButtonClasses({
     variant === "gold" && "bg-amber text-ink",
     variant === "inverted" && "bg-ink text-[#f3f1ea]",
     variant === "outline" && "bg-transparent text-cream border-2 border-cream/25",
-    variant === "ghost" && "bg-transparent text-cream/70 border border-dashed border-cream/25 font-bold text-base",
+    variant === "ghost" && "bg-transparent text-soft border border-dashed border-cream/25 font-bold text-base",
     className,
   );
 }

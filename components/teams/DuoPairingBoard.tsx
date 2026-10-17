@@ -64,7 +64,7 @@ export function DuoPairingBoard({
                 if (e.target.value.trim() === "") renameTeam(t.id, `Team ${i + 1}`);
               }}
               placeholder={`Team ${i + 1}`}
-              className="flex-1 min-w-0 bg-transparent border-none outline-none font-heading font-semibold text-[12px] tracking-[0.14em] uppercase text-cream/60 focus:text-cream"
+              className="flex-1 min-w-0 bg-transparent border-none outline-none font-heading font-semibold text-[12px] tracking-[0.14em] uppercase text-muted focus:text-cream"
             />
           </div>
           <div className="flex gap-2.5">
@@ -89,7 +89,7 @@ export function DuoPairingBoard({
       <button
         type="button"
         onClick={shuffleDuos}
-        className="h-11 rounded-md border border-dashed border-cream/25 flex items-center justify-center gap-2 font-heading font-bold text-sm tracking-[0.1em] uppercase text-cream/65"
+        className="h-11 rounded-md border border-dashed border-cream/25 flex items-center justify-center gap-2 font-heading font-bold text-sm tracking-[0.1em] uppercase text-soft"
       >
         ↻ Shuffle the duos
       </button>

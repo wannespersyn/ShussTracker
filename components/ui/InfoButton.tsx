@@ -35,7 +35,7 @@ export function InfoButton({
         onClick={() => setOpen((v) => !v)}
         className={cn(
           "flex items-center justify-center w-5 h-5 rounded-pill font-heading font-bold text-[11px] leading-none shrink-0 transition-colors",
-          open ? "bg-gold text-ink" : "bg-cream/14 text-cream/55 hover:bg-cream/20",
+          open ? "bg-gold text-ink" : "bg-cream/14 text-muted hover:bg-cream/20",
           className,
         )}
       >
@@ -51,7 +51,7 @@ export function InfoButton({
           />
           <div
             role="tooltip"
-            className="relative w-full max-w-sm rounded-lg bg-surface-panel border border-cream/10 shadow-elevation-xl p-4 font-body text-body-sm text-cream/70"
+            className="relative w-full max-w-sm rounded-lg bg-surface-panel border border-cream/10 shadow-elevation-xl p-4 font-body text-body-sm text-soft"
           >
             {children}
           </div>

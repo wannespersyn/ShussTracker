@@ -10,6 +10,7 @@ import { format } from "@/lib/i18n";
 import { DuoPairingBoard } from "@/components/teams/DuoPairingBoard";
 import { pairIntoDuos, pairIntoSolos, shuffleIntoDuos, toTeamPlayers, type Duo, type RosterPlayer, type TeamPlayer } from "@/lib/teams";
 import { logGame } from "@/app/(app)/log/actions";
+import { Avatar } from "@/components/v2";
 
 type FieldHit = "1" | "2" | "3" | "mama" | "miss";
 type Mat = "2" | "4" | "8";
@@ -44,6 +45,8 @@ export function LogGameWizard({
   backHref = "/home",
   trackShotZones = false,
   ratings = {},
+  duoRecords = {},
+  crewName,
 }: Readonly<{
   groupId?: string;
   roster: RosterPlayer[];
@@ -55,6 +58,9 @@ export function LogGameWizard({
   trackShotZones?: boolean;
   /** Crew Elo by userId, shown on the player chips. */
   ratings?: Record<string, number>;
+  /** "W–L" per duo, keyed by the two sorted user ids joined with "|". */
+  duoRecords?: Record<string, string>;
+  crewName?: string;
 }>) {
   const router = useRouter();
   const { t } = useT();
@@ -204,7 +210,7 @@ export function LogGameWizard({
                 aria-pressed={mat === m}
                 className={cn(
                   "h-11 rounded-sm font-heading font-bold text-[17px] tracking-[0.04em]",
-                  mat === m ? "bg-amber text-ink" : "text-cream/55",
+                  mat === m ? "bg-amber text-ink" : "text-muted",
                 )}
               >
                 {m === "2" ? "1 V 1" : `${m}-MAT`}
@@ -217,8 +223,8 @@ export function LogGameWizard({
           ) : (
             <>
               <div className="flex justify-between items-baseline">
-                <span className="font-heading font-semibold text-[12px] tracking-[0.14em] uppercase text-cream/55">{t.log.whoPlays}</span>
-                <span className={cn("font-display font-extrabold text-lg", ready ? "text-gold" : "text-cream/55")}>
+                <span className="font-heading font-semibold text-[12px] tracking-[0.14em] uppercase text-muted">{t.log.whoPlays}</span>
+                <span className={cn("font-display font-extrabold text-lg", ready ? "text-gold" : "text-muted")}>
                   {picked.length} / {need}
                 </span>
               </div>
@@ -237,7 +243,7 @@ export function LogGameWizard({
                       )}
                     >
                       <span className="font-body font-semibold text-[13px] max-w-full truncate">{shortNames[p.id] ?? p.name}</span>
-                      {ratings[p.id] !== undefined && <span className="font-body text-[11px] text-cream/55">{ratings[p.id]}</span>}
+                      {ratings[p.id] !== undefined && <span className="font-body text-[11px] text-muted">{ratings[p.id]}</span>}
                     </button>
                   );
                 })}
@@ -247,7 +253,7 @@ export function LogGameWizard({
 
           {shownTeams && mat !== "2" && (
             <div className="flex flex-col gap-2">
-              <span className="font-heading font-semibold text-[12px] tracking-[0.14em] uppercase text-cream/55">{t.log.teams}</span>
+              <span className="font-heading font-semibold text-[12px] tracking-[0.14em] uppercase text-muted">{t.log.teams}</span>
               <DuoPairingBoard players={pickedPlayers} teams={shownTeams} onChange={setTeams} />
             </div>
           )}
@@ -256,7 +262,7 @@ export function LogGameWizard({
             type="button"
             disabled={!shownTeams}
             onClick={goToResult}
-            className="mt-auto h-14.5 rounded-lg bg-amber text-ink font-heading font-extrabold text-xl tracking-[0.05em] uppercase disabled:bg-surface-raised disabled:text-cream/40"
+            className="mt-auto h-14.5 rounded-lg bg-amber text-ink font-heading font-extrabold text-xl tracking-[0.05em] uppercase disabled:bg-surface-raised disabled:text-muted"
           >
             {shownTeams ? t.log.next : format(t.log.pickMore, { n: need - picked.length })}
           </button>
@@ -269,19 +275,19 @@ export function LogGameWizard({
             type="button"
             onClick={() => setZones((z) => !z)}
             aria-pressed={zones}
-            className="flex items-center gap-3 min-h-12 px-3.5 py-1 rounded-[14px] bg-surface-deep border border-line text-left"
+            className="flex items-center gap-3 min-h-12 px-3.5 py-1 rounded-[14px] bg-surface-deep border border-line text-left text-cream"
           >
             <span className="flex-1 flex flex-col">
               <span className="font-body font-semibold text-sm">{t.log.trackShots}</span>
-              <span className="font-body text-xs text-cream/55">{zones ? t.log.trackOn : t.log.trackOff}</span>
+              <span className="font-body text-xs text-muted">{zones ? t.log.trackOn : t.log.trackOff}</span>
             </span>
-            <span className={cn("w-12 h-7 rounded-pill p-0.75 flex", zones ? "bg-amber justify-end" : "bg-surface-raised justify-start")}>
-              <span className={cn("w-5.5 h-5.5 rounded-pill", zones ? "bg-ink" : "bg-cream/55")} />
+            <span className={cn("w-12 h-7 rounded-pill p-0.75 flex", zones ? "bg-amber justify-end" : "bg-chip justify-start")}>
+              <span className={cn("w-5.5 h-5.5 rounded-pill", zones ? "bg-ink" : "bg-muted")} />
             </span>
           </button>
 
           <div className="flex items-center justify-between gap-2">
-            <span className="font-heading font-semibold text-[12px] tracking-[0.14em] uppercase text-cream/55">
+            <span className="font-heading font-semibold text-[12px] tracking-[0.14em] uppercase text-muted">
               {teams.length > 2 ? t.log.tapOrder : zones ? t.log.tapWinnerShots : t.log.tapWinnerMama}
             </span>
             {zones && history.length > 0 && (
@@ -307,12 +313,19 @@ export function LogGameWizard({
                 key={team.id}
                 className={cn("rounded-[16px] bg-surface-deep border-2 px-3.5 pt-2 pb-1", placed && r === 0 ? "border-gold" : "border-line")}
               >
-                <button type="button" onClick={() => tapTeam(team.id)} className="w-full min-h-11 flex items-center justify-between text-left">
-                  <span className="font-heading font-bold text-[19px]">{team.players.map((p) => shortNames[p.id] ?? p.name).join(" & ")}</span>
+                <button type="button" onClick={() => tapTeam(team.id)} className="w-full min-h-11 flex items-center justify-between text-left text-cream">
+                  <span className="flex flex-col">
+                    <span className="font-heading font-bold text-[19px]">{team.players.map((p) => shortNames[p.id] ?? p.name).join(" & ")}</span>
+                    {team.players.length === 2 && duoRecords[team.players.map((p) => p.id).sort().join("|")] && (
+                      <span className="font-body text-xs text-muted">
+                        {format(t.log.together, { r: duoRecords[team.players.map((p) => p.id).sort().join("|")] })}
+                      </span>
+                    )}
+                  </span>
                   <span
                     className={cn(
                       "font-heading font-extrabold text-[13px] tracking-[0.1em] px-2.5 py-1.5 rounded-sm whitespace-nowrap",
-                      placed && r === 0 ? "bg-amber text-ink" : placed ? "bg-cream text-surface" : "bg-surface-raised text-cream/55",
+                      placed && r === 0 ? "bg-amber text-ink" : placed ? "bg-cream text-surface" : "bg-surface-raised text-muted",
                     )}
                   >
                     {placed ? (teams.length > 2 ? ORD[r] : r === 0 ? t.log.winner : t.log.lost) : teams.length > 2 ? `TAP = ${ORD[order.length]}` : t.log.tapWin}
@@ -322,11 +335,12 @@ export function LogGameWizard({
                   const s = shots[p.id] ?? {};
                   const total = ZONES.reduce((n, z) => n + (s[z.hit] ?? 0), 0);
                   return (
-                    <div key={p.id} className="flex flex-col gap-1.5 py-2 border-t border-line">
+                    <div key={p.id} className="flex flex-col gap-1.5 py-2 border-t border-cream/6">
                       <div className="flex items-center gap-2.5">
+                        <Avatar name={p.name} size={28} fontSize={11} />
                         <span className="flex-1 font-body font-medium text-[15px]">{shortNames[p.id] ?? p.name}</span>
                         {zones ? (
-                          <span className="font-body text-xs text-cream/55">
+                          <span className="font-body text-xs text-muted">
                             {total} {t.log.shots}
                           </span>
                         ) : (
@@ -335,18 +349,18 @@ export function LogGameWizard({
                               type="button"
                               onClick={() => bump(p.id, "mama", -1)}
                               aria-label={t.log.mamaLess}
-                              className="w-11 h-9 rounded-sm border border-line bg-surface-raised text-lg font-bold"
+                              className="w-11 h-9 rounded-[10px] border border-line-strong bg-surface-raised text-cream text-lg font-bold"
                             >
                               −
                             </button>
-                            <span className={cn("w-6.5 text-center font-display font-extrabold text-[22px]", (s.mama ?? 0) > 0 ? "text-red" : "text-cream/35")}>
+                            <span className={cn("w-6.5 text-center font-display font-extrabold text-[22px]", (s.mama ?? 0) > 0 ? "text-red" : "text-[#5b6460]")}>
                               {s.mama ?? 0}
                             </span>
                             <button
                               type="button"
                               onClick={() => bump(p.id, "mama", 1)}
                               aria-label={t.log.mamaMore}
-                              className="w-11 h-9 rounded-sm border border-red/45 bg-red/15 text-red text-lg font-bold"
+                              className="w-11 h-9 rounded-[10px] border border-red/40 bg-red/13 text-red-pale text-lg font-bold"
                             >
                               +
                             </button>
@@ -371,7 +385,7 @@ export function LogGameWizard({
                                       : z.hit === "miss"
                                         ? "bg-cream/40 text-ink"
                                         : "bg-cream text-surface"
-                                    : cn("bg-surface-raised border border-line", z.hit === "mama" ? "text-red" : "text-cream/75"),
+                                    : cn("bg-surface-raised border border-line", z.hit === "mama" ? "text-red" : "text-soft"),
                                 )}
                               >
                                 <span className="font-display font-extrabold text-[15px]">{z.label}</span>
@@ -388,11 +402,21 @@ export function LogGameWizard({
             );
           })}
 
+          {crewName && (
+            <div className="flex items-center gap-2 px-3 py-2.5 rounded-md bg-surface-deep border border-dashed border-cream/14 font-body text-[13px] text-muted">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 7v5l3 2" />
+              </svg>
+              {format(t.log.countsFor, { time: nowLabel(), crew: crewName })}
+            </div>
+          )}
+
           <button
             type="button"
             disabled={!complete || isPending}
             onClick={save}
-            className="mt-auto h-14.5 rounded-lg bg-amber text-ink font-heading font-extrabold text-[19px] tracking-[0.05em] uppercase disabled:bg-surface-raised disabled:text-cream/40"
+            className="h-14.5 rounded-lg bg-amber text-ink font-heading font-extrabold text-[19px] tracking-[0.05em] uppercase disabled:bg-surface-raised disabled:text-muted"
           >
             {isPending
               ? t.log.saving
@@ -406,4 +430,8 @@ export function LogGameWizard({
       )}
     </div>
   );
+}
+
+function nowLabel() {
+  return new Intl.DateTimeFormat("nl-BE", { hour: "2-digit", minute: "2-digit" }).format(new Date());
 }

@@ -90,6 +90,7 @@ export type FeedGame = {
   teams: { label: string; finalRank: number | null; playerNames: string[] }[];
   commentCount: number;
   reactions: ReactionTally[];
+  mama: number;
 };
 
 /** Recent games in a crew, newest first, with comment/reaction summaries —
@@ -98,7 +99,7 @@ export async function getCrewActivityFeed(groupId: string, viewerId: string, lim
   const groupGames = await db.query.games.findMany({
     where: eq(games.groupId, groupId),
     with: {
-      teams: { with: { players: { with: { user: true } } } },
+      teams: { with: { players: { with: { user: true, shots: true } } } },
       comments: true,
       reactions: true,
     },
@@ -121,5 +122,6 @@ export async function getCrewActivityFeed(groupId: string, viewerId: string, lim
         })),
       commentCount: g.comments.length,
       reactions: tallyReactions(g.reactions, viewerId),
+      mama: g.teams.reduce((n, t) => n + t.players.reduce((m, p) => m + p.shots.filter((s) => s.fieldHit === "mama").length, 0), 0),
     }));
 }

@@ -24,7 +24,7 @@ export default async function ChwaziPage({
     return (
       <div className="min-h-screen bg-surface flex flex-col items-center justify-center gap-4 px-8 text-center">
         <div className="font-display text-3xl text-cream">No crew yet</div>
-        <div className="font-body text-body text-cream/55 max-w-70">
+        <div className="font-body text-body text-muted max-w-70">
           Picking teams needs a crew to pick from. Join or start one first.
         </div>
       </div>
@@ -38,7 +38,7 @@ export default async function ChwaziPage({
     return (
       <div className="min-h-screen bg-surface flex flex-col px-5 pt-14 pb-28 gap-6">
         <header>
-          <div className="font-heading font-bold text-label-kicker tracking-kicker uppercase text-cream/45">
+          <div className="font-heading font-bold text-label-kicker tracking-kicker uppercase text-muted">
             Chwazi
           </div>
           <div className="font-display text-display-sm text-cream mt-1">Which crew?</div>
@@ -49,7 +49,7 @@ export default async function ChwaziPage({
               <Card className="flex items-center justify-between">
                 <div>
                   <div className="font-display text-xl text-cream">{m.group.name}</div>
-                  <div className="font-body text-body-sm text-cream/50">
+                  <div className="font-body text-body-sm text-muted">
                     {m.group.members.length} {m.group.members.length === 1 ? "member" : "members"}
                   </div>
                 </div>
@@ -71,6 +71,7 @@ export default async function ChwaziPage({
   ]);
   const roster = members.map((m) => ({ id: m.user.id, name: m.user.name ?? "Player" }));
   const ratings = Object.fromEntries(elo.map((e) => [e.userId, e.rating]));
+  roster.sort((x, y) => (ratings[y.id] ?? 0) - (ratings[x.id] ?? 0));
 
   return (
     <ChwaziPicker

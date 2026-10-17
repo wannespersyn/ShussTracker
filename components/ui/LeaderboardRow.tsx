@@ -42,13 +42,13 @@ export function LeaderboardRow({
   
   const content = (
     <>
-      <div className={cn("font-display font-extrabold text-xl w-7", rank === 1 ? "text-gold" : "text-cream/45")}>
+      <div className={cn("font-display font-extrabold text-xl w-7", rank === 1 ? "text-gold" : "text-muted")}>
         {rank}
       </div>
       <AvatarChip initials={initials} ring={ring} size={32} className="mr-2.5" />
       <div className="flex-1 min-w-0">
         <div className="font-body font-semibold text-[15px] leading-[1.2] text-cream truncate">{name}</div>
-        {sub && <div className="font-body text-[12px] leading-[1.3] text-cream/55 mt-0.5 truncate">{sub}</div>}
+        {sub && <div className="font-body text-[12px] leading-[1.3] text-muted mt-0.5 truncate">{sub}</div>}
       </div>
       <div className="text-right shrink-0">
         <div className="font-display font-extrabold text-xl text-cream">{points}</div>

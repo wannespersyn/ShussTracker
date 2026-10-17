@@ -35,6 +35,8 @@ export type PlayerInsight = {
   bestWinStreak: number;
   /** Elo after each night played (for sparklines), oldest first. */
   eloHistory: { date: string; elo: number }[];
+  /** Achievement inputs. */
+  feats: { maxMamaGame: number; maxMamaNight: number; comeback: boolean; streakBreaks: number; mvpNights: number };
 };
 
 export type DuoInsight = {
@@ -66,6 +68,8 @@ export type SessionInsight = {
   duoOfNight: { names: string; wins: number; losses: number } | null;
   /** Per player: wins / games / mama tonight. */
   lines: { userId: string; name: string; games: number; wins: number; mama: number }[];
+  /** Per duo tonight. */
+  duoLines: { a: string; b: string; names: string; wins: number; losses: number }[];
 };
 
 export type CrewInsights = {
@@ -124,6 +128,9 @@ export function buildCrewInsights(
   const ratingWeekAgo = new Map<string, number>();
   const results = new Map<string, ("W" | "L")[]>();
   const mama = new Map<string, number>();
+  const maxMamaGame = new Map<string, number>();
+  const comeback = new Set<string>();
+  const breaks = new Map<string, number>();
   const history = new Map<string, Map<string, number>>();
   const ratingOf = (id: string) => rating.get(id) ?? ELO_BASE;
 
@@ -134,7 +141,7 @@ export function buildCrewInsights(
     games: number;
     eloStart: Map<string, number>;
     lines: Map<string, { games: number; wins: number; mama: number }>;
-    duos: Map<string, { names: string; wins: number; losses: number }>;
+    duos: Map<string, { a: string; b: string; names: string; wins: number; losses: number }>;
   };
   const nights = new Map<string, NightAcc>();
   const gameElo: Record<string, Record<string, number>> = {};
@@ -167,6 +174,21 @@ export function buildCrewInsights(
     }
 
     const best = Math.min(...teams.map((t) => t.rank!));
+    // Streak Breaker / Comeback Kid need the streaks as they stood *before* this game.
+    for (const team of teams) {
+      if (team.rank !== best) continue;
+      const opponentsOnFire = teams
+        .filter((t) => t !== team)
+        .some((t) => t.players.some((p) => {
+          const s = streakOf(results.get(p.id) ?? []);
+          return !!s && s.kind === "W" && s.n >= 5;
+        }));
+      for (const p of team.players) {
+        if (opponentsOnFire) breaks.set(p.id, (breaks.get(p.id) ?? 0) + 1);
+        const s = streakOf(results.get(p.id) ?? []);
+        if (s && s.kind === "L" && s.n >= 4) comeback.add(p.id);
+      }
+    }
     for (const team of teams) {
       const won = team.rank === best;
       for (const p of team.players) {
@@ -175,6 +197,7 @@ export function buildCrewInsights(
         list.push(won ? "W" : "L");
         results.set(p.id, list);
         mama.set(p.id, (mama.get(p.id) ?? 0) + p.mama);
+        maxMamaGame.set(p.id, Math.max(maxMamaGame.get(p.id) ?? 0, p.mama));
         const line = acc.lines.get(p.id) ?? { games: 0, wins: 0, mama: 0 };
         line.games++;
         if (won) line.wins++;
@@ -202,7 +225,7 @@ export function buildCrewInsights(
         });
         duos.set(key, d);
         const names = `${firstName(p1.name)} & ${firstName(p2.name)}`;
-        const nd = acc.duos.get(key) ?? { names, wins: 0, losses: 0 };
+        const nd = acc.duos.get(key) ?? { a: p1.id, b: p2.id, names, wins: 0, losses: 0 };
         if (won) nd.wins++;
         else nd.losses++;
         acc.duos.set(key, nd);
@@ -240,6 +263,13 @@ export function buildCrewInsights(
       streak: streakOf(res),
       bestWinStreak: bestRun(res),
       eloHistory: [...(history.get(id) ?? new Map()).entries()].map(([date, elo]) => ({ date, elo: Math.round(elo) })),
+      feats: {
+        maxMamaGame: maxMamaGame.get(id) ?? 0,
+        maxMamaNight: Math.max(0, ...[...nights.values()].map((n) => n.lines.get(id)?.mama ?? 0)),
+        comeback: comeback.has(id),
+        streakBreaks: breaks.get(id) ?? 0,
+        mvpNights: 0,
+      },
     };
   });
 
@@ -263,6 +293,7 @@ export function buildCrewInsights(
     streak: p.streak,
     bestWinStreak: p.bestWinStreak,
     eloHistory: p.eloHistory,
+    feats: p.feats,
   }));
 
   const duoList: DuoInsight[] = [...duos.entries()].map(([key, d]) => {
@@ -308,11 +339,17 @@ export function buildCrewInsights(
         movers,
         mamaKings: maxMama > 0 ? { names: lines.filter((l) => l.mama === maxMama).map((l) => firstName(l.name)), count: maxMama } : null,
         ironLiver: iron ? { name: iron.name, games: iron.games } : null,
-        duoOfNight: duo && duo.wins > 0 ? duo : null,
+        duoOfNight: duo && duo.wins > 0 ? { names: duo.names, wins: duo.wins, losses: duo.losses } : null,
+        duoLines: [...acc.duos.values()],
         lines: lines.sort((x, y) => y.wins - x.wins || y.games - x.games),
       };
     })
     .sort((x, y) => (x.night < y.night ? 1 : -1));
+
+  for (const s of sessions) {
+    const p = s.mvp && s.games >= 3 ? players.find((x) => x.userId === s.mvp!.userId) : undefined;
+    if (p) p.feats.mvpNights++;
+  }
 
   return {
     players,

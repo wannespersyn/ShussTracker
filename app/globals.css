@@ -44,6 +44,12 @@
 
   /* Green — wins, Elo up */
   --color-mint: #7fe0a8;
+  --color-muted: #9aa19c; /* secondary text, kickers, labels */
+  --color-soft: #c9cec9; /* tertiary-light text */
+  --color-chip: #2a3033; /* avatars, L tiles, tags */
+  --color-line-strong: rgba(255, 255, 255, 0.12); /* buttons, pills */
+  --color-surface-nav: #1d2224;
+  --color-nav-active: #ffb627; /* active tab, logo ring */
 
   --color-blue-bright: #4fd1ff;
   --color-purple-bright: #b48cff;
@@ -98,6 +104,12 @@
   --color-red-pale: #a52e23;
   --color-cream: #141614;
   --color-mint: #1e8a50;
+  --color-muted: #5e655f;
+  --color-soft: #3a403b;
+  --color-chip: #ece9e1;
+  --color-line-strong: rgba(0, 0, 0, 0.1);
+  --color-surface-nav: #ffffff;
+  --color-nav-active: #141614;
   --color-field-near: #e3dfd5;
   --color-field-mid: #ece9e1;
   --color-field-far: #f4f2ec;
@@ -125,6 +137,12 @@
     --color-red-pale: #a52e23;
     --color-cream: #141614;
     --color-mint: #1e8a50;
+    --color-muted: #5e655f;
+    --color-soft: #3a403b;
+    --color-chip: #ece9e1;
+    --color-line-strong: rgba(0, 0, 0, 0.1);
+    --color-surface-nav: #ffffff;
+    --color-nav-active: #141614;
     --color-field-near: #e3dfd5;
     --color-field-mid: #ece9e1;
     --color-field-far: #f4f2ec;
@@ -165,6 +183,12 @@
   --color-amber: var(--color-amber-fill);
 
   --color-mint: var(--color-mint);
+  --color-muted: var(--color-muted);
+  --color-soft: var(--color-soft);
+  --color-chip: var(--color-chip);
+  --color-line-strong: var(--color-line-strong);
+  --color-surface-nav: var(--color-surface-nav);
+  --color-nav-active: var(--color-nav-active);
 
   --color-blue-bright: var(--color-blue-bright);
   --color-purple-bright: var(--color-purple-bright);
@@ -227,6 +251,18 @@
    * tighter, ~0.06-0.1em. This default matches the mono kicker case. */
   --tracking-kicker: 0.14em;
 
+  /* Mockups use the default line box for every size (see body). */
+  --text-xs--line-height: normal;
+  --text-sm--line-height: normal;
+  --text-base--line-height: normal;
+  --text-lg--line-height: normal;
+  --text-xl--line-height: normal;
+  --text-2xl--line-height: normal;
+  --text-3xl--line-height: normal;
+  --text-4xl--line-height: normal;
+  --text-5xl--line-height: normal;
+  --text-6xl--line-height: normal;
+
   /* Motion */
   --animate-roll: roll 1.6s cubic-bezier(0.15, 0.85, 0.25, 1) forwards;
   --animate-fly: fly 0.5s cubic-bezier(0.2, 0.8, 0.3, 1) forwards;
@@ -246,7 +282,9 @@
     background: var(--color-surface);
     color: var(--color-cream);
     font-family: var(--font-body);
-    font-variant-numeric: tabular-nums;
+    /* The design is drawn with the browser's default line box, not
+     * Tailwind's 1.5 — keeps every row as tight as the mockups. */
+    line-height: normal;
   }
 
   a {
@@ -404,5 +442,104 @@
   }
   to {
     background-position: 32px 0;
+  }
+}
+
+/* Light mode keeps the hero scoreboard card dark (mockup "Home — light
+ * mode"), and the viewer's own leaderboard row becomes white with an amber
+ * outline. */
+.hero-invert {
+  /* dark values re-applied locally */
+}
+:root[data-theme="light"] .hero-invert {
+  --color-surface-deep: #141614;
+  --color-surface-raised: #1d2224;
+  --color-chip: #2a3033;
+  --color-cream: #f3f1ea;
+  --color-muted: #9aa19c;
+  --color-soft: #c9cec9;
+  --color-line: rgba(255, 255, 255, 0.08);
+  --color-gold: #ffb627;
+  --color-red: #ff6b5b;
+  --color-mint: #7fe0a8;
+  color: var(--color-cream);
+  border-color: transparent;
+}
+:root[data-theme="light"] .me-row {
+  background: #ffffff;
+  border: 2px solid var(--color-amber-fill);
+}
+@media (prefers-color-scheme: light) {
+  :root[data-theme="system"] .hero-invert {
+    --color-surface-deep: #141614;
+    --color-surface-raised: #1d2224;
+    --color-chip: #2a3033;
+    --color-cream: #f3f1ea;
+    --color-muted: #9aa19c;
+    --color-soft: #c9cec9;
+    --color-line: rgba(255, 255, 255, 0.08);
+    --color-gold: #ffb627;
+    --color-red: #ff6b5b;
+    --color-mint: #7fe0a8;
+    color: var(--color-cream);
+    border-color: transparent;
+  }
+  :root[data-theme="system"] .me-row {
+    background: #ffffff;
+    border: 2px solid var(--color-amber-fill);
+  }
+}
+
+/* "On fire" flair (mockup "Home — on a streak"): while the home screen
+ * shows a 3+ win streak, the whole dark theme heats up to orange — nav
+ * included — with a 3px orange frame around the viewport. */
+:root[data-theme="dark"]:has(.on-fire) {
+  --color-gold: #ff7a2f;
+  --color-gold-hover: #ffa16b;
+  --color-amber-fill: #ff7a2f;
+  --color-ink: #160a04;
+  --color-surface: #0e0b0a;
+  --color-surface-deep: #1c1411;
+  --color-surface-panel: #1c1411;
+  --color-surface-raised: #241a16;
+  --color-surface-nav: #241a16;
+  --color-chip: #2a2321;
+  --color-muted: #b9a79c;
+  --color-line: rgba(255, 122, 47, 0.27);
+  --color-line-strong: rgba(255, 122, 47, 0.4);
+  --color-nav-active: #ff7a2f;
+}
+:root[data-theme="dark"] body:has(.on-fire)::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  box-shadow: inset 0 0 0 3px #ff7a2f;
+  pointer-events: none;
+  z-index: 60;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"]:has(.on-fire) {
+    --color-gold: #ff7a2f;
+    --color-gold-hover: #ffa16b;
+    --color-amber-fill: #ff7a2f;
+    --color-ink: #160a04;
+    --color-surface: #0e0b0a;
+    --color-surface-deep: #1c1411;
+    --color-surface-panel: #1c1411;
+    --color-surface-raised: #241a16;
+    --color-surface-nav: #241a16;
+    --color-chip: #2a2321;
+    --color-muted: #b9a79c;
+    --color-line: rgba(255, 122, 47, 0.27);
+    --color-line-strong: rgba(255, 122, 47, 0.4);
+    --color-nav-active: #ff7a2f;
+  }
+  :root[data-theme="system"] body:has(.on-fire)::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    box-shadow: inset 0 0 0 3px #ff7a2f;
+    pointer-events: none;
+    z-index: 60;
   }
 }

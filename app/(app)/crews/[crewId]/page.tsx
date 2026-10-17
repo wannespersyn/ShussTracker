@@ -51,7 +51,7 @@ export default async function CrewPage({
   const unplayed = insights.players.filter((p) => p.games === 0);
   const activeTournaments = tournamentList.filter((x) => x.status !== "completed");
   const since = insights.firstGameAt
-    ? new Intl.DateTimeFormat(locale === "nl" ? "nl-BE" : "en-GB", { day: "numeric", month: "short" }).format(insights.firstGameAt)
+    ? new Intl.DateTimeFormat(locale === "nl" ? "nl-BE" : "en-GB", { day: "numeric", month: "short" }).format(insights.firstGameAt).replace("Sept", "Sep")
     : null;
 
   const minDuoGames = insights.duos.some((d) => d.games >= 5) ? 5 : 1;
@@ -67,9 +67,14 @@ export default async function CrewPage({
         <div className="flex justify-between items-center h-11 gap-2">
           <h1 className="font-display font-extrabold text-[34px] tracking-[0.02em] uppercase truncate">{group.name}</h1>
           <div className="flex items-center gap-2 shrink-0">
-            <IconButton href={`/log?crewId=${crewId}`} label={t.nav.log}>
-              <PlusIcon />
-            </IconButton>
+            {group.plan === "founding" && isPro(group) && (
+              <span className="flex items-center gap-1.5 h-[32px] px-2.5 rounded-sm border border-gold text-gold font-heading font-bold text-[13px] tracking-[0.1em] uppercase">
+                <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="currentColor" aria-hidden="true">
+                  <path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z" />
+                </svg>
+                {t.crew.founding}
+              </span>
+            )}
             {isOwner && (
               <IconButton href={`/crews/${crewId}/manage`} label={t.crew.manage}>
                 <SettingsIcon />
@@ -77,18 +82,19 @@ export default async function CrewPage({
             )}
           </div>
         </div>
-        {group.plan === "founding" && isPro(group) && (
-          <span className="self-start flex items-center gap-1.5 h-7 px-2.5 rounded-sm border border-gold text-gold font-heading font-bold text-[13px] tracking-[0.1em] uppercase">
-            <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="currentColor" aria-hidden="true">
-              <path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z" />
-            </svg>
-            {t.crew.founding}
+        <div className="flex justify-between items-center gap-2">
+          <span className="font-body text-[13px] text-muted truncate">
+            {format(t.crew.meta, { p: ranked.length, g: insights.totalGames })}
+            {since && ` · ${format(t.crew.since, { d: since })}`}
           </span>
-        )}
-        <span className="font-body text-[13px] text-cream/55">
-          {format(t.crew.meta, { p: ranked.length, g: insights.totalGames })}
-          {since && ` · ${format(t.crew.since, { d: since })}`}
-        </span>
+          <a
+            href="#guests"
+            className="shrink-0 h-9 px-3 rounded-pill border border-dashed border-cream/25 text-cream font-body font-semibold text-[13px] flex items-center gap-1.5"
+          >
+            <PlusIcon className="w-3.5 h-3.5" />
+            {t.crew.addGuest}
+          </a>
+        </div>
       </header>
 
       <TextTabs
@@ -107,7 +113,7 @@ export default async function CrewPage({
       />
 
       <section className="rounded-[18px] bg-surface-deep border border-line overflow-hidden" aria-label={t.crew.leaderboard}>
-        <div className={cn(GRID, "px-3.5 py-2.5 border-b border-line font-heading font-semibold text-[12px] tracking-[0.12em] uppercase text-cream/55")}>
+        <div className={cn(GRID, "px-3.5 py-2.5 border-b border-line font-heading font-semibold text-[12px] tracking-[0.12em] uppercase text-muted")}>
           <span>#</span>
           <span>{showDuos ? t.crew.colDuo : t.crew.colPlayer}</span>
           <span className="text-right">{t.crew.colWl}</span>
@@ -116,7 +122,7 @@ export default async function CrewPage({
         </div>
         {showDuos ? (
           duos.length === 0 ? (
-            <p className="px-3.5 py-4 font-body text-sm text-cream/55">{t.crew.noDuos}</p>
+            <p className="px-3.5 py-4 font-body text-sm text-muted">{t.crew.noDuos}</p>
           ) : (
             duos.map((d, i) => (
               <DuoRow key={d.key} duo={d} index={i} userId={userId} recordStreak={recordStreak} mostPlayed={mostPlayed} t={t} />
@@ -126,7 +132,7 @@ export default async function CrewPage({
           [...ranked, ...unplayed].map((p, i) => <PlayerRow key={p.userId} p={p} index={i} userId={userId} t={t} />)
         )}
       </section>
-      {showDuos && minDuoGames > 1 && <span className="font-body text-xs text-cream/45 -mt-1.5">{format(t.crew.minGames, { n: minDuoGames })}</span>}
+      {showDuos && minDuoGames > 1 && <span className="font-body text-xs text-muted -mt-1.5">{format(t.crew.minGames, { n: minDuoGames })}</span>}
 
       <Link
         href={activeTournaments[0] ? `/tournaments/${activeTournaments[0].id}` : `/tournaments/new?crewId=${crewId}`}
@@ -137,19 +143,19 @@ export default async function CrewPage({
         </span>
         <span className="flex-1 min-w-0 flex flex-col">
           <span className="font-body font-semibold text-[15px] truncate">{activeTournaments[0]?.name ?? t.crew.tournament}</span>
-          <span className="font-body text-xs text-cream/55">{t.crew.tournamentSub}</span>
+          <span className="font-body text-xs text-muted">{t.crew.tournamentSub}</span>
         </span>
-        <ChevronRightIcon className="w-4 h-4 text-cream/55" />
+        <ChevronRightIcon className="w-4 h-4 text-muted" />
       </Link>
 
-      <section className="flex flex-col gap-2" aria-label={t.common.guest}>
+      <section id="guests" className="flex flex-col gap-2 scroll-mt-4" aria-label={t.common.guest}>
         <Kicker>{t.crew.addGuest}</Kicker>
         {guests.map((g) => (
           <div key={g.id} className="flex items-center gap-3 rounded-md bg-surface-deep border border-line px-3.5 py-2.5">
             <div className="flex-1 min-w-0">
               <div className="font-body font-semibold text-[15px] truncate">{g.name}</div>
               {g.claimToken && (
-                <div className="font-body text-xs text-cream/55">
+                <div className="font-body text-xs text-muted">
                   Claim code <span className="font-heading font-bold tracking-[0.12em] text-gold">{g.claimToken}</span>
                 </div>
               )}
@@ -180,7 +186,7 @@ export default async function CrewPage({
             required
             placeholder="Guest's name"
             aria-label="Guest's name"
-            className="flex-1 h-11 rounded-md bg-surface-panel border border-line px-3.5 font-body text-sm text-cream placeholder:text-cream/40 outline-none focus:border-gold/60"
+            className="flex-1 h-11 rounded-md bg-surface-panel border border-line px-3.5 font-body text-sm text-cream placeholder:text-muted outline-none focus:border-gold/60"
           />
           <button type="submit" className="h-11 px-4 rounded-md bg-amber font-heading font-bold text-sm uppercase text-ink">
             {t.crew.addGuest}
@@ -194,12 +200,12 @@ export default async function CrewPage({
             Season recap
           </Link>
         )}
-        <Link href="/claim" className="font-heading font-bold text-xs tracking-[0.1em] uppercase text-cream/55">
+        <Link href="/claim" className="font-heading font-bold text-xs tracking-[0.1em] uppercase text-muted">
           Claim a guest
         </Link>
         {!isOwner && (
           <ConfirmForm action={leaveCrew.bind(null, crewId)} confirmMessage={`Leave ${group.name}?`}>
-            <button type="submit" className="font-heading font-bold text-xs tracking-[0.1em] uppercase text-cream/40">
+            <button type="submit" className="font-heading font-bold text-xs tracking-[0.1em] uppercase text-muted">
               Leave crew
             </button>
           </ConfirmForm>
@@ -219,11 +225,11 @@ function PlayerRow({ p, index, userId, t }: Readonly<{ p: PlayerInsight; index: 
       href={`/players/${p.userId}`}
       className={cn(
         GRID,
-        "min-h-12 px-3.5 py-1 border-b border-line last:border-b-0 text-cream",
+        "min-h-12 px-3.5 py-1 border-b border-cream/5 text-cream",
         isMe && "bg-surface-raised shadow-[inset_3px_0_0_var(--color-gold)]",
       )}
     >
-      <span className={cn("font-display font-extrabold text-lg", index === 0 && played ? "text-gold" : "text-cream/55")}>
+      <span className={cn("font-display font-extrabold text-lg", index === 0 && played ? "text-gold" : "text-muted")}>
         {played ? index + 1 : "–"}
       </span>
       <span className="flex flex-col min-w-0">
@@ -236,7 +242,7 @@ function PlayerRow({ p, index, userId, t }: Readonly<{ p: PlayerInsight; index: 
         </span>
       </span>
       <span className="text-right font-display font-semibold text-[17px] tabular-nums">{played ? `${p.wins}–${p.losses}` : "—"}</span>
-      <span className="text-right font-display font-semibold text-[17px] text-cream/75">{played ? `${p.winPct}%` : ""}</span>
+      <span className="text-right font-display font-semibold text-[17px] text-soft">{played ? `${p.winPct}%` : ""}</span>
       <span className="text-right font-display font-extrabold text-[19px] tabular-nums">{p.elo}</span>
     </Link>
   );
@@ -258,11 +264,11 @@ function DuoRow({
       href={href}
       className={cn(
         GRID,
-        "min-h-12 px-3.5 py-1 border-b border-line last:border-b-0 text-cream",
+        "min-h-12 px-3.5 py-1 border-b border-cream/5 text-cream",
         mine && "bg-surface-raised shadow-[inset_3px_0_0_var(--color-gold)]",
       )}
     >
-      <span className={cn("font-display font-extrabold text-lg", index === 0 ? "text-gold" : "text-cream/55")}>{index + 1}</span>
+      <span className={cn("font-display font-extrabold text-lg", index === 0 ? "text-gold" : "text-muted")}>{index + 1}</span>
       <span className="flex flex-col min-w-0">
         <span className="font-body font-semibold text-[15px] truncate">
           {firstName(duo.a.name)} & {firstName(duo.b.name)}
@@ -275,7 +281,7 @@ function DuoRow({
       <span className="text-right font-display font-semibold text-[17px] tabular-nums">
         {duo.wins}–{duo.losses}
       </span>
-      <span className="text-right font-display font-semibold text-[17px] text-cream/75">{duo.winPct}%</span>
+      <span className="text-right font-display font-semibold text-[17px] text-soft">{duo.winPct}%</span>
       <span className="text-right font-display font-extrabold text-[19px] tabular-nums">{duo.duoElo}</span>
     </Link>
   );

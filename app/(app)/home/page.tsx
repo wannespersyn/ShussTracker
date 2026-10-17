@@ -6,10 +6,26 @@ import { format } from "@/lib/i18n";
 import { firstName } from "@/lib/insights";
 import { cn } from "@/lib/cn";
 import { LinkButton } from "@/components/ui";
-import { FlameIcon, PlusIcon, SettingsIcon, ChevronRightIcon } from "@/components/ui/icons";
-import { Avatar, FormStrip, IconButton, Kicker, Panel, Screen, SectionHead, StatGrid } from "@/components/v2";
+import {
+  FlameIcon,
+  PlusIcon,
+  SettingsIcon,
+  ChevronRightIcon,
+} from "@/components/ui/icons";
+import {
+  Avatar,
+  FormStrip,
+  IconButton,
+  Kicker,
+  Panel,
+  Screen,
+  SectionHead,
+  StatGrid,
+} from "@/components/v2";
 
-export default async function HomePage({ searchParams }: Readonly<{ searchParams: Promise<{ crew?: string }> }>) {
+export default async function HomePage({
+  searchParams,
+}: Readonly<{ searchParams: Promise<{ crew?: string }> }>) {
   const session = await requireSession();
   const userId = session.user.id;
   const [{ crew: crewParam }, crews, t, locale, flair] = await Promise.all([
@@ -25,17 +41,27 @@ export default async function HomePage({ searchParams }: Readonly<{ searchParams
     <header className="flex items-center justify-between h-11">
       <div className="flex items-center gap-2.5">
         <svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true">
-          <circle cx="15" cy="15" r="13" fill="none" stroke="var(--color-gold)" strokeWidth="2.5" strokeDasharray="3 2.2" />
-          <circle cx="15" cy="15" r="8" fill="var(--color-gold)" />
+          <circle
+            cx="15"
+            cy="15"
+            r="13"
+            fill="none"
+            stroke="var(--color-nav-active)"
+            strokeWidth="2.5"
+            strokeDasharray="3 2.2"
+          />
+          <circle cx="15" cy="15" r="8" fill="var(--color-amber-fill)" />
         </svg>
-        <span className="font-heading font-extrabold text-[22px] tracking-[0.06em]">SHUSSAPP</span>
+        <span className="font-heading font-extrabold text-[22px] tracking-[0.06em]">
+          SHUSSAPP
+        </span>
       </div>
       <div className="flex items-center gap-2">
         {crew && (
           <Link
             href="/crews"
             aria-label={t.home.switchCrew}
-            className="h-9 px-3 rounded-pill bg-surface-panel border border-line text-cream font-body font-semibold text-[13px] flex items-center gap-1.5 max-w-40"
+            className="h-9 px-3 rounded-pill bg-surface-panel border border-line-strong text-cream font-body font-semibold text-[13px] flex items-center gap-1.5 max-w-40"
           >
             <span className="truncate">{crew.name}</span>
             <ChevronRightIcon className="w-3.5 h-3.5 rotate-90 shrink-0" />
@@ -53,8 +79,12 @@ export default async function HomePage({ searchParams }: Readonly<{ searchParams
       <Screen>
         {header}
         <Panel className="text-center py-8 flex flex-col items-center gap-3">
-          <div className="font-display font-extrabold text-3xl uppercase">{t.home.noCrewTitle}</div>
-          <p className="font-body text-sm text-cream/60 max-w-70">{t.home.noCrewBody}</p>
+          <div className="font-display font-extrabold text-3xl uppercase">
+            {t.home.noCrewTitle}
+          </div>
+          <p className="font-body text-sm text-muted max-w-70">
+            {t.home.noCrewBody}
+          </p>
           <LinkButton href="/crews">{t.home.findCrew}</LinkButton>
         </Panel>
       </Screen>
@@ -69,6 +99,11 @@ export default async function HomePage({ searchParams }: Readonly<{ searchParams
   const lastSession = insights.sessions[0];
   const myLine = lastSession?.lines.find((l) => l.userId === userId);
 
+  const onFire = flair && me?.streak?.kind === "W" && me.streak.n >= 3;
+  const chasers = ranked
+    .filter((p) => p.userId !== userId)
+    .slice(0, 2)
+    .map((p) => firstName(p.name));
   const highlight =
     me?.streak && me.streak.kind === "W" && me.streak.n >= 3
       ? format(t.home.winStreak, { n: me.streak.n })
@@ -79,24 +114,41 @@ export default async function HomePage({ searchParams }: Readonly<{ searchParams
           : null;
 
   const nightLabel = (night: string) =>
-    new Intl.DateTimeFormat(locale === "nl" ? "nl-BE" : "en-GB", { day: "numeric", month: "short", timeZone: "UTC" })
+    new Intl.DateTimeFormat(locale === "nl" ? "nl-BE" : "en-GB", {
+      day: "numeric",
+      month: "short",
+      timeZone: "UTC",
+    })
       .format(new Date(`${night}T12:00:00Z`))
       .toUpperCase()
       .split(" ");
 
   return (
-    <Screen>
+    <Screen className={onFire ? "on-fire" : undefined}>
       {header}
 
-      {flair && me?.streak?.kind === "W" && me.streak.n >= 3 && (
-        <section className="rounded-[22px] bg-[#ff7a2f] text-[#160a04] p-4.5 flex items-center gap-3.5" aria-label={t.home.onFire}>
-          <svg viewBox="0 0 24 24" className="w-14 h-14 shrink-0 motion-safe:animate-flicker" fill="currentColor" aria-hidden="true">
+      {onFire && me?.streak && (
+        <section
+          className="rounded-[22px] bg-[#ff7a2f] text-[#160a04] p-4.5 flex items-center gap-3.5"
+          aria-label={t.home.onFire}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            className="w-16 h-16 shrink-0 motion-safe:animate-flicker"
+            fill="currentColor"
+            aria-hidden="true"
+          >
             <path d="M12 2c1.2 4.4 5.5 6.4 5.5 12a5.5 5.5 0 0 1-11 0c0-3.4 2.2-4.6 2.2-7.6 1.1 1.1 2.2 2.2 3.3 2.2 0-2.2-1.1-4.4 0-6.6z" />
           </svg>
           <span className="flex flex-col">
-            <span className="font-display font-extrabold text-[42px] leading-[0.95] uppercase">{t.home.onFire}</span>
-            <span className="font-heading font-bold text-[17px] tracking-[0.03em] uppercase">
-              {format(t.home.onFireSub, { n: me.streak.n, b: me.bestWinStreak })}
+            <span className="font-display font-extrabold text-[46px] leading-[0.95]! uppercase">
+              {t.home.onFire}
+            </span>
+            <span className="font-heading font-bold text-[19px] tracking-[0.04em] uppercase">
+              {format(t.home.onFireSub, {
+                n: me.streak.n,
+                b: me.bestWinStreak,
+              })}
             </span>
           </span>
         </section>
@@ -104,47 +156,76 @@ export default async function HomePage({ searchParams }: Readonly<{ searchParams
 
       {!me || me.games === 0 ? (
         <Panel className="text-center py-8 flex flex-col items-center gap-3">
-          <div className="font-display font-extrabold text-3xl uppercase">{t.home.noGamesTitle}</div>
-          <p className="font-body text-sm text-cream/60 max-w-70">{t.home.noGamesBody}</p>
+          <div className="font-display font-extrabold text-3xl uppercase">
+            {t.home.noGamesTitle}
+          </div>
+          <p className="font-body text-sm text-muted max-w-70">
+            {t.home.noGamesBody}
+          </p>
         </Panel>
       ) : (
-        <Panel className="flex flex-col gap-3.5">
+        <Panel className="hero-invert flex flex-col gap-3.5">
           <div className="flex justify-between items-start">
             <div className="flex flex-col gap-0.5">
-              <Kicker>{t.home.crewRank}</Kicker>
+              <Kicker>
+                {onFire
+                  ? t.home.crewRankShort
+                  : format(t.home.crewRank, { y: currentYear() })}
+              </Kicker>
               <div className="flex items-baseline gap-2.5">
-                <span className="font-display font-extrabold text-[64px] leading-none text-gold">#{me.rank}</span>
-                <span className="font-heading font-semibold text-[15px] text-cream/55">
-                  {format(t.home.of, { n: ranked.length })}
-                  {me.move !== 0 && (
-                    <span className={cn("ml-1.5", me.move > 0 ? "text-mint" : "text-red")}>
-                      {me.move > 0 ? "▲" : "▼"}
-                      {Math.abs(me.move)}
-                    </span>
+                <span className={cn("font-display font-extrabold leading-none text-gold", onFire ? "text-[60px]" : "text-[64px]")}>
+                  #{me.rank}
+                </span>
+                <span
+                  className={cn(
+                    "font-heading font-semibold text-[15px] text-muted",
+                    onFire && "hidden",
                   )}
+                >
+                  {format(t.home.of, { n: ranked.length })}
+                  {me.move !== 0 &&
+                    ` · ${me.move > 0 ? "▲" : "▼"}${Math.abs(me.move)}`}
                 </span>
               </div>
             </div>
             <div className="flex flex-col items-end gap-0.5">
               <Kicker>{t.home.elo}</Kicker>
-              <span className="font-display font-bold text-[34px] leading-none">{me.elo}</span>
+              <span className="font-display font-bold text-[34px] leading-none tabular-nums">
+                {me.elo}
+              </span>
               {me.eloWeek !== 0 && (
-                <span className={cn("font-heading font-semibold text-[13px]", me.eloWeek > 0 ? "text-mint" : "text-red")}>
-                  {format(t.home.thisWeek, { d: `${me.eloWeek > 0 ? "▲" : "▼"} ${Math.abs(me.eloWeek)}` })}
+                <span
+                  className={cn(
+                    "font-heading font-semibold text-[13px]",
+                    me.eloWeek > 0 ? "text-mint" : "text-red",
+                  )}
+                >
+                  {format(t.home.thisWeek, {
+                    d: `${me.eloWeek > 0 ? "▲" : "▼"} ${Math.abs(me.eloWeek)}`,
+                  })}
                 </span>
               )}
             </div>
           </div>
-          <StatGrid
-            items={[
-              { label: t.home.winPct, value: `${me.winPct}%` },
-              { label: t.home.games, value: me.games },
-              { label: t.home.mama, value: me.mama, tone: "red" },
-            ]}
-          />
+          {!onFire && (
+            <StatGrid
+              items={[
+                { label: t.home.winPct, value: `${me.winPct}%` },
+                { label: t.home.games, value: me.games },
+                { label: t.home.mama, value: me.mama, tone: "red" },
+              ]}
+            />
+          )}
           <div className="flex flex-col gap-1.5">
-            <div className="flex justify-between items-center">
-              <span className="font-body font-semibold text-[11px] tracking-[0.08em] uppercase text-cream/55">{t.home.last10}</span>
+            <div
+              className={cn(
+                "flex justify-between items-center",
+                onFire && "hidden",
+              )}
+            >
+              <span className="font-body font-semibold text-[11px] tracking-[0.08em] uppercase text-muted">
+                {t.home.last10}
+              </span>
               {highlight && (
                 <span className="flex items-center gap-1 font-heading font-bold text-sm uppercase text-gold">
                   <FlameIcon className="w-3.5 h-3.5" />
@@ -152,7 +233,10 @@ export default async function HomePage({ searchParams }: Readonly<{ searchParams
                 </span>
               )}
             </div>
-            <FormStrip form={me.form} />
+            <FormStrip
+              form={me.form}
+              hot={onFire && me.streak ? me.streak.n : 0}
+            />
           </div>
         </Panel>
       )}
@@ -161,38 +245,91 @@ export default async function HomePage({ searchParams }: Readonly<{ searchParams
         href={`/log?crewId=${crew.id}`}
         className="h-14 rounded-lg bg-amber text-ink flex items-center justify-center gap-2.5 font-heading font-extrabold text-xl tracking-[0.06em] uppercase"
       >
-        <PlusIcon className="w-5 h-5" />
-        {t.home.logGame}
+        {onFire ? (
+          t.home.keepGoing
+        ) : (
+          <>
+            <PlusIcon className="w-5 h-5" />
+            {t.home.logGame}
+          </>
+        )}
       </Link>
 
-      {lastSession && (
+      {onFire && chasers.length > 0 && (
+        <div className="flex gap-2.5 items-center px-3.5 py-3 rounded-[14px] bg-surface-deep border border-dashed border-gold/40 font-body text-[13px] leading-[1.35]!">
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="var(--color-gold)"
+            strokeWidth="2"
+            className="shrink-0"
+            aria-hidden="true"
+          >
+            <path d="M12 9v4M12 17h.01M10.3 3.9L2 18a2 2 0 0 0 1.7 3h16.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
+          </svg>
+          <span>
+            {format(t.home.chasers, {
+              names: chasers.join(chasers.length > 1 ? t.home.and : ""),
+            })}{" "}
+            <strong>Streak Breaker</strong>.
+          </span>
+        </div>
+      )}
+
+      {lastSession && !onFire && (
         <Link
           href={`/crews/${crew.id}/sessions`}
           className="flex items-center gap-3 px-3.5 py-3 rounded-[16px] bg-surface-deep border border-line text-cream"
         >
           <span className="w-11 h-11 shrink-0 rounded-md bg-surface-raised flex flex-col items-center justify-center leading-none">
-            <span className="font-body font-bold text-[10px] text-cream/55">{nightLabel(lastSession.night)[1]}</span>
-            <span className="font-display font-extrabold text-xl">{nightLabel(lastSession.night)[0]}</span>
+            <span className="font-body font-bold text-[10px] text-muted">
+              {nightLabel(lastSession.night)[1]}
+            </span>
+            <span className="font-display font-extrabold text-xl">
+              {nightLabel(lastSession.night)[0]}
+            </span>
           </span>
           <span className="flex-1 min-w-0 flex flex-col">
-            <Kicker>{format(t.home.lastSession, { n: lastSession.games })}</Kicker>
+            <Kicker>
+              {format(t.home.lastSession, { n: lastSession.games })}
+            </Kicker>
             <span className="font-body font-semibold text-[15px] truncate">
               {lastSession.mvp?.userId === userId
-                ? format(t.home.youMvp, { w: lastSession.mvp.wins })
+                ? myLine && myLine.mama > 0
+                  ? format(t.home.youMvpMama, {
+                      w: lastSession.mvp.wins,
+                      m: myLine.mama,
+                    })
+                  : format(t.home.youMvp, { w: lastSession.mvp.wins })
                 : myLine
-                  ? format(t.home.youPlayed, { w: myLine.wins, g: myLine.games })
+                  ? format(t.home.youPlayed, {
+                      w: myLine.wins,
+                      g: myLine.games,
+                    })
                   : lastSession.mvp
-                    ? format(t.home.mvpWas, { name: firstName(lastSession.mvp.name), w: lastSession.mvp.wins })
+                    ? format(t.home.mvpWas, {
+                        name: firstName(lastSession.mvp.name),
+                        w: lastSession.mvp.wins,
+                      })
                     : ""}
             </span>
           </span>
-          <ChevronRightIcon className="w-4 h-4 text-cream/55" />
+          <ChevronRightIcon className="w-4 h-4 text-muted" />
         </Link>
       )}
 
-      {top3.length > 0 && (
-        <section className="flex flex-col gap-1.5" aria-label={format(t.home.top3, { crew: crew.name })}>
-          <SectionHead title={format(t.home.top3, { crew: crew.name })} href={`/crews/${crew.id}`} linkLabel={t.common.seeAll} />
+      {top3.length > 0 && !onFire && (
+        <section
+          className="flex flex-col gap-1.5"
+          aria-label={format(t.home.top3, { crew: crew.name })}
+        >
+          <SectionHead
+            title={format(t.home.top3, { crew: crew.name })}
+            href={`/crews/${crew.id}`}
+            linkLabel={t.common.seeAll}
+          />
           {top3.map((p) => {
             const isMe = p.userId === userId;
             return (
@@ -201,16 +338,22 @@ export default async function HomePage({ searchParams }: Readonly<{ searchParams
                 href={`/players/${p.userId}`}
                 className={cn(
                   "flex items-center gap-3 h-12 px-3 rounded-md border text-cream",
-                  isMe ? "bg-surface-raised border-line shadow-[inset_3px_0_0_var(--color-gold)]" : "bg-surface-deep border-line",
+                  isMe
+                    ? "me-row bg-surface-raised border-gold/35"
+                    : "bg-surface-deep border-cream/6",
                 )}
               >
-                <span className={cn("w-5.5 font-display font-extrabold text-xl", p.rank === 1 ? "text-gold" : "text-cream/55")}>{p.rank}</span>
+                <span className="w-5.5 font-display font-extrabold text-xl text-muted">
+                  {p.rank}
+                </span>
                 <Avatar name={p.name} />
                 <span className="flex-1 font-body font-semibold text-[15px] truncate">
-                  {p.name}
-                  {isMe && <span className="text-cream/55 font-medium"> ({t.common.you.toLowerCase()})</span>}
+                  {firstName(p.name)}
+                  {isMe && ` (${t.common.you.toLowerCase()})`}
                 </span>
-                <span className="font-display font-bold text-xl tabular-nums">{p.elo}</span>
+                <span className="font-display font-bold text-xl tabular-nums">
+                  {p.elo}
+                </span>
               </Link>
             );
           })}
@@ -218,4 +361,9 @@ export default async function HomePage({ searchParams }: Readonly<{ searchParams
       )}
     </Screen>
   );
+}
+
+/** Server-rendered per request, so "now" is fine here. */
+function currentYear() {
+  return new Date().getFullYear();
 }

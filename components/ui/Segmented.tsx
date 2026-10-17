@@ -21,7 +21,7 @@ export function SegmentedForm({
     <form
       action={action}
       aria-label={ariaLabel}
-      className="grid gap-1 p-1 rounded-lg bg-surface-panel border border-line"
+      className="grid gap-1 p-1 rounded-[14px] bg-surface-panel border border-cream/10"
       style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}
     >
       {options.map((o) => {
@@ -34,8 +34,8 @@ export function SegmentedForm({
             value={o.value}
             aria-pressed={active}
             className={cn(
-              "h-10 rounded-sm font-heading font-bold text-[15px] tracking-[0.06em] uppercase transition-colors",
-              active ? "bg-amber text-ink" : "text-cream/60",
+              "h-10 rounded-[10px] font-heading font-bold text-[15px] tracking-[0.06em] uppercase transition-colors",
+              active ? "bg-amber text-ink" : "text-muted",
             )}
           >
             {o.label}

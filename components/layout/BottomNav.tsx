@@ -28,7 +28,7 @@ function NavItem({
       aria-current={active ? "page" : undefined}
       className={cn(
         "h-16 flex flex-col items-center justify-center gap-0.75 font-body font-bold text-[10px] tracking-[0.06em] uppercase",
-        active ? "text-gold" : "text-cream/55",
+        active ? "text-nav-active font-extrabold" : "text-muted",
       )}
     >
       <span className="w-5.5 h-5.5 [&>svg]:w-full [&>svg]:h-full">{icon}</span>
@@ -47,7 +47,17 @@ export function BottomNav({ currentUserId }: Readonly<{ currentUserId: string }>
   if (
     pathname.startsWith("/log") ||
     /\/tournaments\/[^/]+\/match\//.test(pathname) ||
-    pathname.endsWith("/recap")
+    pathname.endsWith("/recap") ||
+    pathname.startsWith("/game/") ||
+    pathname.endsWith("/sessions") ||
+    pathname === "/settings" ||
+    pathname === "/feedback" ||
+    pathname.endsWith("/manage") ||
+    pathname.startsWith("/chwazi") ||
+    pathname === "/stats" ||
+    pathname === "/crews/join" ||
+    pathname.includes("/vs/") ||
+    pathname.endsWith("/achievements")
   ) {
     return null;
   }
@@ -58,9 +68,9 @@ export function BottomNav({ currentUserId }: Readonly<{ currentUserId: string }>
     <nav
       aria-label="Main"
       className="fixed inset-x-0 bottom-0 z-40 flex justify-center px-4"
-      style={{ paddingBottom: "calc(1rem + env(safe-area-inset-bottom))" }}
+      style={{ paddingBottom: "calc(22px + env(safe-area-inset-bottom))" }}
     >
-      <div className="w-full max-w-md h-16 rounded-[22px] bg-surface-panel/95 backdrop-blur border border-line grid grid-cols-5 items-center shadow-elevation-md">
+      <div className="w-full max-w-md h-[66px] rounded-[22px] bg-surface-nav/95 backdrop-blur border border-line-strong grid grid-cols-5 items-center shadow-elevation-md">
         <NavItem href="/home" label={t.nav.home} active={pathname === "/home"} icon={<HomeIcon />} />
         <NavItem
           href="/crews"

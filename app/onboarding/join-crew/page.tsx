@@ -16,7 +16,7 @@ export default function JoinCrewOnboardingPage() {
       <BackButton href="/onboarding" className="relative" />
 
       <div className="relative flex flex-col items-center gap-3 mt-8 text-center">
-        <div className="font-heading font-semibold text-[19px] tracking-[2.4px] uppercase text-cream/62">
+        <div className="font-heading font-semibold text-[19px] tracking-[2.4px] uppercase text-soft">
           Got a crew code?
         </div>
         <div className="font-display font-extrabold text-[44px] leading-[0.95] text-cream uppercase">Punch it in</div>

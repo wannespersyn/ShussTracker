@@ -52,6 +52,7 @@ export default async function LogGamePage({
         lockedTeams={lockedTeams}
         backHref={`/game/${rematch}`}
         trackShotZones={rematchGroup?.trackShotZones ?? false}
+        crewName={rematchGroup?.name}
       />
     );
   }
@@ -68,7 +69,7 @@ export default async function LogGamePage({
     return (
       <div className="min-h-screen bg-surface flex flex-col items-center justify-center gap-4 px-8 text-center">
         <div className="font-display text-3xl text-cream">No crew yet</div>
-        <div className="font-body text-body text-cream/55 max-w-70">
+        <div className="font-body text-body text-muted max-w-70">
           Logging a game needs real crewmates on the mat. Join or start a crew first, then come back and flick.
         </div>
       </div>
@@ -88,7 +89,7 @@ export default async function LogGamePage({
         <header className="flex items-center gap-3.5">
           <BackButton href="/home" />
           <div>
-            <div className="font-heading font-bold text-label-kicker tracking-kicker uppercase text-cream/45">
+            <div className="font-heading font-bold text-label-kicker tracking-kicker uppercase text-muted">
               New game
             </div>
             <div className="font-display text-display-sm text-cream mt-1">Which crew?</div>
@@ -101,7 +102,7 @@ export default async function LogGamePage({
                 <Card className="flex items-center justify-between">
                   <div>
                     <div className="font-display text-xl text-cream">{m.group.name}</div>
-                    <div className="font-body text-body-sm text-cream/50">
+                    <div className="font-body text-body-sm text-muted">
                       {m.group.members.length} {m.group.members.length === 1 ? "member" : "members"}
                     </div>
                   </div>
@@ -132,6 +133,7 @@ export default async function LogGamePage({
 
   const insights = await getCrewInsights(selected.groupId);
   const ratings = Object.fromEntries(insights.players.map((p) => [p.userId, p.elo]));
+  const duoRecords = Object.fromEntries(insights.duos.map((d) => [[d.a.id, d.b.id].sort().join("|"), `${d.wins}–${d.losses}`]));
   const activity = new Map(insights.players.map((p) => [p.userId, p.games]));
   roster.sort((a, b) => (activity.get(b.id) ?? 0) - (activity.get(a.id) ?? 0));
 
@@ -143,6 +145,8 @@ export default async function LogGamePage({
       backHref={crewPickerHref}
       trackShotZones={group?.trackShotZones ?? false}
       ratings={ratings}
+      duoRecords={duoRecords}
+      crewName={group?.name}
     />
   );
 }

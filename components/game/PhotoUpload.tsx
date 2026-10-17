@@ -54,7 +54,7 @@ export function PhotoUpload({
         onClick={() => input.current?.click()}
         disabled={pending}
         className={cn(
-          "h-9 px-3 rounded-pill bg-surface/85 backdrop-blur border border-line text-cream font-body font-semibold text-[13px] flex items-center gap-1.5",
+          "h-9 px-3 rounded-pill bg-surface/85 backdrop-blur text-cream font-body font-semibold text-[13px] flex items-center gap-1.5",
           pending && "opacity-60",
         )}
       >

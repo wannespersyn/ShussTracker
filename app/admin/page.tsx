@@ -87,7 +87,7 @@ export default async function AdminPage({ searchParams }: Readonly<{ searchParam
                   {c.name}
                   {c.plan !== "free" && <span className="ml-1.5 font-heading font-bold text-[11px] uppercase text-gold">{c.plan}</span>}
                 </span>
-                <span className="font-body text-xs text-cream/55">
+                <span className="font-body text-xs text-muted">
                   {c.members} members · {c.games} games · last {c.last ? fmt.format(new Date(c.last)) : "—"}
                 </span>
               </span>
@@ -109,21 +109,21 @@ export default async function AdminPage({ searchParams }: Readonly<{ searchParam
               href={s ? `/admin?status=${s}` : "/admin"}
               className={cn(
                 "h-8 px-3 rounded-pill flex items-center font-heading font-bold text-[13px] uppercase",
-                statusFilter === s ? "bg-amber text-ink" : "bg-surface-panel border border-line text-cream/70",
+                statusFilter === s ? "bg-amber text-ink" : "bg-surface-panel border border-line text-soft",
               )}
             >
               {(s ?? "all").replace("_", " ")}
             </Link>
           ))}
         </nav>
-        {shown.length === 0 && <p className="font-body text-sm text-cream/55">Nothing here.</p>}
+        {shown.length === 0 && <p className="font-body text-sm text-muted">Nothing here.</p>}
         {shown.map((f) => (
           <Panel key={f.id} className="flex flex-col gap-2">
-            <div className="flex items-center gap-2 font-body text-xs text-cream/55">
+            <div className="flex items-center gap-2 font-body text-xs text-muted">
               <span
                 className={cn(
                   "px-2 py-0.5 rounded-sm font-heading font-bold text-[11px] uppercase",
-                  f.type === "bug" ? "bg-red/15 text-red" : f.type === "idea" ? "bg-amber/15 text-gold" : "bg-surface-raised text-cream/70",
+                  f.type === "bug" ? "bg-red/15 text-red" : f.type === "idea" ? "bg-amber/15 text-gold" : "bg-surface-raised text-soft",
                 )}
               >
                 {f.type}

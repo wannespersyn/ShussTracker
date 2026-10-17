@@ -5,7 +5,8 @@ import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { requireSession, requireSharesCrew } from "@/lib/db/authz";
 import { getPlayerOpponents } from "@/lib/db/players";
-import { getAchievements } from "@/lib/db/achievements";
+import { getPlayerAchievements } from "@/lib/db/player-achievements";
+import { ACHIEVEMENT_ICON_PATH } from "@/lib/achievements-v2";
 import { getNemesis } from "@/lib/db/h2h";
 import { getCrewInsights, getUserCrews } from "@/lib/db/crew-insights";
 import { getLocale, getT } from "@/lib/i18n/server";
@@ -33,7 +34,7 @@ export default async function PlayerProfilePage({ params }: Readonly<{ params: P
     getUserCrews(viewerId),
     getUserCrews(viewedId),
     getPlayerOpponents(viewedId),
-    getAchievements(viewedId),
+    getPlayerAchievements(viewedId, new Date()),
     getNemesis(viewedId),
     getT(),
     getLocale(),
@@ -45,23 +46,25 @@ export default async function PlayerProfilePage({ params }: Readonly<{ params: P
   const me = insights?.players.find((p) => p.userId === viewedId);
   const rankedCount = insights?.players.filter((p) => p.games > 0).length ?? 0;
   const name = player.name ?? "Player";
-  const earned = achievements.filter((a) => a.earned);
+  const earned = achievements.filter((a) => a.got);
+  const nextUp = achievements.filter((a) => !a.got).sort((a, b) => b.have / b.need - a.have / a.need)[0];
+  const strip = [...[...earned].sort((a, b) => b.need - a.need).slice(0, nextUp ? 3 : 4), ...(nextUp ? [nextUp] : [])];
   const history = me?.eloHistory ?? [];
   const eloDelta = history.length > 1 ? history[history.length - 1].elo - 1000 : 0;
   const sinceLabel = history[0]
     ? new Intl.DateTimeFormat(locale === "nl" ? "nl-BE" : "en-GB", { day: "numeric", month: "short", timeZone: "UTC" }).format(
         new Date(`${history[0].date}T12:00:00Z`),
-      )
+      ).replace("Sept", "Sep")
     : "";
 
   return (
     <Screen>
       <header className="flex items-center gap-3.5 pt-1">
-        <Avatar name={name} size={64} highlight />
+        <Avatar name={name} size={70} fontSize={24} className="border-[3px] border-gold font-display! font-extrabold!" />
         <div className="flex-1 min-w-0 flex flex-col">
           <h1 className="font-display font-extrabold text-[30px] leading-[1.05] uppercase truncate">{name}</h1>
           {me && shared && me.games > 0 && (
-            <span className="font-body text-[13px] text-cream/55 truncate">
+            <span className="font-body text-[13px] text-muted truncate">
               {format(t.profile.rankLine, { crew: shared.name, r: me.rank, n: rankedCount, e: me.elo })}
             </span>
           )}
@@ -77,15 +80,16 @@ export default async function PlayerProfilePage({ params }: Readonly<{ params: P
         <>
           <StatGrid
             className="rounded-[16px] border border-line"
+            flat
             items={[
               { label: t.home.games, value: me.games },
               { label: "W–L", value: `${me.wins}–${me.losses}` },
               { label: t.home.winPct, value: `${me.winPct}%`, tone: "gold" },
-              { label: t.home.mama, value: me.mama, tone: "red" },
+              { label: "Mama", value: me.mama, tone: "red" },
             ]}
           />
           {history.length > 1 && (
-            <Panel className="flex flex-col gap-2">
+            <Panel className="flex flex-col gap-2 px-4 py-3.5 rounded-[18px]">
               <div className="flex justify-between items-baseline">
                 <Kicker>{format(t.profile.eloSince, { d: sinceLabel })}</Kicker>
                 <span className={cn("font-heading font-bold text-[15px]", eloDelta >= 0 ? "text-mint" : "text-red")}>
@@ -102,7 +106,7 @@ export default async function PlayerProfilePage({ params }: Readonly<{ params: P
       ) : (
         <Panel className="text-center py-8">
           <div className="font-display font-extrabold text-2xl uppercase">{t.home.noGamesTitle}</div>
-          <p className="font-body text-sm text-cream/55 mt-1">{t.home.noGamesBody}</p>
+          <p className="font-body text-sm text-muted mt-1">{t.home.noGamesBody}</p>
         </Panel>
       )}
 
@@ -113,17 +117,19 @@ export default async function PlayerProfilePage({ params }: Readonly<{ params: P
           linkLabel={t.common.seeAll}
         />
         <div className="grid grid-cols-4 gap-2">
-          {[...earned, ...achievements.filter((a) => !a.earned)].slice(0, 4).map((a) => (
+          {strip.map((a) => (
             <div
               key={a.id}
               className={cn(
                 "aspect-square rounded-[14px] flex flex-col items-center justify-center gap-1 p-1 text-center",
-                a.earned ? "bg-surface-raised border border-gold/45 text-gold" : "bg-surface-deep border border-dashed border-cream/20 text-cream/35",
+                a.got ? "bg-surface-raised border border-gold/40 text-gold" : "bg-surface-deep border border-dashed border-cream/14 text-[#5b6460]",
               )}
-              title={a.description}
+              title={a.desc}
             >
-              <span className="font-display font-extrabold text-xl leading-none">{a.glyph}</span>
-              <span className="font-body font-bold text-[10px] leading-[1.15] tracking-[0.04em]">{a.name}</span>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" aria-hidden="true">
+                <path d={a.got ? ACHIEVEMENT_ICON_PATH[a.icon] : "M6 11h12v9H6zM8 11V8a4 4 0 0 1 8 0v3"} />
+              </svg>
+              <span className="font-body font-bold text-[10px] leading-[1.15]! tracking-[0.04em]">{a.name}</span>
             </div>
           ))}
         </div>
@@ -132,7 +138,7 @@ export default async function PlayerProfilePage({ params }: Readonly<{ params: P
       {isSelf && (
         <Link
           href="/stats"
-          className="h-12 rounded-[14px] border border-cream/15 text-cream flex items-center justify-center gap-2 font-body font-semibold text-[15px]"
+          className="h-[50px] rounded-[14px] border border-cream/14 text-cream flex items-center justify-center gap-2 font-body font-semibold text-[15px]"
         >
           <ChartIcon className="w-4.5 h-4.5" />
           {t.profile.deepStats}
@@ -141,6 +147,10 @@ export default async function PlayerProfilePage({ params }: Readonly<{ params: P
 
       {shared && insights && insights.totalGames > 0 && (
         <Link href={`/crews/${shared.id}/recap`} className="flex items-center gap-3 px-4 py-3.5 rounded-[18px] bg-amber text-ink">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+            <rect x="5" y="3" width="14" height="18" rx="2" />
+            <path d="M9 8h6M9 12h6M9 16h3" />
+          </svg>
           <span className="flex-1 flex flex-col">
             <span className="font-heading font-extrabold text-[19px] tracking-[0.04em] uppercase">{t.profile.recap}</span>
             <span className="font-body text-xs font-medium">{t.profile.recapSub}</span>
@@ -158,7 +168,7 @@ export default async function PlayerProfilePage({ params }: Readonly<{ params: P
           <span className="flex-1 min-w-0 flex flex-col">
             <Kicker className="text-red">Nemesis</Kicker>
             <span className="font-body font-semibold text-[15px] truncate">{nemesis.opponentName}</span>
-            <span className="font-body text-xs text-cream/55">
+            <span className="font-body text-xs text-muted">
               {nemesis.wins}W–{nemesis.losses}L
             </span>
           </span>
@@ -179,8 +189,8 @@ export default async function PlayerProfilePage({ params }: Readonly<{ params: P
             >
               <Avatar name={o.name} />
               <span className="flex-1 font-body font-semibold text-[15px] truncate">{firstName(o.name)}</span>
-              <span className="font-body text-xs text-cream/55">{o.timesPlayed}×</span>
-              <ChevronRightIcon className="w-4 h-4 text-cream/45" />
+              <span className="font-body text-xs text-muted">{o.timesPlayed}×</span>
+              <ChevronRightIcon className="w-4 h-4 text-muted" />
             </Link>
           ))}
         </section>

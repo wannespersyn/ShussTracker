@@ -6,6 +6,7 @@ import { getLocale, getT } from "@/lib/i18n/server";
 import { format } from "@/lib/i18n";
 import { firstName } from "@/lib/insights";
 import { cn } from "@/lib/cn";
+import { ShareButton } from "@/components/game/ShareButton";
 import { Avatar, Kicker, Panel, Screen, TextTabs } from "@/components/v2";
 
 export default async function SessionsPage({
@@ -44,7 +45,7 @@ export default async function SessionsPage({
       <Screen>
         <h1 className="font-display font-extrabold text-[34px] uppercase h-11">{group.name}</h1>
         {tabs}
-        <p className="font-body text-sm text-cream/55">{t.sessions.empty}</p>
+        <p className="font-body text-sm text-muted">{t.sessions.empty}</p>
       </Screen>
     );
   }
@@ -52,14 +53,26 @@ export default async function SessionsPage({
   const climber = s.movers[0];
   const maxAbs = Math.max(1, ...s.movers.map((m) => Math.abs(m.delta)));
 
+  const dayTitle = longFmt.format(asDate(s.night)).replace(",", "").replace("Sept", "Sep");
   return (
-    <Screen>
-      <h1 className="font-display font-extrabold text-[34px] uppercase h-11 truncate">{group.name}</h1>
-      {tabs}
-
-      <header className="flex flex-col">
-        <span className="font-display font-extrabold text-[26px] uppercase tracking-[0.03em]">{longFmt.format(asDate(s.night))}</span>
-        <span className="font-body text-[13px] text-cream/55">{format(t.sessions.meta, { g: s.games, p: s.players })}</span>
+    <Screen nav={false} className="gap-3 pb-6">
+      <header className="flex items-center gap-3 h-11">
+        <Link
+          href={`/crews/${crewId}/feed`}
+          aria-label={t.common.back}
+          className="w-11 h-11 shrink-0 rounded-pill bg-surface-panel border border-line-strong text-cream flex items-center justify-center"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+            <path d="M15 6l-6 6 6 6" />
+          </svg>
+        </Link>
+        <span className="flex-1 min-w-0 flex flex-col">
+          <h1 className="font-display font-extrabold text-2xl tracking-[0.04em] uppercase truncate">{dayTitle}</h1>
+          <span className="font-body text-xs text-muted truncate">
+            {group.name} · {format(t.sessions.meta, { g: s.games, p: s.players })}
+          </span>
+        </span>
+        <ShareButton label={t.sessions.share} copiedLabel={t.game.copied} title={`${group.name} · ${dayTitle}`} />
       </header>
 
       {s.mvp && (
@@ -79,12 +92,12 @@ export default async function SessionsPage({
 
       <div className="grid grid-cols-2 gap-2">
         {climber && climber.delta > 0 && (
-          <Award k={t.sessions.climber} who={firstName(climber.name)} what={`▲${climber.delta} Elo`} tone="text-mint" />
+          <Award k={t.sessions.climber} who={firstName(climber.name)} what={`▲${climber.delta} Elo · ${s.lines.find((l) => l.userId === climber.userId)?.wins ?? 0} wins`} tone="text-mint" />
         )}
         {s.mamaKings && (
           <Award
             k={s.mamaKings.names.length > 1 ? t.sessions.mamaKings : t.sessions.mamaKing}
-            who={s.mamaKings.names.join(" & ")}
+            who={s.mamaKings.names.map(firstName).join(" & ")}
             what={format(s.mamaKings.names.length > 1 ? t.sessions.mamaSub : t.sessions.mamaSubOne, { n: s.mamaKings.count })}
             tone="text-red"
           />
@@ -93,22 +106,22 @@ export default async function SessionsPage({
           <Award k={t.sessions.iron} who={firstName(s.ironLiver.name)} what={format(t.sessions.ironSub, { g: s.ironLiver.games, n: s.games })} tone="text-cream" />
         )}
         {s.duoOfNight && (
-          <Award k={t.sessions.duo} who={s.duoOfNight.names} what={format(t.sessions.duoSub, { w: s.duoOfNight.wins, l: s.duoOfNight.losses })} tone="text-gold" />
+          <Award k={t.sessions.duo} who={s.duoOfNight.names.split(" & ").map(firstName).join(" & ")} what={format(t.sessions.duoSub, { w: s.duoOfNight.wins, l: s.duoOfNight.losses })} tone="text-gold" />
         )}
       </div>
 
-      <Panel className="flex flex-col gap-1.5">
+      <Panel className="flex flex-col gap-1.5 px-4 py-3.5 rounded-[16px]">
         <Kicker>{t.sessions.movers}</Kicker>
         {s.movers.map((m) => {
           const w = Math.round((Math.abs(m.delta) / maxAbs) * 100);
           return (
-            <div key={m.userId} className="grid grid-cols-[96px_1fr_1fr_44px] items-center h-7">
+            <div key={m.userId} className="grid grid-cols-[92px_1fr_1fr_40px] items-center h-6.5">
               <span className="font-body font-semibold text-sm truncate">{firstName(m.name)}</span>
-              <div className="flex justify-end pr-0.5">{m.delta < 0 && <div className="h-3 rounded-l-[6px] bg-red" style={{ width: `${w}%` }} />}</div>
-              <div className="flex justify-start pl-0.5 border-l border-cream/20">
+              <div className="flex justify-end pr-0.5">{m.delta < 0 && <div className="h-3 rounded-l-[6px] bg-red-pale" style={{ width: `${w}%` }} />}</div>
+              <div className="flex justify-start pl-0.5 border-l border-[#3a4144]">
                 {m.delta > 0 && <div className="h-3 rounded-r-[6px] bg-mint" style={{ width: `${w}%` }} />}
               </div>
-              <span className={cn("text-right font-heading font-bold text-base", m.delta >= 0 ? "text-mint" : "text-red")}>
+              <span className={cn("text-right font-heading font-bold text-base", m.delta >= 0 ? "text-mint" : "text-red-pale")}>
                 {m.delta >= 0 ? "+" : "−"}
                 {Math.abs(m.delta)}
               </span>
@@ -117,7 +130,11 @@ export default async function SessionsPage({
         })}
       </Panel>
 
-      <section className="flex flex-col gap-1.5">
+      <div className="mt-auto pt-1">
+        <ShareButton label={t.sessions.share} copiedLabel={t.game.copied} title={`${group.name} · ${dayTitle}`} cta={t.sessions.shareCta} />
+      </div>
+
+      <section className="flex flex-col gap-1.5 pt-2">
         <Kicker>{t.sessions.lines}</Kicker>
         {s.lines.map((l) => (
           <Link key={l.userId} href={`/players/${l.userId}`} className="flex items-center gap-3 h-11 px-3 rounded-md bg-surface-deep border border-line text-cream">
@@ -142,7 +159,7 @@ export default async function SessionsPage({
                 aria-current={x.night === s.night ? "page" : undefined}
                 className={cn(
                   "h-9 px-3 rounded-pill flex items-center font-body text-[13px] whitespace-nowrap",
-                  x.night === s.night ? "bg-amber text-ink font-bold" : "bg-surface-panel border border-line text-cream/75 font-semibold",
+                  x.night === s.night ? "bg-amber text-ink font-bold" : "bg-surface-panel border border-line text-soft font-semibold",
                 )}
               >
                 {shortFmt.format(asDate(x.night))} · {x.games}
@@ -158,9 +175,9 @@ export default async function SessionsPage({
 function Award({ k, who, what, tone }: Readonly<{ k: string; who: string; what: string; tone: string }>) {
   return (
     <div className="px-3 py-3 rounded-[14px] bg-surface-deep border border-line flex flex-col gap-0.5 min-w-0">
-      <span className="font-heading font-semibold text-[11px] tracking-[0.14em] uppercase text-cream/55">{k}</span>
+      <span className="font-heading font-semibold text-[11px] tracking-[0.14em] uppercase text-muted">{k}</span>
       <span className={cn("font-display font-extrabold text-xl leading-[1.1] uppercase truncate", tone)}>{who}</span>
-      <span className="font-body text-xs text-cream/75">{what}</span>
+      <span className="font-body text-xs text-soft">{what}</span>
     </div>
   );
 }

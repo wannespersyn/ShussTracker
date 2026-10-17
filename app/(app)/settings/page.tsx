@@ -1,35 +1,45 @@
+import Link from "next/link";
+import type { ReactNode } from "react";
 import { isAdminEmail } from "@/lib/admin";
 import { requireSession } from "@/lib/db/authz";
-import { BackButton, Card, LinkButton, PrimaryButton, SegmentedForm } from "@/components/ui";
+import { getCrew, getUserCrews } from "@/lib/db/crew-insights";
+import { SegmentedForm } from "@/components/ui";
+import { Screen, Kicker } from "@/components/v2";
 import { signOutAction } from "@/app/(app)/actions";
-import Link from "next/link";
 import { getFlair, getLocale, getT, getTheme } from "@/lib/i18n/server";
-import { LOCALES, LOCALE_LABELS } from "@/lib/i18n/config";
+import { LOCALES } from "@/lib/i18n/config";
+import { cn } from "@/lib/cn";
 import { updateDisplayName } from "./actions";
 import { setFlairAction, setLocaleAction, setThemeAction } from "./preferences-actions";
 
 export default async function SettingsPage() {
   const session = await requireSession();
+  const userId = session.user.id;
   const name = session.user.name ?? "";
   const email = session.user.email ?? "";
-  const [t, theme, locale, flair] = await Promise.all([getT(), getTheme(), getLocale(), getFlair()]);
+  const [t, theme, locale, flair, crews] = await Promise.all([getT(), getTheme(), getLocale(), getFlair(), getUserCrews(userId)]);
+  const crew = crews[0];
+  const crewInfo = crew ? await getCrew(crew.id) : null;
+  const owns = crew && crew.createdBy === userId;
+  const planLabel = crewInfo?.plan === "founding" ? "FOUNDING" : crewInfo?.plan === "pro" ? "PRO" : "FREE";
 
   return (
-    <div className="min-h-screen bg-surface flex flex-col px-5 pt-14 pb-28 gap-6">
-      <header className="flex items-center gap-3.5">
-        <BackButton href={`/players/${session.user.id}`} />
-        <div>
-          <div className="font-heading font-bold text-label-kicker tracking-kicker uppercase text-cream/45">
-            Account
-          </div>
-          <div className="font-display font-extrabold text-display-sm text-cream mt-1 uppercase">{t.settings.title}</div>
-        </div>
+    <Screen nav={false} className="gap-4 pb-6">
+      <header className="flex items-center gap-3 h-11">
+        <Link
+          href={`/players/${userId}`}
+          aria-label={t.common.back}
+          className="w-11 h-11 shrink-0 rounded-pill bg-surface-panel border border-cream/10 text-cream flex items-center justify-center"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+            <path d="M15 6l-6 6 6 6" />
+          </svg>
+        </Link>
+        <h1 className="font-display font-extrabold text-[26px] tracking-[0.04em] uppercase">{t.settings.title}</h1>
       </header>
 
       <section className="flex flex-col gap-2">
-        <div className="font-heading font-semibold text-[12px] tracking-[0.14em] uppercase text-cream/55">
-          {t.settings.appearance}
-        </div>
+        <Kicker>{t.settings.appearance}</Kicker>
         <SegmentedForm
           action={setThemeAction}
           name="theme"
@@ -41,88 +51,118 @@ export default async function SettingsPage() {
             { value: "light", label: t.settings.themeLight },
           ]}
         />
+        <form action={setFlairAction}>
+          <input type="hidden" name="flair" value={flair ? "off" : "on"} />
+          <button
+            type="submit"
+            aria-pressed={flair}
+            className="w-full flex items-center gap-3 min-h-15 px-4 py-2 rounded-[14px] bg-surface-panel border border-cream/10 text-left text-cream"
+          >
+            <span className="flex-1 flex flex-col">
+              <span className="font-body font-semibold text-[15px]">{t.settings.streakFlair}</span>
+              <span className="font-body font-medium text-xs text-muted">{t.settings.streakFlairSub}</span>
+            </span>
+            <span className={cn("w-12 h-7 rounded-pill p-0.75 flex", flair ? "bg-amber justify-end" : "bg-chip justify-start")}>
+              <span className={cn("w-5.5 h-5.5 rounded-pill", flair ? "bg-ink" : "bg-muted")} />
+            </span>
+          </button>
+        </form>
       </section>
 
-      <form action={setFlairAction}>
-        <input type="hidden" name="flair" value={flair ? "off" : "on"} />
-        <button
-          type="submit"
-          aria-pressed={flair}
-          className="w-full flex items-center gap-3 min-h-15 px-4 py-2 rounded-lg bg-surface-panel border border-line text-left"
-        >
-          <span className="flex-1 flex flex-col">
-            <span className="font-body font-semibold text-[15px] text-cream">{t.settings.streakFlair}</span>
-            <span className="font-body text-xs text-cream/55">{t.settings.streakFlairSub}</span>
-          </span>
-          <span className={`w-12 h-7 rounded-pill p-0.75 flex ${flair ? "bg-amber justify-end" : "bg-surface-raised justify-start"}`}>
-            <span className={`w-5.5 h-5.5 rounded-pill ${flair ? "bg-ink" : "bg-cream/55"}`} />
-          </span>
-        </button>
-      </form>
-
       <section className="flex flex-col gap-2">
-        <div className="font-heading font-semibold text-[12px] tracking-[0.14em] uppercase text-cream/55">
-          {t.settings.language}
-        </div>
+        <Kicker>{t.settings.language}</Kicker>
         <SegmentedForm
           action={setLocaleAction}
           name="locale"
           value={locale}
           ariaLabel={t.settings.language}
-          options={LOCALES.map((l) => ({ value: l, label: LOCALE_LABELS[l] }))}
+          options={LOCALES.map((l) => ({ value: l, label: l.toUpperCase() }))}
         />
       </section>
-
-      <form action={updateDisplayName} className="flex flex-col gap-2.5">
-        <div className="font-mono font-medium text-[10px] tracking-widest uppercase text-cream/45">
-          Display name
-        </div>
-        <input
-          type="text"
-          name="name"
-          required
-          defaultValue={name}
-          placeholder="Your name"
-          className="h-13 rounded-lg bg-cream/8 px-4 font-body text-cream placeholder:text-cream/40 outline-none border-2 border-transparent focus:border-gold/40"
-        />
-        <PrimaryButton type="submit" variant="outline">
-          Save name
-        </PrimaryButton>
-      </form>
-
-      <Card variant="flat">
-        <div className="font-heading font-bold text-label-kicker tracking-kicker uppercase text-cream/40">
-          Signed in as
-        </div>
-        <div className="font-body text-body text-cream mt-1">{email || "No email on file"}</div>
-      </Card>
 
       <section className="flex flex-col gap-2">
-        <div className="font-heading font-semibold text-[12px] tracking-[0.14em] uppercase text-cream/55">{t.settings.help}</div>
-        <div className="flex flex-col rounded-lg overflow-hidden bg-surface-panel border border-line">
-          <Link href="/feedback?type=bug" className="min-h-13 px-4 flex items-center justify-between font-body font-semibold text-[15px] text-cream">
-            {t.settings.feedback} <span className="text-cream/45">→</span>
-          </Link>
-          <Link href="/feedback?type=idea" className="min-h-13 px-4 flex items-center justify-between font-body font-semibold text-[15px] text-cream border-t border-line">
-            {t.settings.feature} <span className="text-cream/45">→</span>
-          </Link>
-          {isAdminEmail(email) && (
-            <Link href="/admin" className="min-h-13 px-4 flex items-center justify-between font-body font-semibold text-[15px] text-gold border-t border-line">
-              Admin <span className="text-cream/45">→</span>
-            </Link>
+        <Kicker>{t.settings.crewAccount}</Kicker>
+        <Group>
+          {crew && (
+            <Row href={owns ? `/crews/${crew.id}/manage` : `/crews/${crew.id}`} value={<span className="font-body font-medium text-xs text-muted">{crew.name}</span>}>
+              {owns ? t.settings.manageCrew : t.nav.crew}
+            </Row>
           )}
-        </div>
+          {crewInfo && (
+            <Row
+              href={`/crews/${crewInfo.id}`}
+              value={<span className="font-heading font-bold text-[13px] tracking-[0.1em] text-gold">{planLabel}</span>}
+            >
+              {t.settings.subscription}
+            </Row>
+          )}
+          <Row href="/crews" value={<span className="font-body font-medium text-xs text-muted">{crews.length}</span>}>
+            {t.settings.yourCrews}
+          </Row>
+          <form action={updateDisplayName} className="flex items-center gap-2 min-h-13 pl-4 pr-2 border-t border-cream/10 first:border-t-0">
+            <label htmlFor="display-name" className="sr-only">
+              {t.settings.name}
+            </label>
+            <input
+              id="display-name"
+              type="text"
+              name="name"
+              required
+              defaultValue={name}
+              placeholder={t.settings.name}
+              className="flex-1 min-w-0 h-11 bg-transparent font-body font-semibold text-[15px] text-cream placeholder:text-muted outline-none"
+            />
+            <button type="submit" className="h-9 px-3 rounded-sm bg-surface-raised border border-line-strong font-body font-semibold text-xs text-cream">
+              {t.settings.save}
+            </button>
+          </form>
+          <div className="min-h-13 px-4 flex items-center gap-3 border-t border-cream/10">
+            <span className="flex-1 font-body font-semibold text-[15px]">{t.settings.signedIn}</span>
+            <span className="font-body font-medium text-xs text-muted truncate max-w-44">{email}</span>
+          </div>
+        </Group>
       </section>
 
-      <LinkButton href="/crews" variant="ghost">
-        Manage your crews
-      </LinkButton>
+      <section className="flex flex-col gap-2">
+        <Kicker>{t.settings.help}</Kicker>
+        <Group>
+          <Row href="/feedback?type=bug">{t.settings.feedback}</Row>
+          <Row href="/feedback?type=idea">{t.settings.feature}</Row>
+          {isAdminEmail(email) && (
+            <Row href="/admin" className="text-gold">
+              Admin
+            </Row>
+          )}
+        </Group>
+      </section>
 
-      <form action={signOutAction} className="mt-auto">
-        <PrimaryButton type="submit" variant="outline" className="w-full">
+      <form action={signOutAction} className="mt-auto pt-2">
+        <button
+          type="submit"
+          className="w-full h-12.5 rounded-[14px] border border-cream/10 font-body font-semibold text-[15px] text-red-pale"
+        >
           {t.settings.signOut}
-        </PrimaryButton>
+        </button>
       </form>
-    </div>
+    </Screen>
+  );
+}
+
+function Group({ children }: Readonly<{ children: ReactNode }>) {
+  return <div className="flex flex-col rounded-[14px] overflow-hidden bg-surface-panel border border-cream/10">{children}</div>;
+}
+
+function Row({ href, value, className, children }: Readonly<{ href: string; value?: ReactNode; className?: string; children: ReactNode }>) {
+  return (
+    <Link
+      href={href}
+      className={cn(
+        "min-h-13 px-4 flex items-center gap-3 font-body font-semibold text-[15px] text-cream border-t border-cream/10 first:border-t-0",
+        className,
+      )}
+    >
+      <span className="flex-1 min-w-0 truncate">{children}</span>
+      {value ?? <span className="font-body font-medium text-xs text-muted">→</span>}
+    </Link>
   );
 }
