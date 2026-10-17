@@ -54,7 +54,9 @@ export default async function CrewPage({
     ? new Intl.DateTimeFormat(locale === "nl" ? "nl-BE" : "en-GB", { day: "numeric", month: "short" }).format(insights.firstGameAt).replace("Sept", "Sep")
     : null;
 
-  const minDuoGames = insights.duos.some((d) => d.games >= 5) ? 5 : 1;
+  // Rotating crews rarely repeat a duo 5 times: only drop one-off pairings
+  // when there are enough repeat duos to fill the board.
+  const minDuoGames = insights.duos.filter((d) => d.games >= 2).length >= 5 ? 2 : 1;
   const duos = insights.duos
     .filter((d) => d.games >= minDuoGames)
     .sort((a, b) => wilsonLowerBound(b.wins, b.games) - wilsonLowerBound(a.wins, a.games) || b.games - a.games);

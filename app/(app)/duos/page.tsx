@@ -19,12 +19,16 @@ export default async function DuosPage({
     getT(),
     getLocale(),
   ]);
-  const crew = crews.find((c) => c.id === crewParam) ?? crews[0];
-  const insights = crew ? await getCrewInsights(crew.id) : null;
-
-  const mine = (insights?.duos ?? [])
-    .filter((d) => d.a.id === userId || d.b.id === userId)
-    .sort((a, b) => b.games - a.games);
+  // Every crew the viewer has duo games in, most duo games first.
+  const allInsights = await Promise.all(crews.map((c) => getCrewInsights(c.id)));
+  const duoCrews = crews
+    .map((c, i) => ({ crew: c, insights: allInsights[i], mine: allInsights[i].duos.filter((d) => d.a.id === userId || d.b.id === userId) }))
+    .filter((x) => x.mine.length > 0)
+    .sort((a, b) => b.mine.reduce((n, d) => n + d.games, 0) - a.mine.reduce((n, d) => n + d.games, 0));
+  const current = duoCrews.find((x) => x.crew.id === crewParam) ?? duoCrews[0];
+  const crew = current?.crew;
+  const insights = current?.insights ?? null;
+  const mine = (current?.mine ?? []).sort((a, b) => b.games - a.games || b.wins - a.wins);
 
   const header = <h1 className="sr-only">{t.duo.title}</h1>;
 
@@ -52,11 +56,29 @@ export default async function DuosPage({
     .sort((a, b) => wilsonLowerBound(b.wins, b.games) - wilsonLowerBound(a.wins, a.games));
   const duoRank = ranking.findIndex((d) => d.key === duo.key) + 1;
   const dateFmt = new Intl.DateTimeFormat(locale === "nl" ? "nl-BE" : "en-GB", { weekday: "short", day: "numeric", month: "short" });
-  const crewQ = crew && crew.id !== crews[0]?.id ? `&crew=${crew.id}` : "";
+  const crewQ = crew && crew.id !== duoCrews[0]?.crew.id ? `&crew=${crew.id}` : "";
 
   return (
     <Screen>
       {header}
+
+      {duoCrews.length > 1 && (
+        <nav className="flex gap-1.5 overflow-x-auto -mx-5 px-5" aria-label="Crew">
+          {duoCrews.map((x) => (
+            <Link
+              key={x.crew.id}
+              href={x.crew.id === duoCrews[0].crew.id ? "/duos" : `/duos?crew=${x.crew.id}`}
+              aria-current={x.crew.id === crew?.id ? "page" : undefined}
+              className={cn(
+                "shrink-0 h-8 px-3 rounded-sm flex items-center font-heading font-bold text-sm tracking-[0.06em] uppercase whitespace-nowrap",
+                x.crew.id === crew?.id ? "bg-surface-raised text-cream border border-gold/50" : "text-muted border border-line",
+              )}
+            >
+              {x.crew.name} · {x.mine.length}
+            </Link>
+          ))}
+        </nav>
+      )}
 
       <nav className="flex gap-2 overflow-x-auto -mx-5 px-5 pb-1" aria-label={t.duo.noName}>
         {mine.map((d) => {
