@@ -9,6 +9,11 @@ import { buildCrewInsights, type CrewInsights, type InsightGame, type InsightPla
 /** Loads a crew's full history and runs it through buildCrewInsights.
  * Wrapped in React `cache` so several components on one page share a
  * single query + replay. */
+/** Writes from this app invalidate the cache instantly; this is only the
+ * safety net for writes it can't see (e.g. the old app sharing the same
+ * database during the beta). Raise it once every write goes through v2. */
+const CREW_CACHE_SECONDS = Number(process.env.CREW_CACHE_SECONDS ?? 300);
+
 type CachedCrewData = {
   members: InsightPlayerRef[];
   games: (Omit<InsightGame, "playedAt"> & { playedAt: number })[];
@@ -58,7 +63,7 @@ function loadCrewData(groupId: string): Promise<CachedCrewData> {
       };
     },
     ["crew-data-v1", groupId],
-    { tags: [crewTag(groupId), ALL_CREWS_TAG], revalidate: 86400 },
+    { tags: [crewTag(groupId), ALL_CREWS_TAG], revalidate: CREW_CACHE_SECONDS },
   )();
 }
 
