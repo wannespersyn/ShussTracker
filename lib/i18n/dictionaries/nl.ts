@@ -212,7 +212,7 @@ export const nl: Dictionary = {
     sub: "Log elke game, volg je duo en beslis wie de crew écht runt.",
     google: "Doorgaan met Google",
     code: "Ik heb een crewcode",
-    legal: "Onafhankelijke fan-app · enkel 18+ · drink met mate.",
+    legal: "Onafhankelijke fan-app · enkel 16+ · drink met mate.",
   },
   manage: {
     title: "Crew beheren",
@@ -312,7 +312,7 @@ export const nl: Dictionary = {
     p3c: "Perfect voor kampen & feestjes",
     ideaTitle: "Een idee? We bouwen wat crews stemmen.",
     idea: "Stel een feature voor",
-    legal: "Onafhankelijke fan-app — niet verbonden aan de makers van het spel. Enkel 18+. Drink met mate.",
+    legal: "Onafhankelijke fan-app — niet verbonden aan de makers van het spel. Enkel 16+. Drink met mate.",
   },
   settings: {
     title: "Instellingen",

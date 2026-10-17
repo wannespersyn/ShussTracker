@@ -213,7 +213,7 @@ export const en = {
     sub: "Log every game, track your duo and settle who really runs the crew.",
     google: "Continue with Google",
     code: "I've got a crew code",
-    legal: "Independent fan app · 18+ only · drink responsibly.",
+    legal: "Independent fan app · 16+ only · drink responsibly.",
   },
   manage: {
     title: "Manage crew",
@@ -313,7 +313,7 @@ export const en = {
     p3c: "Perfect for camps & parties",
     ideaTitle: "Got an idea? We build what crews vote for.",
     idea: "Suggest a feature",
-    legal: "Independent fan app — not affiliated with the makers of the game. 18+ only. Drink responsibly.",
+    legal: "Independent fan app — not affiliated with the makers of the game. 16+ only. Drink responsibly.",
   },
   settings: {
     title: "Settings",
