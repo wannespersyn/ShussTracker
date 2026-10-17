@@ -1,5 +1,6 @@
 "use server";
 
+import { BLOB_ACCESS } from "@/lib/photo";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
@@ -65,7 +66,7 @@ export async function uploadGamePhotoAction(gameId: string, formData: FormData):
   if (!process.env.BLOB_READ_WRITE_TOKEN) return { ok: false, error: "Photo storage isn't set up yet" };
 
   const { put } = await import("@vercel/blob");
-  const blob = await put(`games/${gameId}/${Date.now()}.jpg`, file, { access: "public", contentType: file.type });
+  const blob = await put(`games/${gameId}/${Date.now()}.jpg`, file, { access: BLOB_ACCESS, contentType: file.type });
   await db.update(games).set({ photoUrl: blob.url }).where(eq(games.id, gameId));
   revalidatePath(`/game/${gameId}`);
   return { ok: true };

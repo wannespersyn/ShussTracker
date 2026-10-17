@@ -11,6 +11,7 @@ import { getLocale, getT } from "@/lib/i18n/server";
 import { format } from "@/lib/i18n";
 import { firstName } from "@/lib/insights";
 import { cn } from "@/lib/cn";
+import { photoSrc } from "@/lib/photo";
 import { Avatar, Kicker, Screen } from "@/components/v2";
 import { PhotoUpload } from "@/components/game/PhotoUpload";
 import { ReactionIcon, REACTION_LABEL } from "@/components/game/ReactionIcon";
@@ -86,7 +87,7 @@ export default async function GamePage({ params }: Readonly<{ params: Promise<{ 
       >
         {game.photoUrl && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={game.photoUrl} alt={t.game.photoAlt} className="absolute inset-0 w-full h-full object-cover" />
+          <img src={photoSrc(game.id, game.photoUrl)} alt={t.game.photoAlt} className="absolute inset-0 w-full h-full object-cover" />
         )}
         <div className="relative">
           <PhotoUpload

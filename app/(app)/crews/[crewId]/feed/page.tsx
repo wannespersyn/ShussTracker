@@ -7,6 +7,7 @@ import { getLocale, getT } from "@/lib/i18n/server";
 import { format } from "@/lib/i18n";
 import { firstName, nightKey } from "@/lib/insights";
 import { cn } from "@/lib/cn";
+import { photoSrc } from "@/lib/photo";
 import { Screen, TextTabs } from "@/components/v2";
 import { ReactionIcon } from "@/components/game/ReactionIcon";
 
@@ -138,7 +139,7 @@ export default async function CrewFeedPage({
             {gotw.photoUrl && (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={gotw.photoUrl}
+                src={photoSrc(gotw.id, gotw.photoUrl)}
                 alt=""
                 className="absolute inset-0 w-full h-full object-cover"
               />
