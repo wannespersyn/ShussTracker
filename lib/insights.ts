@@ -254,6 +254,7 @@ export function buildCrewInsights(
       isGuest: ref.isGuest,
       elo: Math.round(ratingOf(id)),
       eloThen: ratingWeekAgo.get(id) ?? ELO_BASE,
+      playedThen: ratingWeekAgo.has(id),
       games: res.length,
       wins,
       losses: res.length - wins,
@@ -273,8 +274,11 @@ export function buildCrewInsights(
     };
   });
 
-  const byNow = [...base].sort((x, y) => y.elo - x.elo || y.games - x.games);
-  const byThen = [...base].sort((x, y) => y.eloThen - x.eloThen || y.games - x.games);
+  // Players who haven't played yet sit at the 1000 start rating; they must not
+  // outrank anyone who has, so they always sort after every active player.
+  const active = (x: { games: number }) => (x.games > 0 ? 0 : 1);
+  const byNow = [...base].sort((x, y) => active(x) - active(y) || y.elo - x.elo || y.games - x.games);
+  const byThen = [...base].sort((x, y) => Number(y.playedThen) - Number(x.playedThen) || y.eloThen - x.eloThen || y.games - x.games);
   const thenRank = new Map(byThen.map((p, i) => [p.userId, i + 1]));
   const players: PlayerInsight[] = byNow.map((p, i) => ({
     userId: p.userId,
@@ -282,7 +286,7 @@ export function buildCrewInsights(
     isGuest: p.isGuest,
     elo: p.elo,
     rank: i + 1,
-    move: p.games === 0 ? 0 : (thenRank.get(p.userId) ?? i + 1) - (i + 1),
+    move: p.games === 0 || !p.playedThen ? 0 : (thenRank.get(p.userId) ?? i + 1) - (i + 1),
     eloWeek: Math.round(p.elo - p.eloThen),
     games: p.games,
     wins: p.wins,
