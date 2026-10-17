@@ -1,5 +1,7 @@
 "use server";
 
+import { invalidateAllCrews } from "@/lib/cache-tags";
+
 import { redirect } from "next/navigation";
 import { requireUserId } from "@/lib/db/authz";
 import { findGuestByClaimCode, claimGuest } from "@/lib/db/guests";
@@ -15,5 +17,6 @@ export async function claimGuestAction(_prev: ClaimGuestState, formData: FormDat
   if (guest.id === userId) return { error: "That's already you" };
 
   await claimGuest(guest.id, userId);
+  invalidateAllCrews();
   redirect(`/players/${userId}`);
 }

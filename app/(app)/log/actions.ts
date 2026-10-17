@@ -1,5 +1,7 @@
 "use server";
 
+import { invalidateCrew } from "@/lib/cache-tags";
+
 import { redirect } from "next/navigation";
 import { requireUserId, requireGroupMember } from "@/lib/db/authz";
 import { createGameRecord, type FieldHit } from "@/lib/db/games";
@@ -17,5 +19,6 @@ export async function logGame(input: LogGameInput) {
 
   const { gameId } = await createGameRecord({ ...input, createdBy: userId });
 
+  invalidateCrew(input.groupId);
   redirect(`/game/${gameId}`);
 }

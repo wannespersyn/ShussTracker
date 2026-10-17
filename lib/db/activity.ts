@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { gameComments, gameReactions, games } from "@/lib/db/schema";
 
@@ -96,19 +96,23 @@ export type FeedGame = {
 /** Recent games in a crew, newest first, with comment/reaction summaries —
  * the crew activity feed: what happened lately, not just who's ahead. */
 export async function getCrewActivityFeed(groupId: string, viewerId: string, limit = 25): Promise<FeedGame[]> {
+  // Only the newest `limit` games, and only the columns the feed shows.
   const groupGames = await db.query.games.findMany({
     where: eq(games.groupId, groupId),
+    orderBy: desc(games.playedAt),
+    limit,
+    columns: { id: true, playedAt: true, matType: true, photoUrl: true },
     with: {
-      teams: { with: { players: { with: { user: true, shots: true } } } },
-      comments: true,
+      teams: {
+        columns: { teamLabel: true, finalRank: true },
+        with: { players: { columns: { userId: true }, with: { user: { columns: { name: true } }, shots: { columns: { fieldHit: true } } } } },
+      },
+      comments: { columns: { id: true } },
       reactions: true,
     },
   });
 
-  return groupGames
-    .sort((a, b) => b.playedAt.getTime() - a.playedAt.getTime())
-    .slice(0, limit)
-    .map((g) => ({
+  return groupGames.map((g) => ({
       id: g.id,
       playedAt: g.playedAt,
       matType: g.matType,

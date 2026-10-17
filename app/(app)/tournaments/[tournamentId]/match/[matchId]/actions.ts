@@ -1,5 +1,7 @@
 "use server";
 
+import { invalidateCrew } from "@/lib/cache-tags";
+
 import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
@@ -49,5 +51,6 @@ export async function playTournamentMatch(input: PlayTournamentMatchInput) {
 
   await recordMatchResult(input.matchId, gameId, input.winnerEntrantId);
 
+  invalidateCrew(match.tournament.groupId);
   redirect(`/tournaments/${match.tournamentId}`);
 }

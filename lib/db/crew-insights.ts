@@ -1,5 +1,7 @@
 import { cache } from "react";
-import { desc, eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
+import { unstable_cache } from "next/cache";
+import { ALL_CREWS_TAG, crewTag } from "@/lib/cache-tags";
 import { db } from "@/lib/db";
 import { games, groupMembers, groups } from "@/lib/db/schema";
 import { buildCrewInsights, type CrewInsights, type InsightGame, type InsightPlayerRef } from "@/lib/insights";
@@ -7,67 +9,84 @@ import { buildCrewInsights, type CrewInsights, type InsightGame, type InsightPla
 /** Loads a crew's full history and runs it through buildCrewInsights.
  * Wrapped in React `cache` so several components on one page share a
  * single query + replay. */
+type CachedCrewData = {
+  members: InsightPlayerRef[];
+  games: (Omit<InsightGame, "playedAt"> & { playedAt: number })[];
+};
+
+/** The raw crew history, cached across requests (tagged per crew) and
+ * invalidated by the server actions that change it — see lib/cache-tags.ts.
+ * Stored with plain-number dates so it survives the cache's JSON round trip. */
+function loadCrewData(groupId: string): Promise<CachedCrewData> {
+  return unstable_cache(
+    async (): Promise<CachedCrewData> => {
+      const [members, rows] = await Promise.all([
+        db.query.groupMembers.findMany({ where: eq(groupMembers.groupId, groupId), with: { user: true } }),
+        db.query.games.findMany({
+          where: eq(games.groupId, groupId),
+          columns: { id: true, playedAt: true, matType: true },
+          with: {
+            teams: {
+              columns: { finalRank: true },
+              with: {
+                players: {
+                  columns: { userId: true },
+                  with: { user: { columns: { name: true, isGuest: true } }, shots: { columns: { fieldHit: true } } },
+                },
+              },
+            },
+          },
+        }),
+      ]);
+      return {
+        members: members.map((m) => ({ id: m.userId, name: m.user.name ?? "Player", isGuest: m.user.isGuest })),
+        games: rows.map((g) => ({
+          id: g.id,
+          playedAt: g.playedAt.getTime(),
+          matType: g.matType,
+          teams: g.teams.map((t) => ({
+            rank: t.finalRank,
+            players: t.players.map((p) => ({
+              id: p.userId,
+              name: p.user.name ?? "Player",
+              isGuest: p.user.isGuest,
+              mama: p.shots.filter((x) => x.fieldHit === "mama").length,
+              shots: p.shots.length,
+            })),
+          })),
+        })),
+      };
+    },
+    ["crew-data-v1", groupId],
+    { tags: [crewTag(groupId), ALL_CREWS_TAG], revalidate: 86400 },
+  )();
+}
+
+/** Insights are recomputed per request from the cached history (cheap, and
+ * keeps "this week" relative to now), memoised within the request. */
 export const getCrewInsights = cache(async (groupId: string): Promise<CrewInsights> => {
-  const [members, rows] = await Promise.all([
-    db.query.groupMembers.findMany({ where: eq(groupMembers.groupId, groupId), with: { user: true } }),
-    db.query.games.findMany({
-      where: eq(games.groupId, groupId),
-      with: { teams: { with: { players: { with: { user: true, shots: true } } } } },
-    }),
-  ]);
-
-  const memberRefs: InsightPlayerRef[] = members.map((m) => ({
-    id: m.userId,
-    name: m.user.name ?? "Player",
-    isGuest: m.user.isGuest,
-  }));
-
-  const insightGames: InsightGame[] = rows.map((g) => ({
-    id: g.id,
-    playedAt: g.playedAt,
-    matType: g.matType,
-    teams: g.teams.map((t) => ({
-      rank: t.finalRank,
-      players: t.players.map((p) => ({
-        id: p.userId,
-        name: p.user.name ?? "Player",
-        isGuest: p.user.isGuest,
-        mama: p.shots.filter((s) => s.fieldHit === "mama").length,
-        shots: p.shots.length,
-      })),
-    })),
-  }));
-
-  return buildCrewInsights(memberRefs, insightGames);
+  const data = await loadCrewData(groupId);
+  return buildCrewInsights(
+    data.members,
+    data.games.map((g) => ({ ...g, playedAt: new Date(g.playedAt) })),
+  );
 });
 
 export type UserCrew = { id: string; name: string; members: number; games: number; lastPlayedAt: Date | null; createdBy: string };
 
 /** The viewer's crews, most active first (most recent game, then size). */
 export const getUserCrews = cache(async (userId: string): Promise<UserCrew[]> => {
-  const memberships = await db.query.groupMembers.findMany({
-    where: eq(groupMembers.userId, userId),
-    with: { group: { with: { members: true } } },
-  });
-
-  const crews = await Promise.all(
-    memberships.map(async (m) => {
-      const recent = await db.query.games.findMany({
-        where: eq(games.groupId, m.groupId),
-        orderBy: desc(games.playedAt),
-        columns: { playedAt: true },
-      });
-      return {
-        id: m.groupId,
-        name: m.group.name,
-        members: m.group.members.length,
-        games: recent.length,
-        lastPlayedAt: recent[0]?.playedAt ?? null,
-        createdBy: m.group.createdBy,
-      };
-    }),
+  const res = await db.execute(sql`
+    select g.id, g.name, g.created_by as "createdBy",
+      (select count(*) from "group_member" m2 where m2.group_id = g.id)::int as members,
+      (select count(*) from "game" x where x.group_id = g.id)::int as games,
+      (select max(played_at) from "game" x where x.group_id = g.id) as "lastPlayedAt"
+    from "group_member" m join "group" g on g.id = m.group_id
+    where m.user_id = ${userId}
+  `);
+  const crews = (res.rows as { id: string; name: string; createdBy: string; members: number; games: number; lastPlayedAt: string | Date | null }[]).map(
+    (r) => ({ ...r, lastPlayedAt: r.lastPlayedAt ? new Date(r.lastPlayedAt) : null }),
   );
-
   return crews.sort(
     (a, b) => (b.lastPlayedAt?.getTime() ?? 0) - (a.lastPlayedAt?.getTime() ?? 0) || b.members - a.members,
   );

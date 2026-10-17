@@ -1,5 +1,7 @@
 "use server";
 
+import { invalidateCrew } from "@/lib/cache-tags";
+
 import { revalidatePath } from "next/cache";
 import { requireUserId, requireGroupMember, requireGroupOwner } from "@/lib/db/authz";
 import { addGuestPlayer, removeGuestPlayer } from "@/lib/db/guests";
@@ -12,6 +14,7 @@ export async function addGuestAction(groupId: string, formData: FormData) {
   if (!name) throw new Error("Give your guest a name");
 
   await addGuestPlayer(groupId, name);
+  invalidateCrew(groupId);
   revalidatePath(`/crews/${groupId}`);
 }
 
@@ -20,5 +23,6 @@ export async function removeGuestAction(groupId: string, guestId: string) {
   await requireGroupOwner(userId, groupId);
 
   await removeGuestPlayer(guestId);
+  invalidateCrew(groupId);
   revalidatePath(`/crews/${groupId}`);
 }
