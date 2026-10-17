@@ -14,6 +14,7 @@ import { cn } from "@/lib/cn";
 import { photoSrc } from "@/lib/photo";
 import { Avatar, Kicker, Screen } from "@/components/v2";
 import { PhotoUpload } from "@/components/game/PhotoUpload";
+import { GamePhoto } from "@/components/game/GamePhoto";
 import { ReactionIcon, REACTION_LABEL } from "@/components/game/ReactionIcon";
 import { addCommentAction, deleteCommentAction, toggleReactionAction, uploadGamePhotoAction } from "./actions";
 
@@ -79,25 +80,34 @@ export default async function GamePage({ params }: Readonly<{ params: Promise<{ 
         <ShareButton label={t.game.share} copiedLabel={t.game.copied} title={matLabel} />
       </header>
 
-      <div
-        className={cn(
-          "relative rounded-[18px] overflow-hidden border border-line flex items-end justify-end p-3",
-          game.photoUrl ? "h-56" : "h-[150px] bg-[repeating-linear-gradient(135deg,var(--color-surface-deep)_0_14px,#1a1f20_14px_28px)]",
-        )}
-      >
-        {game.photoUrl && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={photoSrc(game.id, game.photoUrl)} alt={t.game.photoAlt} className="absolute inset-0 w-full h-full object-cover" />
-        )}
-        <div className="relative">
+      {game.photoUrl ? (
+        <div className="relative rounded-[18px] overflow-hidden border border-line">
+          <GamePhoto src={photoSrc(game.id, game.photoUrl)} alt={t.game.photoAlt} />
+          <div className="absolute bottom-3 right-3">
+            <PhotoUpload
+              action={uploadGamePhotoAction.bind(null, gameId)}
+              hasPhoto
+              label={t.game.addPhoto}
+              changeLabel={t.game.changePhoto}
+              useLabel={t.game.usePhoto}
+              againLabel={t.game.anotherPhoto}
+              cancelLabel={t.game.cancel}
+            />
+          </div>
+        </div>
+      ) : (
+        <div className="h-[150px] rounded-[18px] overflow-hidden border border-line flex items-end justify-end p-3 bg-[repeating-linear-gradient(135deg,var(--color-surface-deep)_0_14px,#1a1f20_14px_28px)]">
           <PhotoUpload
             action={uploadGamePhotoAction.bind(null, gameId)}
-            hasPhoto={!!game.photoUrl}
+            hasPhoto={false}
             label={t.game.addPhoto}
             changeLabel={t.game.changePhoto}
+            useLabel={t.game.usePhoto}
+            againLabel={t.game.anotherPhoto}
+            cancelLabel={t.game.cancel}
           />
         </div>
-      </div>
+      )}
 
       <section className="rounded-[18px] bg-surface-deep border border-line overflow-hidden" aria-label={t.game.result}>
         {teams.map((tm, i) => {

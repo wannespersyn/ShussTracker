@@ -133,6 +133,9 @@ export const nl: Dictionary = {
     pickWinner: "Kies een winnaar",
   },
   game: {
+    usePhoto: "Gebruik foto",
+    anotherPhoto: "Andere foto",
+    cancel: "Annuleer",
     share: "Deel game",
     copied: "Link gekopieerd",
     photoAlt: "Foto van de mat",

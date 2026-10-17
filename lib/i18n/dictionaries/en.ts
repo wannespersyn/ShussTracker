@@ -134,6 +134,9 @@ export const en = {
     pickWinner: "Pick a winner",
   },
   game: {
+    usePhoto: "Use photo",
+    anotherPhoto: "Another one",
+    cancel: "Cancel",
     share: "Share game",
     copied: "Link copied",
     photoAlt: "Photo of the mat",
