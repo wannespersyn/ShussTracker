@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "Shussapp",
     short_name: "Shussapp",
     description: "Log games, track streaks, and settle the crew leaderboard.",
-    start_url: "/",
+    start_url: "/home",
     display: "standalone",
     background_color: "#0b0d0c",
     theme_color: "#0b0d0c",
