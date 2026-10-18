@@ -1,5 +1,7 @@
 "use server";
 
+import { after } from "next/server";
+import { notifyGameLogged } from "@/lib/notify";
 import { invalidateCrew } from "@/lib/cache-tags";
 
 import { redirect } from "next/navigation";
@@ -52,5 +54,6 @@ export async function playTournamentMatch(input: PlayTournamentMatchInput) {
   await recordMatchResult(input.matchId, gameId, input.winnerEntrantId);
 
   invalidateCrew(match.tournament.groupId);
+  after(() => notifyGameLogged(gameId, userId).catch(() => {}));
   redirect(`/tournaments/${match.tournamentId}`);
 }

@@ -16,7 +16,9 @@ import { Avatar, Kicker, Screen } from "@/components/v2";
 import { PhotoUpload } from "@/components/game/PhotoUpload";
 import { GamePhoto } from "@/components/game/GamePhoto";
 import { ReactionIcon, REACTION_LABEL } from "@/components/game/ReactionIcon";
-import { addCommentAction, deleteCommentAction, toggleReactionAction, uploadGamePhotoAction } from "./actions";
+import { addCommentAction, deleteCommentAction, deleteGameAction, toggleReactionAction, uploadGamePhotoAction } from "./actions";
+import { canDeleteGame } from "@/lib/db/game-permissions";
+import { ConfirmForm } from "@/components/ui";
 
 const ORD = ["1ST", "2ND", "3RD", "4TH"];
 
@@ -48,6 +50,7 @@ export default async function GamePage({ params }: Readonly<{ params: Promise<{ 
     getLocale(),
   ]);
   const elo = insights?.gameElo[gameId] ?? {};
+  const mayDelete = await canDeleteGame(game, userId);
   const teams = [...game.teams].sort((a, b) => (a.finalRank ?? 99) - (b.finalRank ?? 99));
   const multi = teams.length > 2;
   const when = new Intl.DateTimeFormat(locale === "nl" ? "nl-BE" : "en-GB", {
@@ -218,14 +221,23 @@ export default async function GamePage({ params }: Readonly<{ params: Promise<{ 
         ))}
       </section>
 
-      {game.groupId && (
-        <Link
-          href={`/log?rematch=${game.id}`}
-          className="self-center h-9 px-4 rounded-pill border border-gold/60 text-gold flex items-center justify-center font-heading font-bold text-sm tracking-[0.08em] uppercase"
-        >
-          {t.game.rematch}
-        </Link>
-      )}
+      <div className="flex items-center justify-center gap-3">
+        {game.groupId && (
+          <Link
+            href={`/log?rematch=${game.id}`}
+            className="h-9 px-4 rounded-pill border border-gold/60 text-gold flex items-center justify-center font-heading font-bold text-sm tracking-[0.08em] uppercase"
+          >
+            {t.game.rematch}
+          </Link>
+        )}
+        {mayDelete && (
+          <ConfirmForm action={deleteGameAction.bind(null, gameId)} confirmMessage={t.game.deleteConfirm}>
+            <button type="submit" className="h-9 px-4 rounded-pill border border-red-pale/40 text-red-pale font-heading font-bold text-sm tracking-[0.08em] uppercase">
+              {t.game.deleteGame}
+            </button>
+          </ConfirmForm>
+        )}
+      </div>
       <form action={addCommentAction.bind(null, gameId)} className="sticky bottom-0 -mx-5 px-5 pt-2 pb-[calc(18px+env(safe-area-inset-bottom))] bg-surface flex gap-2">
         <input
           type="text"

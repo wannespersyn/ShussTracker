@@ -169,6 +169,14 @@ export default async function LandingPage() {
         <div className="max-w-[1200px] mx-auto px-6 py-8 flex flex-wrap justify-between gap-4 text-sm text-muted">
           <span>© 2026 Shussapp</span>
           <span>{L.legal}</span>
+          <span className="flex gap-4">
+            <Link href="/privacy" className="text-soft">
+              Privacy
+            </Link>
+            <Link href="/terms" className="text-soft">
+              Terms
+            </Link>
+          </span>
         </div>
       </footer>
     </div>

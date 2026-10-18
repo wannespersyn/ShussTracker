@@ -1,5 +1,7 @@
 "use server";
 
+import { after } from "next/server";
+import { notifyGameLogged } from "@/lib/notify";
 import { invalidateCrew } from "@/lib/cache-tags";
 
 import { redirect } from "next/navigation";
@@ -20,5 +22,6 @@ export async function logGame(input: LogGameInput) {
   const { gameId } = await createGameRecord({ ...input, createdBy: userId });
 
   invalidateCrew(input.groupId);
+  after(() => notifyGameLogged(gameId, userId).catch(() => {}));
   redirect(`/game/${gameId}`);
 }

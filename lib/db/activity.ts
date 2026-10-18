@@ -22,7 +22,8 @@ export async function getComment(commentId: string) {
 /** A tap toggles: inserting the reaction if absent, removing it if it's
  * already there — one row per (game, user, reaction), enforced by the
  * schema's unique constraint. */
-export async function toggleReaction(gameId: string, userId: string, reaction: Reaction) {
+/** Returns true when the reaction was added (false when removed). */
+export async function toggleReaction(gameId: string, userId: string, reaction: Reaction): Promise<boolean> {
   const existing = await db.query.gameReactions.findFirst({
     where: and(
       eq(gameReactions.gameId, gameId),
@@ -32,9 +33,10 @@ export async function toggleReaction(gameId: string, userId: string, reaction: R
   });
   if (existing) {
     await db.delete(gameReactions).where(eq(gameReactions.id, existing.id));
-  } else {
-    await db.insert(gameReactions).values({ id: randomUUID(), gameId, userId, reaction });
+    return false;
   }
+  await db.insert(gameReactions).values({ id: randomUUID(), gameId, userId, reaction });
+  return true;
 }
 
 export type GameComment = { id: string; userId: string; userName: string; text: string; createdAt: Date };

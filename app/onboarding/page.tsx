@@ -65,7 +65,16 @@ export default function OnboardingPage() {
         >
           {t.onboarding.code}
         </Link>
-        <span className="text-center font-body text-xs text-muted leading-[1.4]!">{t.onboarding.legal}</span>
+        <span className="text-center font-body text-xs text-muted leading-[1.4]!">
+          {t.onboarding.legal}{" "}
+          <Link href="/privacy" className="underline text-muted">
+            Privacy
+          </Link>{" "}
+          ·{" "}
+          <Link href="/terms" className="underline text-muted">
+            Terms
+          </Link>
+        </span>
       </div>
     </div>
   );

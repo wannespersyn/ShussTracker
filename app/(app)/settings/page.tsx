@@ -10,6 +10,9 @@ import { getFlair, getLocale, getT, getTheme } from "@/lib/i18n/server";
 import { LOCALES } from "@/lib/i18n/config";
 import { cn } from "@/lib/cn";
 import { updateDisplayName } from "./actions";
+import { deleteAccountAction } from "./account-actions";
+import { PushToggle } from "@/components/pwa/PushToggle";
+import { pushPublicKey } from "@/lib/push";
 import { setFlairAction, setLocaleAction, setThemeAction } from "./preferences-actions";
 
 export default async function SettingsPage() {
@@ -68,6 +71,18 @@ export default async function SettingsPage() {
           </button>
         </form>
       </section>
+
+      <PushToggle
+        publicKey={pushPublicKey()}
+        labels={{
+          title: t.settings.push,
+          on: t.settings.pushOn,
+          off: t.settings.pushOff,
+          denied: t.settings.pushDenied,
+          iosInstall: t.settings.pushIos,
+          unsupported: t.settings.pushUnsupported,
+        }}
+      />
 
       <section className="flex flex-col gap-2">
         <Kicker>{t.settings.language}</Kicker>
@@ -128,6 +143,8 @@ export default async function SettingsPage() {
         <Group>
           <Row href="/feedback?type=bug">{t.settings.feedback}</Row>
           <Row href="/feedback?type=idea">{t.settings.feature}</Row>
+          <Row href="/privacy">Privacy</Row>
+          <Row href="/terms">{t.settings.terms}</Row>
           {isAdminEmail(email) && (
             <Row href="/admin" className="text-gold">
               Admin
@@ -144,6 +161,30 @@ export default async function SettingsPage() {
           {t.settings.signOut}
         </button>
       </form>
+
+      <details className="group rounded-[14px] border border-cream/10 bg-surface-panel">
+        <summary className="min-h-12 px-4 flex items-center justify-between cursor-pointer list-none font-body font-semibold text-sm text-muted">
+          {t.settings.deleteAccount}
+          <span className="text-muted group-open:rotate-90 transition-transform">›</span>
+        </summary>
+        <form action={deleteAccountAction} className="px-4 pb-4 flex flex-col gap-2.5">
+          <p className="font-body text-[13px] leading-[1.4]! text-muted">{t.settings.deleteAccountBody}</p>
+          <label htmlFor="confirm-delete" className="font-body font-semibold text-xs text-soft">
+            {t.settings.deleteAccountType}
+          </label>
+          <input
+            id="confirm-delete"
+            name="confirm"
+            autoComplete="off"
+            autoCapitalize="characters"
+            placeholder="DELETE"
+            className="h-11 rounded-md bg-surface-raised border border-line px-3.5 font-heading font-bold tracking-[0.1em] text-cream placeholder:text-cream/25 outline-none"
+          />
+          <button type="submit" className="h-11 rounded-md bg-red text-ink font-heading font-extrabold text-sm tracking-[0.06em] uppercase">
+            {t.settings.deleteAccountCta}
+          </button>
+        </form>
+      </details>
     </Screen>
   );
 }

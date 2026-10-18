@@ -316,6 +316,19 @@ export const tournamentMatches = pgTable(
  * visible to admins.
  * --------------------------------------------------------------------- */
 
+/** Web Push subscriptions — one per device/browser that turned on
+ * notifications. Dead endpoints are pruned when a send returns 404/410. */
+export const pushSubscriptions = pgTable("push_subscription", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  endpoint: text("endpoint").notNull().unique(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 export const feedbackTypeEnum = pgEnum("feedback_type", ["bug", "idea", "other"]);
 export const feedbackStatusEnum = pgEnum("feedback_status", ["new", "under_review", "planned", "in_progress", "done", "declined"]);
 

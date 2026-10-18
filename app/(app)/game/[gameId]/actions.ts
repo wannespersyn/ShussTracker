@@ -2,9 +2,14 @@
 
 import { BLOB_ACCESS } from "@/lib/photo";
 import { eq } from "drizzle-orm";
+import { redirect } from "next/navigation";
+import { after } from "next/server";
+import { notifyComment, notifyReaction } from "@/lib/notify";
 import { revalidatePath } from "next/cache";
+import { invalidateCrew } from "@/lib/cache-tags";
+import { canDeleteGame } from "@/lib/db/game-permissions";
 import { db } from "@/lib/db";
-import { games } from "@/lib/db/schema";
+import { games, tournamentMatches } from "@/lib/db/schema";
 import { requireUserId, requireGroupMember } from "@/lib/db/authz";
 import { addComment, deleteComment, getComment, toggleReaction, type Reaction } from "@/lib/db/activity";
 
@@ -27,6 +32,7 @@ export async function addCommentAction(gameId: string, formData: FormData) {
   if (!text) return;
 
   await addComment(gameId, userId, text);
+  after(() => notifyComment(gameId, userId, text).catch(() => {}));
   revalidatePath(`/game/${gameId}`);
 }
 
@@ -46,7 +52,8 @@ export async function toggleReactionAction(gameId: string, reaction: Reaction) {
   const userId = await requireUserId();
   await requireGameAccess(gameId, userId);
 
-  await toggleReaction(gameId, userId, reaction);
+  const added = await toggleReaction(gameId, userId, reaction);
+  if (added) after(() => notifyReaction(gameId, userId, reaction).catch(() => {}));
   revalidatePath(`/game/${gameId}`);
 }
 
@@ -70,4 +77,24 @@ export async function uploadGamePhotoAction(gameId: string, formData: FormData):
   await db.update(games).set({ photoUrl: blob.url }).where(eq(games.id, gameId));
   revalidatePath(`/game/${gameId}`);
   return { ok: true };
+}
+
+/** Deletes a game for good (teams, players, shots, comments and reactions
+ * cascade), removes its photo from Blob and refreshes the crew's stats.
+ * Allowed for whoever logged it, the crew owner and app admins; tournament
+ * games are refused because the bracket depends on them. */
+export async function deleteGameAction(gameId: string) {
+  const userId = await requireUserId();
+  const game = await requireGameAccess(gameId, userId);
+  if (!(await canDeleteGame(game, userId))) throw new Error("Not allowed");
+  const inTournament = await db.query.tournamentMatches.findFirst({ where: eq(tournamentMatches.gameId, gameId), columns: { id: true } });
+  if (inTournament) throw new Error("This game is part of a tournament");
+
+  await db.delete(games).where(eq(games.id, gameId));
+  if (game.photoUrl && process.env.BLOB_READ_WRITE_TOKEN) {
+    const { del } = await import("@vercel/blob");
+    await del(game.photoUrl).catch(() => {});
+  }
+  invalidateCrew(game.groupId);
+  redirect(game.groupId ? `/crews/${game.groupId}/feed` : "/home");
 }
