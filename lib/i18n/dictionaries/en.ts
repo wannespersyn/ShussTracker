@@ -104,6 +104,10 @@ export const en = {
     recapSub: "Share it to your story",
     vs: "Head-to-head",
     rankLine: "{crew} · #{r} of {n} · Elo {e}",
+    bestStreak: "Longest win streak",
+    streakRecord: "Crew record 🏆",
+    streakVsRecord: "Crew record: {n}W · {name}",
+    streakNow: "Now: {n}W",
   },
   log: {
     title: "Log a game",

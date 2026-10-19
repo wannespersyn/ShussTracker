@@ -1,4 +1,5 @@
 import { ELO_BASE, ELO_K } from "@/lib/elo";
+import { wilsonLowerBound } from "@/lib/ranking";
 
 /* -----------------------------------------------------------------------
  * Crew insights — everything the v2 scoreboard screens show (rank moves,
@@ -7,6 +8,10 @@ import { ELO_BASE, ELO_K } from "@/lib/elo";
  * lib/db/crew-insights.ts. Crew histories are small (hundreds of games),
  * so replaying them in memory per request is cheap and keeps every number
  * consistent with every other one.
+ *
+ * Crew rank = Wilson lower bound of the win rate (lib/ranking.ts), so playing
+ * more games counts: 20–8 outranks a lucky 3–0. Elo stays as a stat (and for
+ * Chwazi balancing / duo strength) but no longer decides the order.
  * --------------------------------------------------------------------- */
 
 export type InsightPlayerRef = { id: string; name: string; isGuest: boolean };
@@ -128,6 +133,9 @@ export function buildCrewInsights(
   const ratingWeekAgo = new Map<string, number>();
   const results = new Map<string, ("W" | "L")[]>();
   const mama = new Map<string, number>();
+  /** Games / wins as they stood a week ago, for the weekly rank move. */
+  const gamesThen = new Map<string, number>();
+  const winsThen = new Map<string, number>();
   const maxMamaGame = new Map<string, number>();
   const comeback = new Set<string>();
   const breaks = new Map<string, number>();
@@ -196,6 +204,10 @@ export function buildCrewInsights(
         const list = results.get(p.id) ?? [];
         list.push(won ? "W" : "L");
         results.set(p.id, list);
+        if (game.playedAt.getTime() <= weekAgo) {
+          gamesThen.set(p.id, (gamesThen.get(p.id) ?? 0) + 1);
+          if (won) winsThen.set(p.id, (winsThen.get(p.id) ?? 0) + 1);
+        }
         mama.set(p.id, (mama.get(p.id) ?? 0) + p.mama);
         maxMamaGame.set(p.id, Math.max(maxMamaGame.get(p.id) ?? 0, p.mama));
         const line = acc.lines.get(p.id) ?? { games: 0, wins: 0, mama: 0 };
@@ -255,6 +267,8 @@ export function buildCrewInsights(
       elo: Math.round(ratingOf(id)),
       eloThen: ratingWeekAgo.get(id) ?? ELO_BASE,
       playedThen: ratingWeekAgo.has(id),
+      scoreThen: wilsonLowerBound(winsThen.get(id) ?? 0, gamesThen.get(id) ?? 0),
+      gamesThen: gamesThen.get(id) ?? 0,
       games: res.length,
       wins,
       losses: res.length - wins,
@@ -277,8 +291,13 @@ export function buildCrewInsights(
   // Players who haven't played yet sit at the 1000 start rating; they must not
   // outrank anyone who has, so they always sort after every active player.
   const active = (x: { games: number }) => (x.games > 0 ? 0 : 1);
-  const byNow = [...base].sort((x, y) => active(x) - active(y) || y.elo - x.elo || y.games - x.games);
-  const byThen = [...base].sort((x, y) => Number(y.playedThen) - Number(x.playedThen) || y.eloThen - x.eloThen || y.games - x.games);
+  const score = (x: { wins: number; games: number }) => wilsonLowerBound(x.wins, x.games);
+  const byNow = [...base].sort(
+    (x, y) => active(x) - active(y) || score(y) - score(x) || y.wins - x.wins || y.games - x.games || y.elo - x.elo,
+  );
+  const byThen = [...base].sort(
+    (x, y) => Number(y.playedThen) - Number(x.playedThen) || y.scoreThen - x.scoreThen || y.gamesThen - x.gamesThen || y.eloThen - x.eloThen,
+  );
   const thenRank = new Map(byThen.map((p, i) => [p.userId, i + 1]));
   const players: PlayerInsight[] = byNow.map((p, i) => ({
     userId: p.userId,

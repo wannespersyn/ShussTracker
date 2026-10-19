@@ -1,3 +1,7 @@
+/**
+ * Player profile — crew rank line, headline stats, longest win streak (vs the
+ * crew record), Elo sparkline, achievements strip, nemesis and head-to-heads.
+ */
 import Link from "next/link";
 import { eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
@@ -45,6 +49,11 @@ export default async function PlayerProfilePage({ params }: Readonly<{ params: P
   const insights = shared ? await getCrewInsights(shared.id) : null;
   const me = insights?.players.find((p) => p.userId === viewedId);
   const rankedCount = insights?.players.filter((p) => p.games > 0).length ?? 0;
+  const recordHolder = insights?.players.reduce<(typeof insights.players)[number] | null>(
+    (best, p) => (!best || p.bestWinStreak > best.bestWinStreak ? p : best),
+    null,
+  );
+  const holdsRecord = !!me && !!recordHolder && me.bestWinStreak >= recordHolder.bestWinStreak;
   const name = player.name ?? t.more.player;
   const earned = achievements.filter((a) => a.got);
   const nextUp = achievements.filter((a) => !a.got).sort((a, b) => b.have / b.need - a.have / a.need)[0];
@@ -88,6 +97,23 @@ export default async function PlayerProfilePage({ params }: Readonly<{ params: P
               { label: t.common.mama, value: me.mama, tone: "red" },
             ]}
           />
+          {me.bestWinStreak > 0 && (
+            <Panel className={cn("flex items-center gap-3.5 px-4 py-3.5 rounded-[18px]", holdsRecord && "border-[#ff7a2f]/60")}>
+              <svg viewBox="0 0 24 24" className="w-9 h-9 shrink-0 text-[#ff7a2f]" fill="currentColor" aria-hidden="true">
+                <path d="M12 2c1.2 4.4 5.5 6.4 5.5 12a5.5 5.5 0 0 1-11 0c0-3.4 2.2-4.6 2.2-7.6 1.1 1.1 2.2 2.2 3.3 2.2 0-2.2-1.1-4.4 0-6.6z" />
+              </svg>
+              <span className="flex-1 min-w-0 flex flex-col gap-0.5">
+                <Kicker>{t.profile.bestStreak}</Kicker>
+                <span className="font-body text-xs text-muted truncate">
+                  {holdsRecord
+                    ? t.profile.streakRecord
+                    : format(t.profile.streakVsRecord, { n: recordHolder!.bestWinStreak, name: firstName(recordHolder!.name) })}
+                  {me.streak?.kind === "W" && me.streak.n > 0 && ` · ${format(t.profile.streakNow, { n: me.streak.n })}`}
+                </span>
+              </span>
+              <span className="font-display font-extrabold text-[40px] leading-none tabular-nums text-[#ff7a2f]">{me.bestWinStreak}W</span>
+            </Panel>
+          )}
           {history.length > 1 && (
             <Panel className="flex flex-col gap-2 px-4 py-3.5 rounded-[18px]">
               <div className="flex justify-between items-baseline">

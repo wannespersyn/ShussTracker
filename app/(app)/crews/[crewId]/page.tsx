@@ -1,3 +1,7 @@
+/**
+ * Crew leaderboard — players (ranked by Wilson win-rate, so volume counts) or
+ * duos, with move/streak/record chips, tournaments, guests and crew links.
+ */
 import Link from "next/link";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
@@ -62,6 +66,7 @@ export default async function CrewPage({
     .sort((a, b) => wilsonLowerBound(b.wins, b.games) - wilsonLowerBound(a.wins, a.games) || b.games - a.games);
   const recordStreak = Math.max(0, ...insights.duos.map((d) => d.bestWinStreak));
   const mostPlayed = Math.max(0, ...insights.duos.map((d) => d.games));
+  const playerRecord = Math.max(0, ...ranked.map((p) => p.bestWinStreak));
 
   return (
     <Screen>
@@ -131,7 +136,7 @@ export default async function CrewPage({
             ))
           )
         ) : (
-          [...ranked, ...unplayed].map((p, i) => <PlayerRow key={p.userId} p={p} index={i} userId={userId} t={t} />)
+          [...ranked, ...unplayed].map((p, i) => <PlayerRow key={p.userId} p={p} index={i} userId={userId} recordStreak={playerRecord} t={t} />)
         )}
       </section>
       {showDuos && minDuoGames > 1 && <span className="font-body text-xs text-muted -mt-1.5">{format(t.crew.minGames, { n: minDuoGames })}</span>}
@@ -219,7 +224,13 @@ export default async function CrewPage({
 
 type T = Awaited<ReturnType<typeof getT>>;
 
-function PlayerRow({ p, index, userId, t }: Readonly<{ p: PlayerInsight; index: number; userId: string; t: T }>) {
+function PlayerRow({
+  p,
+  index,
+  userId,
+  recordStreak,
+  t,
+}: Readonly<{ p: PlayerInsight; index: number; userId: string; recordStreak: number; t: T }>) {
   const isMe = p.userId === userId;
   const played = p.games > 0;
   return (
@@ -239,6 +250,9 @@ function PlayerRow({ p, index, userId, t }: Readonly<{ p: PlayerInsight; index: 
         <span className="flex items-center gap-1.25 mt-0.75 overflow-hidden">
           {played && <MoveChip move={p.move} />}
           {p.streak && p.streak.kind === "W" && p.streak.n >= 3 && <Chip tone="hot">{format(t.crew.streak, { n: p.streak.n })}</Chip>}
+          {played && recordStreak >= 3 && p.bestWinStreak === recordStreak && (
+            <Chip tone="hot">{format(t.crew.record, { n: recordStreak })}</Chip>
+          )}
           {p.isGuest && <Chip tone="guest">{t.common.guest.toUpperCase()}</Chip>}
           <FormDots form={p.form.slice(-5)} />
         </span>

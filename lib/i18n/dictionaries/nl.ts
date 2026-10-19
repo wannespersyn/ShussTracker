@@ -103,6 +103,10 @@ export const nl: Dictionary = {
     recapSub: "Deel hem in je story",
     vs: "Head-to-head",
     rankLine: "{crew} · #{r} van {n} · Elo {e}",
+    bestStreak: "Langste win streak",
+    streakRecord: "Crewrecord 🏆",
+    streakVsRecord: "Crewrecord: {n}W · {name}",
+    streakNow: "Nu: {n}W",
   },
   log: {
     title: "Game loggen",
