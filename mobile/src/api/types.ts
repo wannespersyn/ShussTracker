@@ -105,3 +105,14 @@ export type GameDetail = {
   comments: GameComment[];
   reactions: ReactionTally[];
 };
+
+export type FeedGame = {
+  id: string;
+  playedAt: string;
+  matType: "2" | "4" | "8";
+  teams: { label: string; finalRank: number | null; playerNames: string[] }[];
+  commentCount: number;
+  reactions: ReactionTally[];
+  mama: number;
+  photoPath: string | null;
+};

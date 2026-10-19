@@ -656,5 +656,8 @@ export const nl: Dictionary = {
     noCrewBody: "Join of start voorlopig een crew op de Shussapp-website — crews beheren komt binnenkort in de app.",
     comingSoon: "Binnenkort in de app",
     crewOf: "{n} spelers",
+    takePhoto: "Foto nemen",
+    choosePhoto: "Kies uit je foto's",
+    uploading: "Uploaden…",
   },
 };

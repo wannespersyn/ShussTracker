@@ -657,5 +657,8 @@ export const en = {
     noCrewBody: "Join or start a crew on the Shussapp website for now — crew setup comes to the app soon.",
     comingSoon: "Coming soon in the app",
     crewOf: "{n} players",
+    takePhoto: "Take a photo",
+    choosePhoto: "Choose from library",
+    uploading: "Uploading…",
   },
 };

@@ -3,10 +3,11 @@
  *
  * One game's result: teams in finishing order with each player's mama hits
  * and Elo change, the shot-zone totals when tracked, the mat photo,
- * reactions and trash talk (comments). The logger, crew owner or an admin
- * can delete it.
+ * reactions and trash talk (comments). Anyone in the crew can add or change
+ * the photo; the logger, crew owner or an admin can delete the game.
  *
- * Data: GET/DELETE /api/v1/games/{id}, POST …/reactions, POST/DELETE …/comments
+ * Data: GET/DELETE /api/v1/games/{id}, POST …/reactions, POST/DELETE …/comments,
+ *       POST …/photo
  */
 import { useState } from "react";
 import { Alert, KeyboardAvoidingView, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
@@ -20,6 +21,7 @@ import { useCrew } from "@/lib/crew";
 import { format, useT } from "@/lib/i18n";
 import { useQuery } from "@/lib/useQuery";
 import { Avatar, CenterState, ErrorState, Kicker, Txt } from "@/components/ui";
+import { PhotoButton } from "@/components/game/PhotoButton";
 import { colors, fonts, radius } from "@/theme";
 
 const GLYPH: Record<Reaction, string> = { fire: "🔥", laugh: "😂", beer: "🍺", skull: "💀" };
@@ -33,6 +35,7 @@ export default function GameScreen() {
   const q = useQuery<GameDetail>(`/games/${id}`);
   const [reactions, setReactions] = useState<ReactionTally[] | null>(null);
   const [comments, setComments] = useState<GameComment[] | null>(null);
+  const [photoPath, setPhotoPath] = useState<string | null | undefined>(undefined);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
 
@@ -42,6 +45,7 @@ export default function GameScreen() {
   const { game } = q.data;
   const shownReactions = reactions ?? q.data.reactions;
   const shownComments = comments ?? q.data.comments;
+  const shownPhoto = photoPath === undefined ? game.photoPath : photoPath;
   const multi = game.teams.length > 2;
   const ORD = [t.more.ord1, t.more.ord2, t.more.ord3, t.more.ord4];
   const when = new Intl.DateTimeFormat(locale === "nl" ? "nl-BE" : "en-GB", {
@@ -110,9 +114,9 @@ export default function GameScreen() {
           refreshControl={<RefreshControl refreshing={q.refreshing} onRefresh={q.reload} tintColor={colors.gold} />}
           keyboardShouldPersistTaps="handled"
         >
-          {game.photoPath && (
+          {shownPhoto && (
             <Image
-              source={{ uri: apiUrl(game.photoPath), headers: authHeaders() }}
+              source={{ uri: apiUrl(shownPhoto), headers: authHeaders() }}
               style={styles.photo}
               contentFit="cover"
               accessibilityLabel={t.game.photoAlt}
@@ -159,6 +163,8 @@ export default function GameScreen() {
               ))}
             </View>
           )}
+
+          <PhotoButton gameId={game.id} hasPhoto={!!shownPhoto} onUploaded={setPhotoPath} />
 
           <Kicker>{t.game.reactions}</Kicker>
           <View style={{ flexDirection: "row", gap: 8 }}>

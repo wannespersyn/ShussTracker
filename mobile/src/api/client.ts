@@ -5,7 +5,8 @@
  * token and Accept-Language, parses JSON and turns error bodies into
  * ApiError. The token lives in the device keychain (expo-secure-store).
  *
- * Exports: api, ApiError, apiUrl, tokenStore, setUnauthorizedHandler, setApiLocale
+ * Exports: api, upload, ApiError, apiUrl, authHeaders, tokenStore,
+ *          setUnauthorizedHandler, setApiLocale
  * Env: EXPO_PUBLIC_API_URL (defaults to the production site).
  */
 import * as SecureStore from "expo-secure-store";
@@ -75,6 +76,26 @@ export async function api<T>(path: string, { method = "GET", body }: Options = {
     throw new ApiError(0, "network", "network");
   }
   if (res.status === 204) return undefined as T;
+  const json = (await res.json().catch(() => null)) as { error?: { code: string; message: string } } | null;
+  if (!res.ok) {
+    if (res.status === 401 && token) onUnauthorized?.();
+    throw new ApiError(res.status, json?.error?.code ?? "unknown", json?.error?.message ?? `HTTP ${res.status}`);
+  }
+  return json as T;
+}
+
+/** Multipart upload to `/api/v1{path}` (e.g. a game photo). */
+export async function upload<T>(path: string, form: FormData): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(apiUrl(`/api/v1${path}`), {
+      method: "POST",
+      headers: { accept: "application/json", "accept-language": locale, ...authHeaders() },
+      body: form,
+    });
+  } catch {
+    throw new ApiError(0, "network", "network");
+  }
   const json = (await res.json().catch(() => null)) as { error?: { code: string; message: string } } | null;
   if (!res.ok) {
     if (res.status === 401 && token) onUnauthorized?.();
