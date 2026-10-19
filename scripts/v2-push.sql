@@ -1,6 +1,15 @@
 -- Migrations 0010 + 0011 (push notifications, per-device language) for when you'd rather paste SQL than
 -- run `drizzle-kit migrate`. Safe to re-run.
 BEGIN;
+
+-- Production was set up with `drizzle-kit push`, so drizzle's bookkeeping
+-- table may not exist yet. Create it (same shape drizzle-kit uses).
+CREATE SCHEMA IF NOT EXISTS "drizzle";
+CREATE TABLE IF NOT EXISTS "drizzle"."__drizzle_migrations" (
+  "id" serial PRIMARY KEY,
+  "hash" text NOT NULL,
+  "created_at" bigint
+);
 CREATE TABLE IF NOT EXISTS "push_subscription" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
   "user_id" uuid NOT NULL REFERENCES "public"."user"("id") ON DELETE cascade,
