@@ -50,6 +50,7 @@ function RootStack() {
         <Stack.Screen name="game/[id]" />
         <Stack.Screen name="player/[id]" />
         <Stack.Screen name="crews/new" options={{ presentation: "modal" }} />
+        <Stack.Screen name="chwazi" />
       </Stack.Protected>
       <Stack.Protected guard={status === "signedOut"}>
         <Stack.Screen name="sign-in" />

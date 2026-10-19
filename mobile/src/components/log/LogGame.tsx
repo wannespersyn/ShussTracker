@@ -9,13 +9,15 @@
  *
  * Data: POST /api/v1/games; calls `onSaved(gameId)` afterwards.
  * Notes: the crew's "track every shot" setting is the default for step 2.
+ * Teams picked in Chwazi arrive as `presetPlayerIds` and skip step 1.
  */
 import { useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { router } from "expo-router";
 import { api, ApiError } from "@/api/client";
 import type { CrewDetail } from "@/api/types";
 import { format, useT } from "@/lib/i18n";
-import { pairIntoSolos, shortNamesFor, shuffleIntoDuos, type Team } from "@/lib/teams";
+import { pairIntoDuos, pairIntoSolos, shortNamesFor, shuffleIntoDuos, type Team } from "@/lib/teams";
 import { Avatar, Button, Kicker, Segmented, Txt } from "@/components/ui";
 import { colors, fonts, radius } from "@/theme";
 
@@ -30,7 +32,16 @@ const ZONES: { hit: FieldHit; label: string }[] = [
 ];
 const needFor = (m: Mat) => (m === "8" ? 8 : m === "2" ? 2 : 4);
 
-export function LogGame({ detail, onSaved }: { detail: CrewDetail; onSaved: (gameId: string) => void }) {
+export function LogGame({
+  detail,
+  onSaved,
+  presetPlayerIds,
+}: {
+  detail: CrewDetail;
+  onSaved: (gameId: string) => void;
+  /** Ordered player ids from Chwazi (pairs for duos); opens on the result step. */
+  presetPlayerIds?: string[];
+}) {
   const { t } = useT();
   const ORD = [t.more.ord1, t.more.ord2, t.more.ord3, t.more.ord4];
 
@@ -45,11 +56,16 @@ export function LogGame({ detail, onSaved }: { detail: CrewDetail; onSaved: (gam
     [detail],
   );
   const short = useMemo(() => shortNamesFor(roster), [roster]);
+  const [preset] = useState(() => {
+    const players = (presetPlayerIds ?? []).map((id) => roster.find((p) => p.id === id)).filter((p) => !!p);
+    if (![2, 4, 8].includes(players.length) || players.length !== presetPlayerIds?.length) return null;
+    return { mat: String(players.length) as Mat, ids: players.map((p) => p.id), teams: players.length === 2 ? pairIntoSolos(players) : pairIntoDuos(players) };
+  });
 
-  const [step, setStep] = useState<"setup" | "result">("setup");
-  const [mat, setMat] = useState<Mat>("4");
-  const [picked, setPicked] = useState<string[]>([]);
-  const [teams, setTeams] = useState<Team[] | null>(null);
+  const [step, setStep] = useState<"setup" | "result">(preset ? "result" : "setup");
+  const [mat, setMat] = useState<Mat>(preset?.mat ?? "4");
+  const [picked, setPicked] = useState<string[]>(preset?.ids ?? []);
+  const [teams, setTeams] = useState<Team[] | null>(preset?.teams ?? null);
   const [swapFrom, setSwapFrom] = useState<string | null>(null);
   const [order, setOrder] = useState<string[]>([]);
   const [zones, setZones] = useState(detail.crew.trackShotZones);
@@ -153,7 +169,13 @@ export function LogGame({ detail, onSaved }: { detail: CrewDetail; onSaved: (gam
   if (step === "setup") {
     return (
       <ScrollView contentContainerStyle={styles.content}>
-        <Txt v="heading" style={styles.title}>{t.log.title}</Txt>
+        <View style={styles.between}>
+          <View style={{ width: 84 }} />
+          <Txt v="heading" style={styles.title}>{t.log.title}</Txt>
+          <Pressable onPress={() => router.push("/chwazi")} style={styles.chwazi}>
+            <Txt style={{ fontFamily: fonts.bodySemi, fontSize: 13 }}>🎲 Chwazi</Txt>
+          </Pressable>
+        </View>
         <Segmented
           value={mat}
           onChange={pickMat}
@@ -357,6 +379,7 @@ export function LogGame({ detail, onSaved }: { detail: CrewDetail; onSaved: (gam
 const styles = StyleSheet.create({
   content: { padding: 20, gap: 14, paddingBottom: 48 },
   title: { textAlign: "center", fontSize: 24 },
+  chwazi: { width: 84, height: 36, borderRadius: 999, alignItems: "center", justifyContent: "center", backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line },
   between: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
   count: { fontFamily: fonts.display, fontSize: 18, color: colors.muted },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },

@@ -51,7 +51,11 @@ export type DuoInsight = {
   losses: number;
   winPct: number;
   duoElo: number;
+  mamaA: number;
+  mamaB: number;
   bestWinStreak: number;
+  streak: Streak | null;
+  recent: { gameId: string; playedAt: string; won: boolean; opponents: string; mama: number; streakAfter: number }[];
 };
 
 export type SessionInsight = {

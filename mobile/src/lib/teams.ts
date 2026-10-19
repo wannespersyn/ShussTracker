@@ -5,7 +5,8 @@
  * solo "teams" for 1v1, and short display names that stay unique within a
  * group of players ("Jan", "Jan D." / "Jan V.").
  *
- * Exports: Team, shuffleIntoDuos, pairIntoSolos, shortNamesFor
+ * Exports: Team, shuffleIntoDuos, pairIntoDuos, balanceIntoDuos, pairIntoSolos,
+ *          shortNamesFor
  */
 export type Player = { id: string; name: string };
 export type Team = { id: string; label: string; players: Player[] };
@@ -19,11 +20,25 @@ function shuffle<T>(arr: T[]): T[] {
   return copy;
 }
 
-export function shuffleIntoDuos(players: Player[]): Team[] {
-  const order = shuffle(players);
+/** Consecutive pairs of an already-ordered list (0+1, 2+3, …). */
+export function pairIntoDuos(order: Player[]): Team[] {
   const teams: Team[] = [];
   for (let i = 0; i < order.length; i += 2) teams.push({ id: `team-${i / 2}`, label: `Team ${i / 2 + 1}`, players: [order[i], order[i + 1]] });
   return teams;
+}
+
+export function shuffleIntoDuos(players: Player[]): Team[] {
+  return pairIntoDuos(shuffle(players));
+}
+
+/** Chwazi's "balance by Elo": strongest with weakest, next with next, so no
+ * duo is stacked; which pair lands in which slot is still random. */
+export function balanceIntoDuos(players: Player[], ratings: Record<string, number>): Team[] {
+  const sorted = [...players].sort((a, b) => (ratings[b.id] ?? 1000) - (ratings[a.id] ?? 1000));
+  const pairs: Player[] = [];
+  for (let lo = 0, hi = sorted.length - 1; lo < hi; lo++, hi--) pairs.push(sorted[lo], sorted[hi]);
+  const duos = pairIntoDuos(pairs);
+  return shuffle(duos).map((d, i) => ({ ...d, id: `team-${i}`, label: `Team ${i + 1}` }));
 }
 
 export function pairIntoSolos(players: Player[]): Team[] {
