@@ -2,13 +2,14 @@
  * Me tab — Route: /me
  *
  * Your own profile (rank, Elo history, stats, achievements, nemesis) with
- * the app settings below it: language (EN / NL, also used for errors and
+ * a way to join or start another crew, then the app settings: language (EN / NL, also used for errors and
  * push notifications) and sign out.
  *
  * Data: GET /api/v1/players/{myId}
  */
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { router } from "expo-router";
 import { useAuth } from "@/auth/AuthProvider";
 import type { PlayerProfile } from "@/api/types";
 import { useCrew } from "@/lib/crew";
@@ -43,6 +44,8 @@ export default function MeTab() {
             </Txt>
           </View>
         )}
+
+        <Button label={t.app.anotherCrew} kind="outline" onPress={() => router.push("/crews/new")} />
 
         <Kicker style={{ marginTop: 8 }}>{t.settings.title}</Kicker>
         <Card style={{ gap: 10 }}>

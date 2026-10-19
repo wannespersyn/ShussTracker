@@ -4,14 +4,15 @@
  * The selected crew, like the website's crew page, in two sections:
  * the leaderboard (players or duos: rank, name with streak / guest chips and
  * last-5 form, W–L, win % and Elo) and the feed of recent games.
- * Pull to refresh.
+ * The owner can share the invite (code + join link). Pull to refresh.
  *
  * Data: GET /api/v1/crews/{crewId}, GET /api/v1/crews/{crewId}/feed
  */
 import { useState } from "react";
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
+import { apiUrl } from "@/api/client";
 import { useAuth } from "@/auth/AuthProvider";
 import { useCrew } from "@/lib/crew";
 import { format, useT } from "@/lib/i18n";
@@ -19,6 +20,7 @@ import { useQuery } from "@/lib/useQuery";
 import type { CrewDetail, FeedGame } from "@/api/types";
 import { CenterState, Chip, ErrorState, FormDots, Segmented, Txt } from "@/components/ui";
 import { CrewSwitcher } from "@/components/CrewSwitcher";
+import { NoCrew } from "@/components/crew/NoCrew";
 import { Feed } from "@/components/crew/Feed";
 import { colors, fonts } from "@/theme";
 
@@ -33,11 +35,16 @@ export default function Crew() {
   const q = useQuery<CrewDetail>(crew ? `/crews/${crew.id}` : null, version);
   const feed = useQuery<{ games: FeedGame[] }>(crew && section === "feed" ? `/crews/${crew.id}/feed?limit=40` : null, version);
 
-  if (!crew) return <CenterState title={t.crews.none} body={t.app.noCrewBody} />;
+  if (!crew) return <NoCrew />;
   if (q.error && !q.data) return <ErrorState error={q.error} onRetry={q.reload} />;
   if (!q.data) return <CenterState />;
 
   const { insights } = q.data;
+
+  function invite(crewName: string, code: string) {
+    const url = apiUrl(`/crews/join?code=${code}`);
+    void Share.share({ message: `${format(t.manage.shareTitle, { crew: crewName })} — ${t.join.code}: ${code}\n${url}` });
+  }
   const userId = me?.user.id;
   const players = [...insights.players.filter((p) => p.games > 0), ...insights.players.filter((p) => p.games === 0)];
   const minDuoGames = insights.duos.filter((d) => d.games >= 2).length >= 5 ? 2 : 1;
@@ -60,9 +67,16 @@ export default function Crew() {
           <Txt v="display" numberOfLines={1} style={{ textTransform: "uppercase" }}>
             {crew.name}
           </Txt>
-          <Txt style={{ color: colors.muted, fontSize: 13 }}>
-            {format(t.crew.meta, { p: insights.players.filter((p) => p.games > 0).length, g: insights.totalGames })}
-          </Txt>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+            <Txt style={{ color: colors.muted, fontSize: 13, flex: 1 }}>
+              {format(t.crew.meta, { p: insights.players.filter((p) => p.games > 0).length, g: insights.totalGames })}
+            </Txt>
+            {q.data.crew.inviteCode && (
+              <Pressable onPress={() => invite(q.data!.crew.name, q.data!.crew.inviteCode!)} style={styles.invite}>
+                <Text style={styles.inviteText}>{`+ ${t.app.invite}`}</Text>
+              </Pressable>
+            )}
+          </View>
         </View>
         <CrewSwitcher />
         <View style={styles.tabs}>
@@ -174,6 +188,8 @@ export default function Crew() {
 }
 
 const styles = StyleSheet.create({
+  invite: { height: 32, paddingHorizontal: 12, borderRadius: 999, justifyContent: "center", backgroundColor: colors.gold },
+  inviteText: { fontFamily: fonts.headBold, fontSize: 13, letterSpacing: 0.8, color: colors.ink, textTransform: "uppercase" },
   tabs: { flexDirection: "row", gap: 18, borderBottomWidth: 1, borderBottomColor: colors.line },
   tab: { paddingVertical: 8, borderBottomWidth: 2, borderBottomColor: "transparent", marginBottom: -1 },
   tabOn: { borderBottomColor: colors.gold },

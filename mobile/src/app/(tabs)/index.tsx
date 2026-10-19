@@ -17,6 +17,7 @@ import { useQuery } from "@/lib/useQuery";
 import type { CrewDetail } from "@/api/types";
 import { Avatar, Card, CenterState, Chip, ErrorState, FormDots, Kicker, StatTile, Txt } from "@/components/ui";
 import { CrewSwitcher } from "@/components/CrewSwitcher";
+import { NoCrew } from "@/components/crew/NoCrew";
 import { colors, fonts } from "@/theme";
 
 const first = (name: string) => name.trim().split(/\s+/)[0] ?? name;
@@ -27,7 +28,7 @@ export default function Home() {
   const { crew, version } = useCrew();
   const q = useQuery<CrewDetail>(crew ? `/crews/${crew.id}` : null, version);
 
-  if (!crew) return <CenterState title={t.home.noCrewTitle} body={t.app.noCrewBody} />;
+  if (!crew) return <NoCrew />;
   if (q.error && !q.data) return <ErrorState error={q.error} onRetry={q.reload} />;
   if (!q.data) return <CenterState />;
 
