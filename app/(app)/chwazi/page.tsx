@@ -8,6 +8,7 @@ import { ChwaziPicker } from "@/components/chwazi/ChwaziPicker";
 import { Card } from "@/components/ui";
 import { ChevronRightIcon } from "@/components/ui/icons";
 
+
 export default async function ChwaziPage({
   searchParams,
 }: Readonly<{ searchParams: Promise<{ crewId?: string; count?: string }> }>) {
