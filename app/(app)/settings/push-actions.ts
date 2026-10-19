@@ -2,12 +2,13 @@
 
 import { requireUserId } from "@/lib/db/authz";
 import { removePushSubscription, savePushSubscription, sendPush } from "@/lib/push";
+import { getLocale } from "@/lib/i18n/server";
 
 export async function subscribePushAction(sub: { endpoint: string; keys: { p256dh: string; auth: string } }) {
   const userId = await requireUserId();
   if (!sub?.endpoint || !sub.keys?.p256dh || !sub.keys?.auth) return { ok: false };
-  await savePushSubscription(userId, { endpoint: sub.endpoint, p256dh: sub.keys.p256dh, auth: sub.keys.auth });
-  await sendPush([userId], { title: "Notifications on", body: "You’ll hear about comments, reactions and games you’re logged in.", url: "/settings" });
+  await savePushSubscription(userId, { endpoint: sub.endpoint, p256dh: sub.keys.p256dh, auth: sub.keys.auth, locale: await getLocale() });
+  await sendPush([userId], (t) => ({ title: t.push.onTitle, body: t.push.onBody, url: "/settings" }));
   return { ok: true };
 }
 

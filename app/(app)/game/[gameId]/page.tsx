@@ -15,12 +15,11 @@ import { photoSrc } from "@/lib/photo";
 import { Avatar, Kicker, Screen } from "@/components/v2";
 import { PhotoUpload } from "@/components/game/PhotoUpload";
 import { GamePhoto } from "@/components/game/GamePhoto";
-import { ReactionIcon, REACTION_LABEL } from "@/components/game/ReactionIcon";
+import { ReactionIcon } from "@/components/game/ReactionIcon";
 import { addCommentAction, deleteCommentAction, deleteGameAction, toggleReactionAction, uploadGamePhotoAction } from "./actions";
 import { canDeleteGame } from "@/lib/db/game-permissions";
 import { ConfirmForm } from "@/components/ui";
 
-const ORD = ["1ST", "2ND", "3RD", "4TH"];
 
 export default async function GamePage({ params }: Readonly<{ params: Promise<{ gameId: string }> }>) {
   const { gameId } = await params;
@@ -126,17 +125,17 @@ export default async function GamePage({ params }: Readonly<{ params: Promise<{ 
                   won ? "bg-amber text-ink" : "bg-chip text-muted",
                 )}
               >
-                {multi ? ORD[(tm.finalRank ?? i + 1) - 1] : won ? "W" : "L"}
+                {multi ? [t.more.ord1, t.more.ord2, t.more.ord3, t.more.ord4][(tm.finalRank ?? i + 1) - 1] : won ? "W" : "L"}
               </span>
               <span className="flex-1 min-w-0 flex flex-col">
                 <span className="font-heading font-bold text-[19px] uppercase truncate">
-                  {tm.players.map((p) => firstName(p.user.name ?? "Player")).join(" & ")}
+                  {tm.players.map((p) => firstName(p.user.name ?? t.more.player)).join(" & ")}
                 </span>
                 <span className="font-body text-xs text-muted truncate">
                   {tm.players
                     .map((p) => {
                       const m = p.shots.filter((s) => s.fieldHit === "mama").length;
-                      return m > 0 ? `${firstName(p.user.name ?? "")} ${m} mama` : null;
+                      return m > 0 ? `${firstName(p.user.name ?? "")} ${format(t.feed.mamaN, { n: m })}` : null;
                     })
                     .filter(Boolean)
                     .join(" · ") || "—"}
@@ -164,7 +163,7 @@ export default async function GamePage({ params }: Readonly<{ params: Promise<{ 
               <div key={fh} className="rounded-sm bg-surface-deep border border-line py-2 text-center">
                 <div className={cn("font-display font-extrabold text-xl", fh === "mama" ? "text-red" : "text-cream")}>{n}</div>
                 <div className="font-body font-semibold text-[10px] uppercase tracking-[0.08em] text-muted">
-                  {fh === "mama" ? "Mama" : fh === "miss" ? "Miss" : `Field ${fh}`}
+                  {fh === "mama" ? t.common.mama : fh === "miss" ? t.more.miss : format(t.more.field, { n: fh })}
                 </div>
               </div>
             );
@@ -180,7 +179,7 @@ export default async function GamePage({ params }: Readonly<{ params: Promise<{ 
               <button
                 type="submit"
                 aria-pressed={tally.reactedByMe}
-                aria-label={REACTION_LABEL[r]}
+                aria-label={{ fire: t.more.reactFire, laugh: t.more.reactLaugh, beer: t.more.reactBeer, skull: t.more.reactSkull }[r]}
                 className={cn(
                   "w-full h-12 rounded-[14px] border-2 flex items-center justify-center gap-1.5",
                   tally.reactedByMe ? "bg-amber/13 border-gold text-gold" : "bg-surface-deep border-line text-soft",

@@ -3,9 +3,11 @@ import { db } from "@/lib/db";
 import { games, users } from "@/lib/db/schema";
 import { sendPush } from "@/lib/push";
 import { firstName } from "@/lib/insights";
+import { format } from "@/lib/i18n";
 
 /* What triggers a push. Called from server actions inside `after()`, so
- * the user who did the thing never waits on it. */
+ * the user who did the thing never waits on it. Payloads are built per
+ * receiver language via `sendPush(ids, (t) => …)`. */
 
 async function gamePeople(gameId: string) {
   const game = await db.query.games.findFirst({
@@ -18,7 +20,7 @@ async function gamePeople(gameId: string) {
 
 async function nameOf(userId: string) {
   const u = await db.query.users.findFirst({ where: eq(users.id, userId), columns: { name: true } });
-  return firstName(u?.name ?? "Someone");
+  return u?.name ? firstName(u.name) : null;
 }
 
 const playersOf = (game: NonNullable<Awaited<ReturnType<typeof gamePeople>>>) =>
@@ -29,17 +31,19 @@ export async function notifyComment(gameId: string, authorId: string, text: stri
   if (!game) return;
   const to = [...playersOf(game), game.createdBy].filter((id) => id !== authorId);
   const who = await nameOf(authorId);
-  await sendPush(to, { title: `${who} on your game`, body: text.slice(0, 140), url: `/game/${gameId}`, tag: `game-${gameId}-comments` });
+  await sendPush(to, (t) => ({ title: format(t.push.comment, { who: who ?? t.push.someone }), body: text.slice(0, 140), url: `/game/${gameId}`, tag: `game-${gameId}-comments` }));
 }
 
-const REACTION_WORD: Record<string, string> = { fire: "fire", laugh: "laughing", beer: "cheers", skull: "dead" };
 
 export async function notifyReaction(gameId: string, reactorId: string, reaction: string) {
   const game = await gamePeople(gameId);
   if (!game) return;
   const to = playersOf(game).filter((id) => id !== reactorId);
   const who = await nameOf(reactorId);
-  await sendPush(to, { title: `${who} reacted to your game`, body: `“${REACTION_WORD[reaction] ?? reaction}”`, url: `/game/${gameId}`, tag: `game-${gameId}-reactions` });
+  await sendPush(to, (t) => {
+    const word = { fire: t.more.reactFire, laugh: t.more.reactLaugh, beer: t.more.reactBeer, skull: t.more.reactSkull }[reaction] ?? reaction;
+    return { title: format(t.push.reacted, { who: who ?? t.push.someone }), body: `“${word}”`, url: `/game/${gameId}`, tag: `game-${gameId}-reactions` };
+  });
 }
 
 export async function notifyGameLogged(gameId: string, loggerId: string) {
@@ -56,11 +60,11 @@ export async function notifyGameLogged(gameId: string, loggerId: string) {
             .filter((x) => x !== t)
             .flatMap((x) => x.players.map((q) => firstName(q.user.name ?? "")))
             .join(" & ");
-          return sendPush([p.userId], {
-            title: t.finalRank === best ? "Win logged" : "Loss logged",
-            body: `${who} logged your game vs ${opponents}. Tap to roast or react.`,
+          return sendPush([p.userId], (d) => ({
+            title: t.finalRank === best ? d.push.win : d.push.loss,
+            body: format(d.push.loggedBody, { who: who ?? d.push.someone, opp: opponents }),
             url: `/game/${gameId}`,
-          });
+          }));
         }),
     ),
   );

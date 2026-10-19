@@ -24,7 +24,7 @@ export default async function SettingsPage() {
   const crew = crews[0];
   const crewInfo = crew ? await getCrew(crew.id) : null;
   const owns = crew && crew.createdBy === userId;
-  const planLabel = crewInfo?.plan === "founding" ? "FOUNDING" : crewInfo?.plan === "pro" ? "PRO" : "FREE";
+  const planLabel = crewInfo?.plan === "founding" ? "FOUNDING" : crewInfo?.plan === "pro" ? "PRO" : t.more.planFree;
 
   return (
     <Screen nav={false} className="gap-4 pb-6">
@@ -143,7 +143,7 @@ export default async function SettingsPage() {
         <Group>
           <Row href="/feedback?type=bug">{t.settings.feedback}</Row>
           <Row href="/feedback?type=idea">{t.settings.feature}</Row>
-          <Row href="/privacy">Privacy</Row>
+          <Row href="/privacy">{t.more.privacy}</Row>
           <Row href="/terms">{t.settings.terms}</Row>
           {isAdminEmail(email) && (
             <Row href="/admin" className="text-gold">

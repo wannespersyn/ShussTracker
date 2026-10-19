@@ -273,7 +273,7 @@ export default async function HomePage({
             {format(t.home.chasers, {
               names: chasers.join(chasers.length > 1 ? t.home.and : ""),
             })}{" "}
-            <strong>Streak Breaker</strong>.
+            <strong>{t.ach.streakBreaker}</strong>.
           </span>
         </div>
       )}

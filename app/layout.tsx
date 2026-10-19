@@ -30,14 +30,17 @@ const barlowCondensed = localFont({
   ],
 });
 
-export const metadata: Metadata = {
-  title: "Shussapp",
-  description: "Log games, track streaks, and settle the crew leaderboard.",
-  appleWebApp: {
+export async function generateMetadata(): Promise<Metadata> {
+  const t = getDictionary(await getLocale());
+  return {
     title: "Shussapp",
-    statusBarStyle: "black-translucent",
-  },
-};
+    description: t.more.metaDescription,
+    appleWebApp: {
+      title: "Shussapp",
+      statusBarStyle: "black-translucent",
+    },
+  };
+}
 
 export const viewport: Viewport = {
   themeColor: [

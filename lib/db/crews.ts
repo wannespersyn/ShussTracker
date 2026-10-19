@@ -1,3 +1,4 @@
+import { getT } from "@/lib/i18n/server";
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
@@ -40,10 +41,11 @@ export async function joinCrewByCode(
   rawCode: string,
 ): Promise<{ groupId: string; error?: undefined } | { error: string; groupId?: undefined }> {
   const code = rawCode.trim().toUpperCase();
-  if (!code) return { error: "Enter a crew code" };
+  const t = await getT();
+  if (!code) return { error: t.errors.crewCodeEmpty };
 
   const [group] = await db.select().from(groups).where(eq(groups.inviteCode, code)).limit(1);
-  if (!group) return { error: "That code doesn't match a crew" };
+  if (!group) return { error: t.errors.crewCodeNoMatch };
 
   const [existing] = await db
     .select()

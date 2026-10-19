@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { cn } from "@/lib/cn";
+import { useT } from "@/lib/i18n/client";
 
 /** Downscale to max 1600px JPEG in the browser before uploading — keeps
  * uploads well under the server-action body limit and Blob storage cheap. */
@@ -39,6 +40,7 @@ export function PhotoUpload({
   const input = useRef<HTMLInputElement>(null);
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const { t } = useT();
   const [picked, setPicked] = useState<{ file: File; url: string } | null>(null);
 
   useEffect(() => () => {
@@ -61,7 +63,7 @@ export function PhotoUpload({
       const fd = new FormData();
       fd.append("photo", small);
       const res = await action(fd);
-      if (!res.ok) setError(res.error ?? "Upload failed");
+      if (!res.ok) setError(res.error ?? t.errors.uploadFailed);
       else setPicked(null);
     });
   }

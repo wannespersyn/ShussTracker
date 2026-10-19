@@ -1,9 +1,19 @@
+/**
+ * ChwaziPicker
+ *
+ * Random (or Elo-balanced) team picker: choose the mat and who's in, shuffle
+ * into teams, then hand them to the log flow via /log?teams=….
+ *
+ * Notes: copy comes from the active dictionary (t.chwazi, t.log).
+ */
 "use client";
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { balanceIntoDuos, pairIntoSolos, shuffleIntoDuos, toTeamPlayers, type Duo, type RosterPlayer } from "@/lib/teams";
 import { cn } from "@/lib/cn";
+import { useT } from "@/lib/i18n/client";
+import { format } from "@/lib/i18n";
 
 type Mat = "2" | "4" | "8";
 const TEAM_HEX = ["var(--color-amber-fill)", "#4fd1ff", "#ff6b5b", "#c6f432"];
@@ -24,6 +34,8 @@ export function ChwaziPicker({
   /** Player count the caller already fixed (log wizard): preselects the mat. */
   requiredCount?: number;
 }>) {
+  const { t } = useT();
+  const c = t.chwazi;
   const players = useMemo(() => toTeamPlayers(roster), [roster]);
   const [mat, setMat] = useState<Mat>(requiredCount === 2 ? "2" : requiredCount === 8 ? "8" : "4");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -76,7 +88,7 @@ export function ChwaziPicker({
       <header className="flex items-center gap-3 h-11">
         <Link
           href={`/log?crewId=${groupId}`}
-          aria-label="Back to logging"
+          aria-label={c.back}
           className="w-11 h-11 shrink-0 rounded-pill bg-surface-panel border border-line-strong text-cream flex items-center justify-center"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
@@ -86,14 +98,14 @@ export function ChwaziPicker({
         <span className="flex-1 flex flex-col">
           <span className="font-heading font-extrabold text-[26px] tracking-[0.06em]">CHWAZI</span>
           <span className="font-body text-xs text-muted">
-            {phase === "result" ? `${balanced && mat !== "2" ? "Balanced by Elo" : "Pure luck"} · ${matName}` : "Pick who plays — Chwazi makes the teams"}
+            {phase === "result" ? `${balanced && mat !== "2" ? c.balanced : c.luck} · ${matName}` : c.sub}
           </span>
         </span>
       </header>
 
       {phase === "select" && (
         <>
-          <div role="group" aria-label="Mat" className="grid grid-cols-3 gap-1 p-1 rounded-[14px] bg-surface-panel border border-line">
+          <div role="group" aria-label={t.log.mat} className="grid grid-cols-3 gap-1 p-1 rounded-[14px] bg-surface-panel border border-line">
             {(["2", "4", "8"] as Mat[]).map((m) => (
               <button
                 key={m}
@@ -108,7 +120,7 @@ export function ChwaziPicker({
           </div>
 
           <div className="flex justify-between items-baseline">
-            <span className="font-heading font-semibold text-[12px] tracking-[0.14em] uppercase text-muted">Who&apos;s playing?</span>
+            <span className="font-heading font-semibold text-[12px] tracking-[0.14em] uppercase text-muted">{t.log.whoPlays}</span>
             <span className={cn("font-display font-extrabold text-lg", ready ? "text-gold" : "text-muted")}>
               {selectedIds.length} / {need}
             </span>
@@ -150,8 +162,8 @@ export function ChwaziPicker({
               className="flex items-center gap-3 min-h-15 px-3.5 py-2 rounded-[14px] bg-surface-deep border border-line text-left text-cream"
             >
               <span className="flex-1 flex flex-col">
-                <span className="font-body font-semibold text-[15px]">Balance by Elo</span>
-                <span className="font-body text-xs text-muted">Strongest with weakest — no stacked duos</span>
+                <span className="font-body font-semibold text-[15px]">{c.balance}</span>
+                <span className="font-body text-xs text-muted">{c.balanceSub}</span>
               </span>
               <span className={cn("w-12 h-7 rounded-pill p-0.75 flex shrink-0", balanced ? "bg-amber justify-end" : "bg-chip justify-start")}>
                 <span className={cn("w-5.5 h-5.5 rounded-pill", balanced ? "bg-ink" : "bg-muted")} />
@@ -165,7 +177,7 @@ export function ChwaziPicker({
             onClick={chwazi}
             className="h-16 shrink-0 rounded-[18px] bg-amber text-ink font-heading font-extrabold text-[26px] tracking-[0.1em] disabled:bg-surface-raised disabled:text-[#6b746f]"
           >
-            {ready ? "CHWAZI!" : `PICK ${need - selectedIds.length} MORE`}
+            {ready ? "CHWAZI!" : format(t.log.pickMore, { n: need - selectedIds.length }).toUpperCase()}
           </button>
         </>
       )}
@@ -177,7 +189,7 @@ export function ChwaziPicker({
               <div key={c} className="w-12 h-12 rounded-pill animate-pop" style={{ background: c, animationDelay: `${i * 90}ms` }} />
             ))}
           </div>
-          <div className="font-heading font-bold text-[13px] tracking-[0.2em] uppercase text-muted">Shuffling…</div>
+          <div className="font-heading font-bold text-[13px] tracking-[0.2em] uppercase text-muted">{c.shuffling}</div>
         </div>
       )}
 
@@ -194,7 +206,7 @@ export function ChwaziPicker({
                 style={{ borderColor: color }}
               >
                 <span className="font-heading font-extrabold text-sm tracking-[0.14em] [writing-mode:vertical-rl] rotate-180" style={{ color }}>
-                  TEAM {i + 1}
+                  {format(c.team, { n: i + 1 })}
                 </span>
                 <div className="flex-1 flex flex-col gap-1.5">
                   {team.players.map((p) => (
@@ -207,7 +219,7 @@ export function ChwaziPicker({
                     </div>
                   ))}
                 </div>
-                {avg !== null && <span className="font-body text-xs text-muted">{team.players.length > 1 ? `Duo Elo ${avg}` : `Elo ${avg}`}</span>}
+                {avg !== null && <span className="font-body text-xs text-muted">{team.players.length > 1 ? `${t.duo.duoElo} ${avg}` : `Elo ${avg}`}</span>}
               </div>
             );
           })}
@@ -217,14 +229,14 @@ export function ChwaziPicker({
               onClick={chwazi}
               className="h-14 rounded-[16px] border-2 border-gold text-gold font-heading font-extrabold text-lg tracking-[0.06em]"
             >
-              RESHUFFLE
+              {c.reshuffle}
             </button>
             <Link href={logHref} className="h-14 rounded-[16px] bg-amber text-ink flex items-center justify-center font-heading font-extrabold text-lg tracking-[0.06em]">
-              LOG THIS GAME
+              {c.logThis}
             </Link>
           </div>
           <button type="button" onClick={() => setPhase("select")} className="h-11 font-body font-semibold text-sm text-muted">
-            Change players
+            {c.change}
           </button>
         </div>
       )}

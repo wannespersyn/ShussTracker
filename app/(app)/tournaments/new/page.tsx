@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { groupMembers } from "@/lib/db/schema";
 import { requireSession, requireGroupMember } from "@/lib/db/authz";
 import { TournamentSetup } from "@/components/tournaments/TournamentSetup";
+import { getT } from "@/lib/i18n/server";
 
 export default async function NewTournamentPage({
   searchParams,
@@ -22,7 +23,8 @@ export default async function NewTournamentPage({
     where: eq(groupMembers.groupId, crewId),
     with: { user: true },
   });
-  const roster = members.map((m) => ({ id: m.user.id, name: m.user.name ?? "Player" }));
+  const P = (await getT()).more.player;
+  const roster = members.map((m) => ({ id: m.user.id, name: m.user.name ?? P }));
   const presetEntrantIds = entrants ? entrants.split(",").filter(Boolean) : undefined;
 
   return <TournamentSetup groupId={crewId} roster={roster} presetEntrantIds={presetEntrantIds} />;

@@ -2,20 +2,22 @@
 
 import { useState } from "react";
 import { cn } from "@/lib/cn";
+import { useT } from "@/lib/i18n/client";
 import { ACHIEVEMENT_ICON_PATH, type AchievementCat, type AchievementV2 } from "@/lib/achievements-v2";
 
-const CATS: [AchievementCat, string][] = [
-  ["streak", "STREAKS"],
-  ["games", "GAMES"],
-  ["shots", "MAMA"],
-  ["social", "SOCIAL"],
-];
 
 export function AchievementGrid({ items }: Readonly<{ items: AchievementV2[] }>) {
   const [cat, setCat] = useState<AchievementCat>("streak");
+  const { t } = useT();
+  const CATS: [AchievementCat, string][] = [
+    ["streak", t.ach.streaks],
+    ["games", t.ach.games],
+    ["shots", t.ach.mama],
+    ["social", t.ach.social],
+  ];
   return (
     <>
-      <div role="tablist" aria-label="Category" className="flex gap-1.5">
+      <div role="tablist" aria-label={t.ach.category} className="flex gap-1.5">
         {CATS.map(([id, label]) => (
           <button
             key={id}
@@ -56,7 +58,7 @@ export function AchievementGrid({ items }: Readonly<{ items: AchievementV2[] }>)
                   <div className={cn("h-full", a.got ? "bg-amber" : "bg-[#6b746f]")} style={{ width: `${pct}%` }} />
                 </div>
                 <span className={cn("font-body font-bold text-[11px] tracking-[0.06em]", a.got ? "text-gold" : "text-muted")}>
-                  {a.got ? "UNLOCKED" : `${Math.min(a.have, a.need)} / ${a.need}`}
+                  {a.got ? t.ach.unlocked : `${Math.min(a.have, a.need)} / ${a.need}`}
                 </span>
               </div>
             );

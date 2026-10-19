@@ -6,10 +6,10 @@ import { getT } from "@/lib/i18n/server";
 import { LangSwitch } from "@/components/LangSwitch";
 import { cn } from "@/lib/cn";
 
-export const metadata = {
-  title: "Shussapp — the scoreboard for your cap-flicking crew",
-  description: "Log games in seconds, follow your duo’s record, and settle once and for all who runs the crew.",
-};
+export async function generateMetadata() {
+  const t = await getT();
+  return { title: `Shussapp — ${t.landing.kicker.toLowerCase()}`, description: t.landing.lead };
+}
 
 /** Public website. Signed-in users go straight to the app. */
 export default async function LandingPage() {
@@ -97,7 +97,7 @@ export default async function LandingPage() {
               ))}
             </div>
             <div className="h-12 rounded-md bg-[#ffb627] text-[#111] flex items-center justify-center font-heading font-extrabold text-lg tracking-[0.06em]">
-              LOG A GAME
+              {t.log.title.toUpperCase()}
             </div>
             <div className="h-11 rounded-[10px] bg-[#15191a]" />
             <div className="h-11 rounded-[10px] bg-[#15191a]" />
@@ -171,10 +171,10 @@ export default async function LandingPage() {
           <span>{L.legal}</span>
           <span className="flex gap-4">
             <Link href="/privacy" className="text-soft">
-              Privacy
+              {t.more.privacy}
             </Link>
             <Link href="/terms" className="text-soft">
-              Terms
+              {t.more.terms}
             </Link>
           </span>
         </div>

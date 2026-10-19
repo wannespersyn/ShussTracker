@@ -12,6 +12,7 @@ import { db } from "@/lib/db";
 import { games, tournamentMatches } from "@/lib/db/schema";
 import { requireUserId, requireGroupMember } from "@/lib/db/authz";
 import { addComment, deleteComment, getComment, toggleReaction, type Reaction } from "@/lib/db/activity";
+import { getT } from "@/lib/i18n/server";
 
 async function requireGameAccess(gameId: string, userId: string) {
   const game = await db.query.games.findFirst({ where: eq(games.id, gameId) });
@@ -67,10 +68,11 @@ export async function uploadGamePhotoAction(gameId: string, formData: FormData):
   await requireGameAccess(gameId, userId);
 
   const file = formData.get("photo");
-  if (!(file instanceof File) || file.size === 0) return { ok: false, error: "No photo" };
-  if (!file.type.startsWith("image/")) return { ok: false, error: "Not an image" };
-  if (file.size > MAX_PHOTO_BYTES) return { ok: false, error: "Photo too large" };
-  if (!process.env.BLOB_READ_WRITE_TOKEN) return { ok: false, error: "Photo storage isn't set up yet" };
+  const { errors: e } = await getT();
+  if (!(file instanceof File) || file.size === 0) return { ok: false, error: e.noPhoto };
+  if (!file.type.startsWith("image/")) return { ok: false, error: e.notImage };
+  if (file.size > MAX_PHOTO_BYTES) return { ok: false, error: e.tooLarge };
+  if (!process.env.BLOB_READ_WRITE_TOKEN) return { ok: false, error: e.noStorage };
 
   const { put } = await import("@vercel/blob");
   const blob = await put(`games/${gameId}/${Date.now()}.jpg`, file, { access: BLOB_ACCESS, contentType: file.type });

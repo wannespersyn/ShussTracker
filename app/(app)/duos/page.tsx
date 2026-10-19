@@ -63,7 +63,7 @@ export default async function DuosPage({
       {header}
 
       {duoCrews.length > 1 && (
-        <nav className="flex gap-1.5 overflow-x-auto -mx-5 px-5" aria-label="Crew">
+        <nav className="flex gap-1.5 overflow-x-auto -mx-5 px-5" aria-label={t.nav.crew}>
           {duoCrews.map((x) => (
             <Link
               key={x.crew.id}
@@ -177,7 +177,7 @@ export default async function DuosPage({
               <span className="font-body font-semibold text-sm truncate">vs {g.opponents}</span>
               <span className="font-body text-[11px] text-muted">
                 {dateFmt.format(g.playedAt)}
-                {g.mama > 0 && ` · ${g.mama} mama`}
+                {g.mama > 0 && ` · ${format(t.feed.mamaN, { n: g.mama })}`}
               </span>
             </span>
             {g.won && g.streakAfter >= 2 && (

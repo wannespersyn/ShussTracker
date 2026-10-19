@@ -45,7 +45,7 @@ export default async function PlayerProfilePage({ params }: Readonly<{ params: P
   const insights = shared ? await getCrewInsights(shared.id) : null;
   const me = insights?.players.find((p) => p.userId === viewedId);
   const rankedCount = insights?.players.filter((p) => p.games > 0).length ?? 0;
-  const name = player.name ?? "Player";
+  const name = player.name ?? t.more.player;
   const earned = achievements.filter((a) => a.got);
   const nextUp = achievements.filter((a) => !a.got).sort((a, b) => b.have / b.need - a.have / a.need)[0];
   const strip = [...[...earned].sort((a, b) => b.need - a.need).slice(0, nextUp ? 3 : 4), ...(nextUp ? [nextUp] : [])];
@@ -85,7 +85,7 @@ export default async function PlayerProfilePage({ params }: Readonly<{ params: P
               { label: t.home.games, value: me.games },
               { label: "W–L", value: `${me.wins}–${me.losses}` },
               { label: t.home.winPct, value: `${me.winPct}%`, tone: "gold" },
-              { label: "Mama", value: me.mama, tone: "red" },
+              { label: t.common.mama, value: me.mama, tone: "red" },
             ]}
           />
           {history.length > 1 && (
@@ -98,7 +98,7 @@ export default async function PlayerProfilePage({ params }: Readonly<{ params: P
               </div>
               <Sparkline
                 values={[1000, ...history.map((h) => h.elo)]}
-                label={`Elo went from 1000 to ${history[history.length - 1].elo}`}
+                label={format(t.more.eloWent, { n: history[history.length - 1].elo })}
               />
             </Panel>
           )}
@@ -166,7 +166,7 @@ export default async function PlayerProfilePage({ params }: Readonly<{ params: P
         >
           <Avatar name={nemesis.opponentName} size={42} />
           <span className="flex-1 min-w-0 flex flex-col">
-            <Kicker className="text-red">Nemesis</Kicker>
+            <Kicker className="text-red">{t.more.nemesis}</Kicker>
             <span className="font-body font-semibold text-[15px] truncate">{nemesis.opponentName}</span>
             <span className="font-body text-xs text-muted">
               {nemesis.wins}W–{nemesis.losses}L

@@ -68,11 +68,11 @@ export default function OnboardingPage() {
         <span className="text-center font-body text-xs text-muted leading-[1.4]!">
           {t.onboarding.legal}{" "}
           <Link href="/privacy" className="underline text-muted">
-            Privacy
+            {t.more.privacy}
           </Link>{" "}
           ·{" "}
           <Link href="/terms" className="underline text-muted">
-            Terms
+            {t.more.terms}
           </Link>
         </span>
       </div>

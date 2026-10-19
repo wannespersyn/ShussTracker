@@ -11,6 +11,8 @@ import { BackButton, Card } from "@/components/ui";
 import { ChevronRightIcon } from "@/components/ui/icons/ChevronRightIcon";
 import { TEAM_COLORS, type Duo } from "@/lib/teams";
 import { initialsFor } from "@/lib/format";
+import { getT } from "@/lib/i18n/server";
+import { format } from "@/lib/i18n";
 
 export default async function LogGamePage({
   searchParams,
@@ -18,6 +20,7 @@ export default async function LogGamePage({
   searchParams: Promise<{ crewId?: string; teams?: string; casual?: string; rematch?: string }>;
 }>) {
   const session = await requireSession();
+  const t = await getT();
   const { crewId, teams, casual, rematch } = await searchParams;
 
   // Rematch — same crew, same teams, fresh game. Self-contained: it skips
@@ -68,9 +71,9 @@ export default async function LogGamePage({
   if (memberships.length === 0) {
     return (
       <div className="min-h-screen bg-surface flex flex-col items-center justify-center gap-4 px-8 text-center">
-        <div className="font-display text-3xl text-cream">No crew yet</div>
+        <div className="font-display text-3xl text-cream">{t.more.noCrew}</div>
         <div className="font-body text-body text-muted max-w-70">
-          Logging a game needs real crewmates on the mat. Join or start a crew first, then come back and flick.
+          {t.empty.logNoCrew}
         </div>
       </div>
     );
@@ -90,9 +93,9 @@ export default async function LogGamePage({
           <BackButton href="/home" />
           <div>
             <div className="font-heading font-bold text-label-kicker tracking-kicker uppercase text-muted">
-              New game
+              {t.more.newGame}
             </div>
-            <div className="font-display text-display-sm text-cream mt-1">Which crew?</div>
+            <div className="font-display text-display-sm text-cream mt-1">{t.more.whichCrew}</div>
           </div>
         </header>
         <div className="flex flex-col gap-3">
@@ -103,7 +106,7 @@ export default async function LogGamePage({
                   <div>
                     <div className="font-display text-xl text-cream">{m.group.name}</div>
                     <div className="font-body text-body-sm text-muted">
-                      {m.group.members.length} {m.group.members.length === 1 ? "member" : "members"}
+                      {format(m.group.members.length === 1 ? t.more.member : t.more.members, { n: m.group.members.length })}
                     </div>
                   </div>
                   <div className="font-display text-2xl text-gold/70"><ChevronRightIcon className="w-6 h-6" /></div>
@@ -128,7 +131,7 @@ export default async function LogGamePage({
 
   const roster = members.map((m) => ({
     id: m.user.id,
-    name: m.user.name ?? "Player",
+    name: m.user.name ?? t.more.player,
   }));
 
   const insights = await getCrewInsights(selected.groupId);

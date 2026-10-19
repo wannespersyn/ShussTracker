@@ -158,7 +158,7 @@ export default async function CrewPage({
               <div className="font-body font-semibold text-[15px] truncate">{g.name}</div>
               {g.claimToken && (
                 <div className="font-body text-xs text-muted">
-                  Claim code <span className="font-heading font-bold tracking-[0.12em] text-gold">{g.claimToken}</span>
+                  {t.more.claimCode} <span className="font-heading font-bold tracking-[0.12em] text-gold">{g.claimToken}</span>
                 </div>
               )}
             </div>
@@ -173,9 +173,9 @@ export default async function CrewPage({
               </a>
             )}
             {isOwner && (
-              <ConfirmForm action={removeGuestAction.bind(null, crewId, g.id)} confirmMessage={`Remove guest ${g.name}?`}>
+              <ConfirmForm action={removeGuestAction.bind(null, crewId, g.id)} confirmMessage={format(t.more.removeGuest, { name: g.name })}>
                 <button type="submit" className="font-heading font-bold text-xs tracking-[0.1em] uppercase text-red">
-                  Remove
+                  {t.more.remove}
                 </button>
               </ConfirmForm>
             )}
@@ -186,8 +186,8 @@ export default async function CrewPage({
             type="text"
             name="name"
             required
-            placeholder="Guest's name"
-            aria-label="Guest's name"
+            placeholder={t.more.guestName}
+            aria-label={t.more.guestName}
             className="flex-1 h-11 rounded-md bg-surface-panel border border-line px-3.5 font-body text-sm text-cream placeholder:text-muted outline-none focus:border-gold/60"
           />
           <button type="submit" className="h-11 px-4 rounded-md bg-amber font-heading font-bold text-sm uppercase text-ink">
@@ -199,16 +199,16 @@ export default async function CrewPage({
       <div className="flex items-center justify-center gap-5 pt-1">
         {insights.totalGames > 0 && (
           <Link href={`/crews/${crewId}/recap`} className="font-heading font-bold text-xs tracking-[0.1em] uppercase text-gold">
-            Season recap
+            {t.more.seasonRecap}
           </Link>
         )}
         <Link href="/claim" className="font-heading font-bold text-xs tracking-[0.1em] uppercase text-muted">
-          Claim a guest
+          {t.more.claimGuest}
         </Link>
         {!isOwner && (
-          <ConfirmForm action={leaveCrew.bind(null, crewId)} confirmMessage={`Leave ${group.name}?`}>
+          <ConfirmForm action={leaveCrew.bind(null, crewId)} confirmMessage={format(t.more.leaveConfirm, { crew: group.name })}>
             <button type="submit" className="font-heading font-bold text-xs tracking-[0.1em] uppercase text-muted">
-              Leave crew
+              {t.more.leaveCrew}
             </button>
           </ConfirmForm>
         )}

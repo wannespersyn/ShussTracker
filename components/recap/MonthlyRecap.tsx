@@ -1,8 +1,17 @@
+/**
+ * MonthlyRecap
+ *
+ * Instagram-story style "your month" recap: tap through the slides built by
+ * buildMonthlyRecap and share the current one as a 1080×1920 image.
+ *
+ * Notes: falls back to a download where file sharing isn't supported.
+ */
 "use client";
 
 import Link from "next/link";
 import { useState } from "react";
 import type { RecapStory } from "@/lib/monthly-recap";
+import { useT } from "@/lib/i18n/client";
 
 const TONES: Record<RecapStory["tone"], { bg: string; fg: string }> = {
   amber: { bg: "#ffb627", fg: "#111111" },
@@ -15,13 +24,15 @@ const TONES: Record<RecapStory["tone"], { bg: string; fg: string }> = {
 export function MonthlyRecap({ slides, crewName, closeHref }: Readonly<{ slides: RecapStory[]; crewName: string; closeHref: string }>) {
   const [i, setI] = useState(0);
   const [status, setStatus] = useState<string | null>(null);
+  const { t } = useT();
+  const M = t.monthly;
   const s = slides[i];
   const tone = TONES[s.tone];
   const last = i === slides.length - 1;
 
   async function share() {
-    const result = await shareStory(s, crewName);
-    setStatus(result === "downloaded" ? "Saved — post it from your photos" : null);
+    const result = await shareStory(s, crewName, M.shareTitle);
+    setStatus(result === "downloaded" ? M.saved : null);
   }
 
   return (
@@ -37,7 +48,7 @@ export function MonthlyRecap({ slides, crewName, closeHref }: Readonly<{ slides:
         </div>
         <div className="flex justify-between items-center">
           <span className="font-heading font-extrabold text-base tracking-[0.1em] uppercase">SHUSSAPP · {crewName}</span>
-          <Link href={closeHref} aria-label="Close recap" className="w-11 h-11 flex items-center justify-center" style={{ color: tone.fg }}>
+          <Link href={closeHref} aria-label={M.close} className="w-11 h-11 flex items-center justify-center" style={{ color: tone.fg }}>
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true">
               <path d="M6 6l12 12M18 6L6 18" />
             </svg>
@@ -45,7 +56,7 @@ export function MonthlyRecap({ slides, crewName, closeHref }: Readonly<{ slides:
         </div>
         <button
           type="button"
-          aria-label="Next slide"
+          aria-label={M.nextSlide}
           onClick={() => setI((k) => Math.min(slides.length - 1, k + 1))}
           className="flex-1 flex flex-col justify-center gap-3.5 text-left"
           style={{ color: tone.fg }}
@@ -65,7 +76,7 @@ export function MonthlyRecap({ slides, crewName, closeHref }: Readonly<{ slides:
             className="h-13.5 rounded-lg border-2 font-heading font-extrabold text-lg tracking-[0.08em]"
             style={{ borderColor: tone.fg, color: tone.fg }}
           >
-            BACK
+            {M.back}
           </button>
           <button
             type="button"
@@ -73,7 +84,7 @@ export function MonthlyRecap({ slides, crewName, closeHref }: Readonly<{ slides:
             className="h-13.5 rounded-lg font-heading font-extrabold text-lg tracking-[0.08em]"
             style={{ background: tone.fg, color: tone.bg }}
           >
-            {last ? "SHARE TO STORY" : "NEXT"}
+            {last ? M.shareStory : M.next}
           </button>
         </div>
       </div>
@@ -83,7 +94,7 @@ export function MonthlyRecap({ slides, crewName, closeHref }: Readonly<{ slides:
 
 /** Draws the slide as a 1080×1920 story image and opens the share sheet
  * (falls back to a download where file sharing isn't supported). */
-async function shareStory(s: RecapStory, crewName: string): Promise<"shared" | "downloaded" | "failed"> {
+async function shareStory(s: RecapStory, crewName: string, title: string): Promise<"shared" | "downloaded" | "failed"> {
   const W = 1080;
   const H = 1920;
   const canvas = document.createElement("canvas");
@@ -130,7 +141,7 @@ async function shareStory(s: RecapStory, crewName: string): Promise<"shared" | "
   const file = new File([blob], "shussapp-recap.png", { type: "image/png" });
   if (navigator.canShare?.({ files: [file] })) {
     try {
-      await navigator.share({ files: [file], title: "Shussapp recap" });
+      await navigator.share({ files: [file], title });
     } catch {
       /* closed */
     }

@@ -38,7 +38,7 @@ export default async function PlayerAchievementsPage({ params }: Readonly<{ para
           </svg>
         </Link>
         <h1 className="flex-1 font-display font-extrabold text-[26px] tracking-[0.04em] uppercase truncate">
-          {viewerId === viewedId ? "Achievements" : `${(player.name ?? "Player").split(" ")[0]}`}
+          {viewerId === viewedId ? t.ach.title : `${(player.name ?? t.more.player).split(" ")[0]}`}
         </h1>
         <span className="font-display font-extrabold text-[22px] text-gold">
           {got} / {items.length}

@@ -1,14 +1,33 @@
+/**
+ * monthly-recap
+ *
+ * Builds the six "your month" story slides from crew insights, in the
+ * viewer's language (dictionary + locale-aware month names).
+ *
+ * Exports: buildMonthlyRecap, RecapStory
+ */
 import type { CrewInsights } from "@/lib/insights";
 import { firstName } from "@/lib/insights";
+import { format, type Dictionary } from "@/lib/i18n";
+import type { Locale } from "@/lib/i18n/config";
 
 export type RecapStory = { kicker: string; big: string; bigSize: number; line: string; foot: string; tone: "amber" | "ink" | "panel" | "red" };
 
-const MONTHS_EN = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 /** The six "your month" story slides from the mockup, built from the crew
  * insights. Uses the current month, or last month when the viewer hasn't
  * played yet this month. Returns null when there's nothing to recap. */
-export function buildMonthlyRecap(insights: CrewInsights, userId: string, crewName: string, now: Date): { month: string; slides: RecapStory[] } | null {
+export function buildMonthlyRecap(
+  insights: CrewInsights,
+  userId: string,
+  crewName: string,
+  now: Date,
+  t: Dictionary,
+  locale: Locale,
+): { month: string; slides: RecapStory[] } | null {
+  const M = t.monthly;
+  const monthFmt = new Intl.DateTimeFormat(locale === "nl" ? "nl-BE" : "en-GB", { month: "long", timeZone: "UTC" });
+  const monthNameOf = (idx: number) => monthFmt.format(new Date(Date.UTC(2026, idx, 15)));
   const me = insights.players.find((p) => p.userId === userId);
   if (!me || me.games === 0) return null;
 
@@ -19,7 +38,7 @@ export function buildMonthlyRecap(insights: CrewInsights, userId: string, crewNa
   if (!playedIn(month)) month = ym(prev(now));
   if (!playedIn(month)) return null;
   const monthIdx = Number(month.slice(5, 7)) - 1;
-  const monthName = MONTHS_EN[monthIdx];
+  const monthName = monthNameOf(monthIdx);
   const prevMonth = ym(prev(new Date(`${month}-15T12:00:00Z`)));
 
   const nights = insights.sessions.filter((s) => s.night.startsWith(month));
@@ -66,57 +85,72 @@ export function buildMonthlyRecap(insights: CrewInsights, userId: string, crewNa
   const above = ranked[me.rank - 2];
   const leader = ranked[0];
 
+  const winRate = pct(mine.wins, mine.games);
+  const gap = above ? above.elo - me.elo : 0;
   const slides: RecapStory[] = [
-    { tone: "amber", kicker: `YOUR ${monthName.toUpperCase()}`, big: "RECAP", bigSize: 110, line: `${firstName(me.name)}, it’s\nbeen a month.`, foot: "Tap next. Then share it to your story." },
+    {
+      tone: "amber",
+      kicker: format(M.your, { month: monthName.toUpperCase() }),
+      big: M.recap,
+      bigSize: 110,
+      line: format(M.hello, { name: firstName(me.name) }),
+      foot: M.tapNext,
+    },
     {
       tone: "ink",
-      kicker: "YOU PLAYED",
+      kicker: M.youPlayed,
       big: String(mine.games),
       bigSize: 170,
-      line: `games · ${mine.wins} wins`,
+      line: format(M.gamesWins, { w: mine.wins }),
       foot: before.games
-        ? `${pct(mine.wins, mine.games)}% win rate in ${monthName} — ${pct(mine.wins, mine.games) >= pct(before.wins, before.games) ? "up" : "down"} from ${pct(before.wins, before.games)}% in ${MONTHS_EN[(monthIdx + 11) % 12]}.`
-        : `${pct(mine.wins, mine.games)}% win rate in ${monthName}.`,
+        ? format(M.rateVs, {
+            p: winRate,
+            month: monthName,
+            dir: winRate >= pct(before.wins, before.games) ? M.up : M.down,
+            q: pct(before.wins, before.games),
+            prev: monthNameOf((monthIdx + 11) % 12),
+          })
+        : format(M.rate, { p: winRate, month: monthName }),
     },
     bestDuo
       ? {
           tone: "panel",
-          kicker: "BEST DUO",
+          kicker: M.bestDuo,
           big: `${bestDuo.wins}–${bestDuo.losses}`,
           bigSize: 130,
-          line: `WITH ${firstName(bestDuo.partner).toUpperCase()}\n${bestDuo.losses === 0 ? "unbeaten" : "together"}`,
-          foot: `Your best pairing in ${crewName} this month.`,
+          line: `${format(M.with, { name: firstName(bestDuo.partner).toUpperCase() })}\n${bestDuo.losses === 0 ? M.unbeaten : M.together}`,
+          foot: format(M.bestPairing, { crew: crewName }),
         }
-      : { tone: "panel", kicker: "BEST DUO", big: "—", bigSize: 130, line: "No duo games\nthis month", foot: "Grab a partner next time." },
+      : { tone: "panel", kicker: M.bestDuo, big: "—", bigSize: 130, line: M.noDuo, foot: M.grabPartner },
     {
       tone: "red",
-      kicker: "MAMA MACHINE",
+      kicker: M.mamaMachine,
       big: String(mine.mama),
       bigSize: 170,
-      line: "red-field hits",
+      line: M.redHits,
       foot:
         mine.mama > 0
-          ? `#${myMamaPos} in ${crewName} this month.${runnerUp ? ` ${firstName(runnerUp[1].name)} had ${runnerUp[1].n}.` : ""}`
-          : "Not a single one. Sharp.",
+          ? `${format(M.mamaPos, { pos: myMamaPos, crew: crewName })}${runnerUp ? ` ${format(M.runnerUp, { name: firstName(runnerUp[1].name), n: runnerUp[1].n })}` : ""}`
+          : M.noneSharp,
     },
     {
       tone: "ink",
-      kicker: "CREW MONTH",
+      kicker: M.crewMonth,
       big: String(crewGames),
       bigSize: 150,
-      line: `games played\nin ${crewName}`,
-      foot: ironMan ? `${firstName(ironMan.name)} played ${ironMan.n} of them. Respect.` : "",
+      line: format(M.gamesIn, { crew: crewName }),
+      foot: ironMan ? format(M.iron, { name: firstName(ironMan.name), n: ironMan.n }) : "",
     },
     {
       tone: "amber",
-      kicker: `${monthName.toUpperCase()} RANK`,
+      kicker: format(M.rank, { month: monthName.toUpperCase() }),
       big: `#${me.rank}`,
       bigSize: 170,
-      line: `in ${crewName}\nELO ${me.elo}${me.eloWeek ? ` (${me.eloWeek > 0 ? "▲" : "▼"}${Math.abs(me.eloWeek)} this week)` : ""}`,
+      line: `${format(M.inCrew, { crew: crewName })}\nELO ${me.elo}${me.eloWeek ? ` ${format(M.thisWeek, { arrow: me.eloWeek > 0 ? "▲" : "▼", n: Math.abs(me.eloWeek) })}` : ""}`,
       foot:
         me.rank === 1
-          ? "Top of the crew. Defend it."
-          : `${firstName(above.name)} is ${above.elo - me.elo} point${above.elo - me.elo === 1 ? "" : "s"} ahead.${leader && leader !== above ? ` ${firstName(leader.name)} ${leader.elo - me.elo}.` : ""} Next month is yours.`,
+          ? M.top
+          : `${format(gap === 1 ? M.aheadOne : M.ahead, { name: firstName(above.name), n: gap })}${leader && leader !== above ? ` ${firstName(leader.name)} ${leader.elo - me.elo}.` : ""} ${M.yours}`,
     },
   ];
   return { month: monthName, slides };

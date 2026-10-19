@@ -1,3 +1,12 @@
+/**
+ * DeepStats
+ *
+ * Client-side stats explorer for the viewer's main crew: who / mat / period
+ * filters, totals, mama rate or full shot-zone split, and win % by partner.
+ *
+ * Data: one StatsExplorerData payload from the stats page, sliced in memory.
+ * Notes: all copy comes from the active dictionary (t.deep).
+ */
 "use client";
 
 import Link from "next/link";
@@ -5,6 +14,8 @@ import { useMemo, useState } from "react";
 import type { StatsExplorerData, StatsGame } from "@/lib/db/stats";
 import { firstName } from "@/lib/insights";
 import { cn } from "@/lib/cn";
+import { useT } from "@/lib/i18n/client";
+import { format } from "@/lib/i18n";
 
 type Who = "me" | "duo" | "crew";
 type MatF = "all" | "4" | "8" | "2";
@@ -20,6 +31,8 @@ export function DeepStats({ data, currentUserId, backHref }: Readonly<{ data: St
   const [period, setPeriod] = useState<Period>("season");
   const [shot, setShot] = useState<"mama" | "zones">("mama");
   const [now] = useState(() => Date.now());
+  const { t } = useT();
+  const d = t.deep;
 
   // The crew this page is about: where the viewer played the most.
   const crew = useMemo(() => {
@@ -77,17 +90,17 @@ export function DeepStats({ data, currentUserId, backHref }: Readonly<{ data: St
       const best = Math.max(0, ...games.flatMap((g) => g.teams.flatMap((t) => t.userIds.map((u) => t.shots[u]?.risk ?? 0))));
       return {
         totals: [
-          { k: "GAMES", v: String(games.length) },
-          { k: "PLAYERS", v: String(per.size) },
-          { k: "MAMA / GAME", v: crewSlots ? (crewMama / games.length).toFixed(2) : "—" },
+          { k: d.games, v: String(games.length) },
+          { k: d.players, v: String(per.size) },
+          { k: d.mamaGame, v: crewSlots ? (crewMama / games.length).toFixed(2) : "—" },
         ],
         mamaPct: games.length ? Math.round((mamaGames / games.length) * 100) : 0,
-        mamaLine: `of games have a mama (${mamaGames} of ${games.length})`,
-        you: crewSlots ? `${(crewMama / crewSlots).toFixed(2)} / player` : "—",
+        mamaLine: format(d.mamaLineCrew, { m: mamaGames, n: games.length }),
+        you: crewSlots ? format(d.perPlayer, { v: (crewMama / crewSlots).toFixed(2) }) : "—",
         avg: "",
         best,
         rows: rank(per),
-        rowLabel: "WIN % BY PLAYER",
+        rowLabel: d.byPlayer,
         zones,
         tracked,
       };
@@ -116,17 +129,17 @@ export function DeepStats({ data, currentUserId, backHref }: Readonly<{ data: St
     const n = mine.length;
     return {
       totals: [
-        { k: "GAMES", v: String(n) },
-        { k: "WIN %", v: n ? `${Math.round((wins / n) * 100)}%` : "—" },
-        { k: "MAMA / GAME", v: n ? (myMama / n).toFixed(2) : "—" },
+        { k: d.games, v: String(n) },
+        { k: d.winPct, v: n ? `${Math.round((wins / n) * 100)}%` : "—" },
+        { k: d.mamaGame, v: n ? (myMama / n).toFixed(2) : "—" },
       ],
       mamaPct: n ? Math.round((mamaGames / n) * 100) : 0,
-      mamaLine: `of your games have a mama (${mamaGames} of ${n})`,
-      you: n ? `You ${(myMama / n).toFixed(2)} / game` : "—",
-      avg: crewSlots && crew ? `${crew.name} avg ${(crewMama / crewSlots).toFixed(2)}` : "",
+      mamaLine: format(d.mamaLine, { m: mamaGames, n }),
+      you: n ? format(d.youPerGame, { v: (myMama / n).toFixed(2) }) : "—",
+      avg: crewSlots && crew ? format(d.crewAvg, { crew: crew.name, v: (crewMama / crewSlots).toFixed(2) }) : "",
       best,
       rows: rank(per),
-      rowLabel: "WIN % BY PARTNER",
+      rowLabel: d.byPartner,
       zones,
       tracked,
     };
@@ -143,7 +156,7 @@ export function DeepStats({ data, currentUserId, backHref }: Readonly<{ data: St
           .slice(0, 8),
       };
     }
-  }, [data.games, crew, mat, period, who, currentUserId, now]);
+  }, [data.games, crew, mat, period, who, currentUserId, now, d]);
 
   const zoneTotal = s.zones.near + s.zones.mid + s.zones.far + s.zones.risk + s.zones.miss;
   const zp = (n: number) => (zoneTotal ? Math.round((n / zoneTotal) * 100) : 0);
@@ -153,24 +166,24 @@ export function DeepStats({ data, currentUserId, backHref }: Readonly<{ data: St
       <header className="flex items-center gap-3 h-11">
         <Link
           href={backHref}
-          aria-label="Back"
+          aria-label={t.common.back}
           className="w-11 h-11 shrink-0 rounded-pill bg-surface-panel border border-line-strong text-cream flex items-center justify-center"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
             <path d="M15 6l-6 6 6 6" />
           </svg>
         </Link>
-        <h1 className="flex-1 font-display font-extrabold text-[26px] tracking-[0.04em]">DEEP STATS</h1>
+        <h1 className="flex-1 font-display font-extrabold text-[26px] tracking-[0.04em] uppercase">{t.profile.deepStats}</h1>
         {crew && <span className="font-body font-semibold text-[13px] text-muted truncate max-w-28">{crew.name}</span>}
       </header>
 
       <div className="flex flex-col gap-2">
-        <Chips label="Who" value={who} onChange={setWho} options={[["me", "ME"], ["duo", "DUO"], ["crew", "CREW"]]} />
-        <Chips label="Mat" value={mat} onChange={setMat} options={[["all", "ALL"], ["4", "4-MAT"], ["8", "8-MAT"], ["2", "1V1"]]} />
-        <Chips label="Period" value={period} onChange={setPeriod} options={[["30d", "30 DAYS"], ["season", "SEASON"], ["ever", "ALL TIME"]]} />
+        <Chips label={d.who} value={who} onChange={setWho} options={[["me", d.me], ["duo", d.duo], ["crew", d.crew]]} />
+        <Chips label={d.mat} value={mat} onChange={setMat} options={[["all", d.all], ["4", "4-MAT"], ["8", "8-MAT"], ["2", "1V1"]]} />
+        <Chips label={d.period} value={period} onChange={setPeriod} options={[["30d", d.days30], ["season", d.season], ["ever", d.ever]]} />
       </div>
 
-      <section aria-label="Totals" className="grid grid-cols-3 gap-px rounded-[14px] overflow-hidden bg-line">
+      <section aria-label={d.totals} className="grid grid-cols-3 gap-px rounded-[14px] overflow-hidden bg-line">
         {s.totals.map((x) => (
           <div key={x.k} className="bg-surface-deep p-3 flex flex-col gap-0.5">
             <span className="font-body font-semibold text-[10px] tracking-[0.08em] text-muted">{x.k}</span>
@@ -179,14 +192,14 @@ export function DeepStats({ data, currentUserId, backHref }: Readonly<{ data: St
         ))}
       </section>
 
-      <section aria-label="Shots" className="flex flex-col gap-2 p-3.5 rounded-[16px] bg-surface-deep border border-line">
+      <section aria-label={d.shotsAria} className="flex flex-col gap-2 p-3.5 rounded-[16px] bg-surface-deep border border-line">
         <div className="flex justify-between items-center">
-          <span className="font-heading font-semibold text-[12px] tracking-[0.14em] text-muted">SHOTS</span>
-          <div role="tablist" aria-label="Shot view" className="flex gap-1">
+          <span className="font-heading font-semibold text-[12px] tracking-[0.14em] text-muted">{d.shots}</span>
+          <div role="tablist" aria-label={d.shotView} className="flex gap-1">
             {(
               [
-                ["mama", "MAMA"],
-                ["zones", "ALL ZONES"],
+                ["mama", d.mama],
+                ["zones", d.allZones],
               ] as const
             ).map(([id, label]) => (
               <button
@@ -217,11 +230,11 @@ export function DeepStats({ data, currentUserId, backHref }: Readonly<{ data: St
             <div className="flex justify-between font-body font-semibold text-xs text-soft">
               <span>{s.you}</span>
               {s.avg && <span className="text-muted">{s.avg}</span>}
-              <span>Best: {s.best} in a game</span>
+              <span>{format(d.best, { n: s.best })}</span>
             </div>
           </div>
         ) : s.tracked === 0 ? (
-          <p className="font-body text-[13px] text-muted">No shot tracking in this slice yet — switch on “Track every shot” when you log a game.</p>
+          <p className="font-body text-[13px] text-muted">{d.noTracking}</p>
         ) : (
           <div className="flex flex-col gap-2">
             <div className="flex h-7 rounded-sm overflow-hidden gap-0.5">
@@ -235,22 +248,22 @@ export function DeepStats({ data, currentUserId, backHref }: Readonly<{ data: St
               <span>1 · {zp(s.zones.near)}%</span>
               <span>2 · {zp(s.zones.mid)}%</span>
               <span>3 · {zp(s.zones.far)}%</span>
-              <span className="text-red-pale">MAMA · {zp(s.zones.risk)}%</span>
-              <span className="text-muted">MISS · {zp(s.zones.miss)}%</span>
+              <span className="text-red-pale">{d.mama} · {zp(s.zones.risk)}%</span>
+              <span className="text-muted">{d.miss} · {zp(s.zones.miss)}%</span>
             </div>
-            <span className="font-body text-xs text-muted">From {s.tracked} games logged with shot tracking on.</span>
+            <span className="font-body text-xs text-muted">{format(d.fromTracked, { n: s.tracked })}</span>
           </div>
         )}
       </section>
 
       <section aria-label={s.rowLabel} className="flex flex-col gap-1.5">
         <span className="font-heading font-semibold text-[12px] tracking-[0.14em] text-muted">
-          {s.rowLabel} · {s.rows.min}+ GAMES
+          {s.rowLabel} · {format(d.minGames, { n: s.rows.min })}
         </span>
-        {s.rows.list.length === 0 && <p className="font-body text-[13px] text-muted">Not enough games in this slice yet.</p>}
+        {s.rows.list.length === 0 && <p className="font-body text-[13px] text-muted">{d.notEnough}</p>}
         {s.rows.list.map((r, i) => (
           <div key={r.id} className="grid grid-cols-[80px_1fr_44px] items-center gap-2.5 h-7.5">
-            <span className="font-body font-semibold text-sm truncate">{nameOf.get(r.id) ?? "Player"}</span>
+            <span className="font-body font-semibold text-sm truncate">{nameOf.get(r.id) ?? t.more.player}</span>
             <div className="h-3 rounded-[6px] bg-surface-raised overflow-hidden">
               <div className={cn("h-full rounded-[6px]", r.pct >= 60 || (i === 0 && r.pct >= 50) ? "bg-amber" : "bg-[#6b746f]")} style={{ width: `${r.pct}%` }} />
             </div>

@@ -28,7 +28,6 @@ const ZONES: { hit: FieldHit; label: string }[] = [
   { hit: "mama", label: "M" },
   { hit: "miss", label: "✕" },
 ];
-const ORD = ["1ST", "2ND", "3RD", "4TH"];
 const needFor = (m: Mat) => (m === "8" ? 8 : m === "2" ? 2 : 4);
 
 /** v2 log flow — two screens instead of five:
@@ -64,6 +63,7 @@ export function LogGameWizard({
 }>) {
   const router = useRouter();
   const { t } = useT();
+  const ORD = [t.more.ord1, t.more.ord2, t.more.ord3, t.more.ord4];
   const [isPending, startTransition] = useTransition();
   const players = useMemo<TeamPlayer[]>(() => toTeamPlayers(roster), [roster]);
   const shortNames = useMemo(() => shortNamesFor(players), [players]);
@@ -328,7 +328,7 @@ export function LogGameWizard({
                       placed && r === 0 ? "bg-amber text-ink" : placed ? "bg-cream text-surface" : "bg-surface-raised text-muted",
                     )}
                   >
-                    {placed ? (teams.length > 2 ? ORD[r] : r === 0 ? t.log.winner : t.log.lost) : teams.length > 2 ? `TAP = ${ORD[order.length]}` : t.log.tapWin}
+                    {placed ? (teams.length > 2 ? ORD[r] : r === 0 ? t.log.winner : t.log.lost) : teams.length > 2 ? format(t.more.tapOrd, { o: ORD[order.length] }) : t.log.tapWin}
                   </span>
                 </button>
                 {team.players.map((p) => {

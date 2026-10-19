@@ -66,7 +66,7 @@ export function BottomNav({ currentUserId }: Readonly<{ currentUserId: string }>
 
   return (
     <nav
-      aria-label="Main"
+      aria-label={t.more.mainNav}
       className="fixed inset-x-0 bottom-0 z-40 flex justify-center px-4"
       style={{ paddingBottom: "calc(22px + env(safe-area-inset-bottom))" }}
     >

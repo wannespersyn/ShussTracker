@@ -326,6 +326,8 @@ export const pushSubscriptions = pgTable("push_subscription", {
   endpoint: text("endpoint").notNull().unique(),
   p256dh: text("p256dh").notNull(),
   auth: text("auth").notNull(),
+  /** UI language of the device that subscribed — pushes are written in it. */
+  locale: text("locale").notNull().default("en"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

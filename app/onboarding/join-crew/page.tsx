@@ -3,9 +3,11 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { BackButton, PrimaryButton } from "@/components/ui";
+import { useT } from "@/lib/i18n/client";
 
 export default function JoinCrewOnboardingPage() {
   const [code, setCode] = useState("");
+  const { t } = useT();
 
   const trimmedCode = code.trim().toUpperCase();
   const canContinue = trimmedCode.length > 0;
@@ -17,9 +19,9 @@ export default function JoinCrewOnboardingPage() {
 
       <div className="relative flex flex-col items-center gap-3 mt-8 text-center">
         <div className="font-heading font-semibold text-[19px] tracking-[2.4px] uppercase text-soft">
-          Got a crew code?
+          {t.claim.gotCode}
         </div>
-        <div className="font-display font-extrabold text-[44px] leading-[0.95] text-cream uppercase">Punch it in</div>
+        <div className="font-display font-extrabold text-[44px] leading-[0.95] text-cream uppercase">{t.claim.punchIn}</div>
       </div>
 
       <div className="relative flex-1 flex flex-col justify-center gap-4">
@@ -27,7 +29,7 @@ export default function JoinCrewOnboardingPage() {
           type="text"
           value={code}
           onChange={(e) => setCode(e.target.value.toUpperCase())}
-          placeholder="CREW CODE"
+          placeholder={t.claim.crewCodePh}
           maxLength={6}
           autoFocus
           className="h-18 rounded-lg bg-surface-panel border-2 border-gold px-4 font-display font-extrabold text-4xl tracking-[0.18em] text-center uppercase text-cream placeholder:text-cream/30 outline-none"
@@ -36,7 +38,7 @@ export default function JoinCrewOnboardingPage() {
 
       <div className="relative flex flex-col gap-3">
         <PrimaryButton size="lg" disabled={!canContinue} onClick={() => signIn("google", { callbackUrl })}>
-          Continue with Google
+          {t.onboarding.google}
         </PrimaryButton>
       </div>
     </div>

@@ -34,8 +34,8 @@ export default async function HeadToHeadPage({ params }: Readonly<{ params: Prom
   const insights = shared ? await getCrewInsights(shared.id) : null;
   const pa = insights?.players.find((p) => p.userId === aId);
   const pb = insights?.players.find((p) => p.userId === bId);
-  const aName = firstName(a.name ?? "Player");
-  const bName = firstName(b.name ?? "Player");
+  const aName = firstName(a.name ?? t.more.player);
+  const bName = firstName(b.name ?? t.more.player);
   const total = h2h.aWins + h2h.bWins;
 
   const rows = [
@@ -84,7 +84,7 @@ export default async function HeadToHeadPage({ params }: Readonly<{ params: Prom
       </section>
 
       {insights && (
-        <section aria-label="Comparison" className="rounded-[18px] bg-surface-deep border border-line px-4 py-3.5 flex flex-col gap-3.5">
+        <section aria-label={t.more.comparison} className="rounded-[18px] bg-surface-deep border border-line px-4 py-3.5 flex flex-col gap-3.5">
           {rows.map((r) => {
             const sum = r.x + r.y;
             const pctA = sum > 0 ? Math.round((r.x / sum) * 100) : 50;

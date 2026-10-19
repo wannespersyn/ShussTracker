@@ -148,7 +148,7 @@ export default async function ManageCrewPage({ params }: Readonly<{ params: Prom
           const isOwner = m.userId === group.createdBy;
           const isMe = m.userId === userId;
           const games = gamesOf.get(m.userId) ?? 0;
-          const memberName = m.user.name ?? "Player";
+          const memberName = m.user.name ?? t.more.player;
           const sub = isOwner
             ? format(t.manage.created, { d: dateFmt.format(group.createdAt).replace("Sept", "Sep") })
             : m.user.isGuest
@@ -167,7 +167,7 @@ export default async function ManageCrewPage({ params }: Readonly<{ params: Prom
                 <Tag tone="admin">ADMIN</Tag>
               ) : (
                 <>
-                  {m.user.isGuest && <Tag tone="guest">GUEST</Tag>}
+                  {m.user.isGuest && <Tag tone="guest">{t.common.guest.toUpperCase()}</Tag>}
                   <ConfirmForm action={removeCrewMemberAction.bind(null, crewId, m.userId)} confirmMessage={format(t.manage.removeConfirm, { name: memberName, crew: group.name })}>
                     <button type="submit" aria-label={format(t.manage.remove, { name: memberName })} className="w-8 h-8 flex items-center justify-center text-muted">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true">
