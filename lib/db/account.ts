@@ -39,6 +39,7 @@ export async function deleteAccount(userId: string) {
   await db.delete(groupMembers).where(eq(groupMembers.userId, userId));
   await db.delete(accounts).where(eq(accounts.userId, userId));
   await db.execute(sql`delete from "push_subscription" where user_id = ${userId}`).catch(() => {});
+  await db.execute(sql`delete from "app_push_token" where user_id = ${userId}`).catch(() => {});
   await db
     .update(users)
     .set({ name: FORMER_PLAYER, email: null, emailVerified: null, image: null, isGuest: true, claimToken: null })

@@ -3,13 +3,14 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { games } from "@/lib/db/schema";
 import { requireGroupMember } from "@/lib/db/authz";
+import { optionalApiUser } from "@/lib/api/session";
 
 /** Streams a game photo from the private Blob store — only to members of the
- * game's crew (or the person who logged a crew-less game). */
-export async function GET(_req: Request, ctx: { params: Promise<{ gameId: string }> }) {
+ * game's crew (or the person who logged a crew-less game). Accepts the web
+ * session cookie or the app's bearer token. */
+export async function GET(req: Request, ctx: { params: Promise<{ gameId: string }> }) {
   const { gameId } = await ctx.params;
-  const session = await auth();
-  const userId = session?.user?.id;
+  const userId = (await optionalApiUser(req)) ?? (await auth())?.user?.id;
   if (!userId) return new Response("Unauthorized", { status: 401 });
 
   const game = await db.query.games.findFirst({ where: eq(games.id, gameId), columns: { groupId: true, createdBy: true, photoUrl: true } });

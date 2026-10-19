@@ -331,6 +331,19 @@ export const pushSubscriptions = pgTable("push_subscription", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+/** Native push tokens from the mobile app (Expo push service, which hands
+ * them on to APNs / FCM). One row per device; `locale` as above. */
+export const appPushTokens = pgTable("app_push_token", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  token: text("token").notNull().unique(),
+  platform: text("platform").notNull(),
+  locale: text("locale").notNull().default("en"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 export const feedbackTypeEnum = pgEnum("feedback_type", ["bug", "idea", "other"]);
 export const feedbackStatusEnum = pgEnum("feedback_status", ["new", "under_review", "planned", "in_progress", "done", "declined"]);
 
