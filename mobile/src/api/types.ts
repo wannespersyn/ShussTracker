@@ -75,3 +75,33 @@ export type CrewDetail = {
   guests: { id: string; name: string; claimToken: string | null }[];
   tournaments: { id: string; name: string; status: string }[];
 };
+
+export type Reaction = "fire" | "laugh" | "beer" | "skull";
+export type ReactionTally = { reaction: Reaction; count: number; reactedByMe: boolean };
+export type GameComment = { id: string; userId: string; userName: string; text: string; createdAt: string };
+
+export type GameDetail = {
+  game: {
+    id: string;
+    playedAt: string;
+    matType: "2" | "4" | "8";
+    createdBy: string;
+    crew: { id: string; name: string } | null;
+    photoPath: string | null;
+    tournamentId: string | null;
+    canDelete: boolean;
+    teams: {
+      label: string;
+      finalRank: number | null;
+      players: {
+        id: string;
+        name: string | null;
+        isGuest: boolean;
+        eloDelta: number | null;
+        shots: Record<"1" | "2" | "3" | "mama" | "miss", number>;
+      }[];
+    }[];
+  };
+  comments: GameComment[];
+  reactions: ReactionTally[];
+};

@@ -47,6 +47,7 @@ function RootStack() {
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.surface } }}>
       <Stack.Protected guard={status === "signedIn"}>
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="game/[id]" />
       </Stack.Protected>
       <Stack.Protected guard={status === "signedOut"}>
         <Stack.Screen name="sign-in" />

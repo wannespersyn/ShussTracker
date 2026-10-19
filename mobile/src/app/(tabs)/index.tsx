@@ -23,8 +23,8 @@ const first = (name: string) => name.trim().split(/\s+/)[0] ?? name;
 export default function Home() {
   const { t } = useT();
   const { me } = useAuth();
-  const { crew } = useCrew();
-  const q = useQuery<CrewDetail>(crew ? `/crews/${crew.id}` : null);
+  const { crew, version } = useCrew();
+  const q = useQuery<CrewDetail>(crew ? `/crews/${crew.id}` : null, version);
 
   if (!crew) return <CenterState title={t.home.noCrewTitle} body={t.app.noCrewBody} />;
   if (q.error && !q.data) return <ErrorState error={q.error} onRetry={q.reload} />;

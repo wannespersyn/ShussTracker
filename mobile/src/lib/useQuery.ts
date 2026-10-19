@@ -3,7 +3,8 @@
  *
  * Minimal data hook for GET endpoints: loads on mount and whenever the path
  * changes, keeps showing the previous data while reloading, and exposes
- * `reload` for pull-to-refresh. Pass `null` as path to skip loading.
+ * `reload` for pull-to-refresh. Pass `null` as path to skip loading;
+ * changing `version` refetches the same path.
  */
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/api/client";
@@ -12,7 +13,7 @@ type Result<T> = { path: string; data: T | null; error: ApiError | null };
 
 const toApiError = (e: unknown) => (e instanceof ApiError ? e : new ApiError(0, "unknown", String(e)));
 
-export function useQuery<T>(path: string | null) {
+export function useQuery<T>(path: string | null, version = 0) {
   const [result, setResult] = useState<Result<T> | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -26,7 +27,7 @@ export function useQuery<T>(path: string | null) {
     return () => {
       live = false;
     };
-  }, [path]);
+  }, [path, version]);
 
   const reload = useCallback(async () => {
     if (!path) return;
