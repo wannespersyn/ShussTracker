@@ -6,7 +6,6 @@ import { createTournament, type TournamentFormat } from "@/lib/db/tournaments";
 
 export type CreateTournamentInput = {
   groupId: string;
-  eventId?: string;
   name: string;
   format: TournamentFormat;
   entrantPairs: [string, string][];
@@ -20,7 +19,6 @@ export async function createTournamentAction(input: CreateTournamentInput) {
     input.groupId,
     userId,
     input.name,
-    input.eventId,
     input.entrantPairs,
     input.format,
   );

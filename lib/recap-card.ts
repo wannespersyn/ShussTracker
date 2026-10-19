@@ -92,6 +92,7 @@ function drawCard(canvas: HTMLCanvasElement, slide: RecapSlide, content: RecapCa
 export async function shareRecapCard(
   slide: RecapSlide,
   content: RecapCardContent,
+  title = "Shussapp recap",
 ): Promise<"shared" | "downloaded" | "failed"> {
   const canvas = document.createElement("canvas");
   canvas.width = CARD_SIZE;
@@ -105,7 +106,7 @@ export async function shareRecapCard(
 
   if (navigator.canShare?.({ files: [file] })) {
     try {
-      await navigator.share({ files: [file], title: "Shussapp recap" });
+      await navigator.share({ files: [file], title });
       return "shared";
     } catch {
       // AbortError from a cancelled share sheet isn't a failure worth a

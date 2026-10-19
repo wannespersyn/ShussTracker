@@ -24,7 +24,7 @@ type LeaderboardRowProps = {
 const rowClasses = (highlighted: boolean) =>
   cn(
     "w-full flex items-center rounded-md border px-3 py-2.5 text-left",
-    highlighted ? "bg-linear-to-r from-gold/15 to-surface-deep border-gold" : "bg-surface-deep border-cream/6",
+    highlighted ? "bg-surface-raised border-line shadow-[inset_3px_0_0_var(--color-gold)]" : "bg-surface-deep border-line",
   );
 
 export function LeaderboardRow({
@@ -39,20 +39,19 @@ export function LeaderboardRow({
   href,
   onClick,
 }: LeaderboardRowProps) {
-  const isTop3 = rank <= 3;
-
+  
   const content = (
     <>
-      <div className={cn("font-mono font-semibold text-body w-6.5", isTop3 ? "text-gold" : "text-cream/40")}>
+      <div className={cn("font-display font-extrabold text-xl w-7", rank === 1 ? "text-gold" : "text-muted")}>
         {rank}
       </div>
       <AvatarChip initials={initials} ring={ring} size={32} className="mr-2.5" />
       <div className="flex-1 min-w-0">
-        <div className="font-heading font-semibold text-body-sm leading-[1.2] text-cream truncate">{name}</div>
-        {sub && <div className="font-mono text-[9.5px] leading-[1.3] text-cream/40 mt-0.5 truncate">{sub}</div>}
+        <div className="font-body font-semibold text-[15px] leading-[1.2] text-cream truncate">{name}</div>
+        {sub && <div className="font-body text-[12px] leading-[1.3] text-muted mt-0.5 truncate">{sub}</div>}
       </div>
       <div className="text-right shrink-0">
-        <div className="font-mono font-semibold text-body-sm text-gold">{points}</div>
+        <div className="font-display font-extrabold text-xl text-cream">{points}</div>
         {pointsLabel !== "Points" && (
           <div className="font-mono text-[9px] tracking-kicker text-cream/35 uppercase mt-0.5">{pointsLabel}</div>
         )}

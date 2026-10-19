@@ -73,54 +73,12 @@ export function capInkColor(color: CapRingColor) {
  * "lip") rather than an offset-shadow color — see `--shadow-cta` in
  * app/globals.css. */
 export const recapSlideThemes = {
-  showedUp: {
-    background: "radial-gradient(120% 120% at 50% 0%, #14201A 0%, #0B0F0C 55%, #0A0C0A 100%)",
-    accent: "#E8B33C",
-    text: "#EFE7D6",
-    buttonBg: "#E8B33C",
-    buttonFg: "#0A0C0A",
-    buttonShadow: "rgba(232,179,60,.28)",
-  },
-  biggestWin: {
-    background: "radial-gradient(120% 120% at 50% 0%, #6B1712 0%, #2C0A08 55%, #0A0C0A 100%)",
-    accent: "#E8B33C",
-    text: "#EFE7D6",
-    buttonBg: "#E8B33C",
-    buttonFg: "#0A0C0A",
-    buttonShadow: "rgba(232,179,60,.28)",
-  },
-  bestDuo: {
-    background: "radial-gradient(120% 120% at 50% 0%, #3D2F12 0%, #1A140A 55%, #0A0C0A 100%)",
-    accent: "#E8B33C",
-    text: "#EFE7D6",
-    buttonBg: "#E8B33C",
-    buttonFg: "#0A0C0A",
-    buttonShadow: "rgba(232,179,60,.28)",
-  },
-  redZones: {
-    background: "radial-gradient(120% 120% at 50% 0%, #14201A 0%, #0B0F0C 55%, #0A0C0A 100%)",
-    accent: "#E05B4E",
-    text: "#EFE7D6",
-    buttonBg: "#E8B33C",
-    buttonFg: "#0A0C0A",
-    buttonShadow: "rgba(232,179,60,.28)",
-  },
-  topScorer: {
-    background: "radial-gradient(120% 120% at 50% 0%, #14201A 0%, #0B0F0C 55%, #0A0C0A 100%)",
-    accent: "#4FA8E8",
-    text: "#EFE7D6",
-    buttonBg: "#4FA8E8",
-    buttonFg: "#0A0C0A",
-    buttonShadow: "rgba(79,168,232,.28)",
-  },
-  mostGames: {
-    background: "radial-gradient(120% 120% at 50% 0%, #14201A 0%, #0B0F0C 55%, #0A0C0A 100%)",
-    accent: "#A66BE0",
-    text: "#EFE7D6",
-    buttonBg: "#A66BE0",
-    buttonFg: "#0A0C0A",
-    buttonShadow: "rgba(166,107,224,.28)",
-  },
+  showedUp: { background: "#ffb627", accent: "#111111", text: "#111111", buttonBg: "#111111", buttonFg: "#ffb627", buttonShadow: "transparent" },
+  biggestWin: { background: "#15191a", accent: "#ffb627", text: "#f3f1ea", buttonBg: "#ffb627", buttonFg: "#111111", buttonShadow: "transparent" },
+  bestDuo: { background: "#0b0d0c", accent: "#ffb627", text: "#f3f1ea", buttonBg: "#ffb627", buttonFg: "#111111", buttonShadow: "transparent" },
+  redZones: { background: "#ff6b5b", accent: "#111111", text: "#111111", buttonBg: "#111111", buttonFg: "#ff6b5b", buttonShadow: "transparent" },
+  topScorer: { background: "#15191a", accent: "#4fd1ff", text: "#f3f1ea", buttonBg: "#4fd1ff", buttonFg: "#111111", buttonShadow: "transparent" },
+  mostGames: { background: "#ffb627", accent: "#111111", text: "#111111", buttonBg: "#111111", buttonFg: "#ffb627", buttonShadow: "transparent" },
 } as const;
 
 export type RecapSlide = keyof typeof recapSlideThemes;

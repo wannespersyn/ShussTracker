@@ -50,6 +50,41 @@
       "when": 1787848728952,
       "tag": "0006_woozy_natasha_romanoff",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792177947143,
+      "tag": "0007_game_photo",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792178470267,
+      "tag": "0008_plans_feedback",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792178958563,
+      "tag": "0009_drop_events_rivalries",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792342680135,
+      "tag": "0010_push_subscriptions",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792411314388,
+      "tag": "0011_push_locale",
+      "breakpoints": true
     }
   ]
 }

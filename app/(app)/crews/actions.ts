@@ -1,9 +1,10 @@
 "use server";
 
+import { invalidateCrew } from "@/lib/cache-tags";
+
 import { redirect } from "next/navigation";
 import { requireUserId, requireGroupMember } from "@/lib/db/authz";
 import { createCrewForUser, joinCrewByCode, removeCrewMember } from "@/lib/db/crews";
-import { createEvent } from "@/lib/db/events";
 
 function stringField(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -16,6 +17,7 @@ export async function createCrew(formData: FormData) {
   if (!name) throw new Error("Give your crew a name");
 
   const groupId = await createCrewForUser(userId, name);
+  invalidateCrew(groupId);
   redirect(`/crews/${groupId}`);
 }
 
@@ -26,6 +28,7 @@ export async function joinCrew(_prev: JoinCrewState, formData: FormData): Promis
   const result = await joinCrewByCode(userId, stringField(formData, "code"));
   if (result.error) return { error: result.error };
 
+  invalidateCrew(result.groupId);
   redirect(`/crews/${result.groupId}`);
 }
 
@@ -36,16 +39,7 @@ export async function leaveCrew(groupId: string) {
   const userId = await requireUserId();
   await requireGroupMember(userId, groupId);
   await removeCrewMember(groupId, userId);
+  invalidateCrew(groupId);
   redirect("/crews");
 }
 
-export async function createEventAction(groupId: string, formData: FormData) {
-  const userId = await requireUserId();
-  await requireGroupMember(userId, groupId);
-
-  const name = stringField(formData, "name").trim() || "Game night";
-  const date = stringField(formData, "date").trim() || new Date().toISOString().slice(0, 10);
-
-  const eventId = await createEvent(groupId, userId, name, date);
-  redirect(`/events/${eventId}`);
-}

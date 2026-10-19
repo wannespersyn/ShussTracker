@@ -7,12 +7,16 @@ import { getCrewEloLeaderboard } from "@/lib/db/crews";
 import { ChwaziPicker } from "@/components/chwazi/ChwaziPicker";
 import { Card } from "@/components/ui";
 import { ChevronRightIcon } from "@/components/ui/icons";
+import { getT } from "@/lib/i18n/server";
+import { format } from "@/lib/i18n";
+
 
 export default async function ChwaziPage({
   searchParams,
-}: Readonly<{ searchParams: Promise<{ crewId?: string; eventId?: string; count?: string }> }>) {
+}: Readonly<{ searchParams: Promise<{ crewId?: string; count?: string }> }>) {
   const session = await requireSession();
-  const { crewId, eventId, count } = await searchParams;
+  const t = await getT();
+  const { crewId, count } = await searchParams;
   const requiredCount = count ? Number(count) : undefined;
 
   const memberships = await db.query.groupMembers.findMany({
@@ -23,9 +27,9 @@ export default async function ChwaziPage({
   if (memberships.length === 0) {
     return (
       <div className="min-h-screen bg-surface flex flex-col items-center justify-center gap-4 px-8 text-center">
-        <div className="font-display text-3xl text-cream">No crew yet</div>
-        <div className="font-body text-body text-cream/55 max-w-70">
-          Picking teams needs a crew to pick from. Join or start one first.
+        <div className="font-display text-3xl text-cream">{t.more.noCrew}</div>
+        <div className="font-body text-body text-muted max-w-70">
+          {t.empty.chwaziNoCrew}
         </div>
       </div>
     );
@@ -34,24 +38,23 @@ export default async function ChwaziPage({
   const selected = memberships.length === 1 ? memberships[0] : memberships.find((m) => m.groupId === crewId);
 
   if (!selected) {
-    const eventQuery = eventId ? `&eventId=${eventId}` : "";
     const countQuery = count ? `&count=${count}` : "";
     return (
       <div className="min-h-screen bg-surface flex flex-col px-5 pt-14 pb-28 gap-6">
         <header>
-          <div className="font-heading font-bold text-label-kicker tracking-kicker uppercase text-cream/45">
+          <div className="font-heading font-bold text-label-kicker tracking-kicker uppercase text-muted">
             Chwazi
           </div>
-          <div className="font-display text-display-sm text-cream mt-1">Which crew?</div>
+          <div className="font-display text-display-sm text-cream mt-1">{t.more.whichCrew}</div>
         </header>
         <div className="flex flex-col gap-3">
           {memberships.map((m) => (
-            <Link key={m.groupId} href={`/chwazi?crewId=${m.groupId}${eventQuery}${countQuery}`}>
+            <Link key={m.groupId} href={`/chwazi?crewId=${m.groupId}${countQuery}`}>
               <Card className="flex items-center justify-between">
                 <div>
                   <div className="font-display text-xl text-cream">{m.group.name}</div>
-                  <div className="font-body text-body-sm text-cream/50">
-                    {m.group.members.length} {m.group.members.length === 1 ? "member" : "members"}
+                  <div className="font-body text-body-sm text-muted">
+                    {format(m.group.members.length === 1 ? t.more.member : t.more.members, { n: m.group.members.length })}
                   </div>
                 </div>
                 <ChevronRightIcon className="w-6 h-6 text-gold/70" />
@@ -70,13 +73,13 @@ export default async function ChwaziPage({
     }),
     getCrewEloLeaderboard(selected.groupId),
   ]);
-  const roster = members.map((m) => ({ id: m.user.id, name: m.user.name ?? "Player" }));
+  const roster = members.map((m) => ({ id: m.user.id, name: m.user.name ?? t.more.player }));
   const ratings = Object.fromEntries(elo.map((e) => [e.userId, e.rating]));
+  roster.sort((x, y) => (ratings[y.id] ?? 0) - (ratings[x.id] ?? 0));
 
   return (
     <ChwaziPicker
       groupId={selected.groupId}
-      eventId={eventId}
       roster={roster}
       ratings={ratings}
       requiredCount={requiredCount}

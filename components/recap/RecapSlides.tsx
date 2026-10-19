@@ -1,3 +1,12 @@
+/**
+ * RecapSlides
+ *
+ * Crew season recap as tap-through slides (showed up, blowout, best partner,
+ * top scorer, most games, red zone), with a shareable image per slide.
+ *
+ * Notes: cardContentFor mirrors the on-screen copy for the canvas card;
+ * keep both in sync. Copy lives in t.season.
+ */
 "use client";
 
 import { useState } from "react";
@@ -6,67 +15,69 @@ import { recapSlideThemes, displayHero, type RecapSlide } from "@/lib/theme/toke
 import { StatCounter } from "@/components/ui";
 import type { RecapData } from "@/lib/db/recap";
 import { shareRecapCard, type RecapCardContent } from "@/lib/recap-card";
+import { useT } from "@/lib/i18n/client";
+import { format, type Dictionary } from "@/lib/i18n";
 
 const ORDER: RecapSlide[] = ["showedUp", "biggestWin", "bestDuo", "topScorer", "mostGames", "redZones"];
 
 /** Mirrors the slide's own JSX content (below) as flat text a canvas can
  * draw — kept in one place so the shared image never drifts from what's
  * on screen. */
-function cardContentFor(key: RecapSlide, data: RecapData, crewName: string): RecapCardContent {
-  const kicker = `${crewName} · ${data.label}`;
+function cardContentFor(key: RecapSlide, data: RecapData, crewName: string, S: Dictionary["season"], label: string): RecapCardContent {
+  const kicker = `${crewName} · ${label}`;
   switch (key) {
     case "showedUp":
       return {
         kicker,
-        headline: "The crew showed up",
+        headline: S.showedUp,
         bigNumber: String(data.showedUp.games),
-        subtext: `games logged, across ${data.showedUp.nights} ${data.showedUp.nights === 1 ? "night" : "nights"}`,
+        subtext: format(data.showedUp.nights === 1 ? S.acrossOne : S.across, { n: data.showedUp.nights }),
       };
     case "biggestWin":
       return data.biggestWin
         ? {
             kicker,
-            headline: `Biggest blowout — ${data.biggestWin.winnerNames}`,
+            headline: `${S.blowout} — ${data.biggestWin.winnerNames}`,
             bigNumber: String(data.biggestWin.margin),
-            subtext: `point margin over ${data.biggestWin.loserNames}`,
+            subtext: format(S.margin, { names: data.biggestWin.loserNames }),
           }
-        : { kicker, headline: "Biggest blowout", bigNumber: "–", subtext: "No games logged yet." };
+        : { kicker, headline: S.blowout, bigNumber: "–", subtext: S.noGames };
     case "bestDuo":
       return data.bestDuo
         ? {
             kicker,
-            headline: `Best partner — ${data.bestDuo.names}`,
+            headline: `${S.bestPartner} — ${data.bestDuo.names}`,
             bigNumber: String(data.bestDuo.wins),
-            subtext: `wins together · ${data.bestDuo.wins}–${data.bestDuo.losses}`,
+            subtext: format(S.winsTogether, { w: data.bestDuo.wins, l: data.bestDuo.losses }),
           }
-        : { kicker, headline: "Best partner", bigNumber: "–", subtext: "No partner pairing yet." };
+        : { kicker, headline: S.bestPartner, bigNumber: "–", subtext: S.noPartner };
     case "topScorer":
       return data.topScorer
         ? {
             kicker,
-            headline: `Top scorer — ${data.topScorer.name}`,
+            headline: `${S.topScorer} — ${data.topScorer.name}`,
             bigNumber: String(data.topScorer.points),
-            subtext: "points this season",
+            subtext: S.pointsSeason,
           }
-        : { kicker, headline: "Top scorer", bigNumber: "–", subtext: "No points logged yet." };
+        : { kicker, headline: S.topScorer, bigNumber: "–", subtext: S.noPoints };
     case "mostGames":
       return data.mostGames
         ? {
             kicker,
-            headline: `Most games — ${data.mostGames.name}`,
+            headline: `${S.mostGames} — ${data.mostGames.name}`,
             bigNumber: String(data.mostGames.games),
-            subtext: "games played",
+            subtext: S.gamesPlayed,
           }
-        : { kicker, headline: "Most games", bigNumber: "–", subtext: "No games logged yet." };
+        : { kicker, headline: S.mostGames, bigNumber: "–", subtext: S.noGames };
     case "redZones":
       return data.redZones
         ? {
             kicker,
-            headline: `Red zone regular — ${data.redZones.name}`,
+            headline: `${S.redZone} — ${data.redZones.name}`,
             bigNumber: String(data.redZones.count),
-            subtext: "chugs taken",
+            subtext: S.chugs,
           }
-        : { kicker, headline: "Red zone regular", bigNumber: "–", subtext: "Nobody's hit the red zone yet." };
+        : { kicker, headline: S.redZone, bigNumber: "–", subtext: S.noRed };
   }
 }
 
@@ -77,6 +88,9 @@ export function RecapSlides({
 }: Readonly<{ crewId: string; crewName: string; data: RecapData }>) {
   const [index, setIndex] = useState(0);
   const [sharing, setSharing] = useState(false);
+  const { t } = useT();
+  const S = t.season;
+  const label = data.label === "All-time" ? S.allTime : data.label;
   const key = ORDER[index];
   const theme = recapSlideThemes[key];
 
@@ -91,7 +105,7 @@ export function RecapSlides({
     if (sharing) return;
     setSharing(true);
     try {
-      await shareRecapCard(key, cardContentFor(key, data, crewName));
+      await shareRecapCard(key, cardContentFor(key, data, crewName, S, label), t.monthly.shareTitle);
     } finally {
       setSharing(false);
     }
@@ -104,7 +118,7 @@ export function RecapSlides({
           <div
             key={k}
             className="flex-1 h-1 rounded-pill"
-            style={{ background: i <= index ? theme.accent : "rgba(255,255,255,.25)" }}
+            style={{ background: theme.text, opacity: i <= index ? 1 : 0.25 }}
           />
         ))}
       </div>
@@ -117,12 +131,13 @@ export function RecapSlides({
           className="h-9 px-3.5 rounded-pill font-heading font-bold text-[11px] tracking-[1.2px] uppercase disabled:opacity-50"
           style={{ background: theme.buttonBg, color: theme.buttonFg }}
         >
-          {sharing ? "…" : "Share"}
+          {sharing ? "…" : S.share}
         </button>
         <Link
           href={`/crews/${crewId}`}
-          aria-label="Close recap"
-          className="w-9 h-9 flex items-center justify-center text-2xl leading-none"
+          aria-label={t.monthly.close}
+          className="w-11 h-11 flex items-center justify-center text-3xl leading-none"
+          style={{ color: theme.text }}
         >
           ×
         </Link>
@@ -130,15 +145,15 @@ export function RecapSlides({
 
       <div className="relative flex-1 flex flex-col items-center justify-center px-6 text-center gap-3 pointer-events-none">
         <div className="font-mono font-semibold text-[11px] tracking-[0.2em] uppercase" style={{ color: theme.accent }}>
-          {crewName} · {data.label}
+          {crewName} · {label}
         </div>
 
         {key === "showedUp" && (
           <>
-            <div className="font-body text-lg opacity-85">The crew showed up</div>
+            <div className="font-body text-lg opacity-85">{S.showedUp}</div>
             <StatCounter value={data.showedUp.games} size={displayHero.seasonRecapStat} />
             <div className="font-body text-lg opacity-85">
-              games logged, across {data.showedUp.nights} {data.showedUp.nights === 1 ? "night" : "nights"}
+              {format(data.showedUp.nights === 1 ? S.acrossOne : S.across, { n: data.showedUp.nights })}
             </div>
           </>
         )}
@@ -146,70 +161,70 @@ export function RecapSlides({
         {key === "biggestWin" &&
           (data.biggestWin ? (
             <>
-              <div className="font-body text-lg opacity-85">Biggest blowout</div>
+              <div className="font-body text-lg opacity-85">{S.blowout}</div>
               <div className="font-display text-3xl">{data.biggestWin.winnerNames}</div>
               <StatCounter value={data.biggestWin.margin} size={displayHero.seasonRecapStat} />
-              <div className="font-body text-lg opacity-85">point margin over {data.biggestWin.loserNames}</div>
+              <div className="font-body text-lg opacity-85">{format(S.margin, { names: data.biggestWin.loserNames })}</div>
             </>
           ) : (
-            <div className="font-body text-lg opacity-85">No games logged yet.</div>
+            <div className="font-body text-lg opacity-85">{S.noGames}</div>
           ))}
 
         {key === "bestDuo" &&
           (data.bestDuo ? (
             <>
-              <div className="font-body text-lg opacity-85">Best partner</div>
+              <div className="font-body text-lg opacity-85">{S.bestPartner}</div>
               <div className="font-display text-3xl">{data.bestDuo.names}</div>
               <StatCounter value={data.bestDuo.wins} size={displayHero.seasonRecapStat} />
               <div className="font-body text-lg opacity-85">
-                wins together · {data.bestDuo.wins}–{data.bestDuo.losses}
+                {format(S.winsTogether, { w: data.bestDuo.wins, l: data.bestDuo.losses })}
               </div>
             </>
           ) : (
-            <div className="font-body text-lg opacity-85">No partner pairing yet.</div>
+            <div className="font-body text-lg opacity-85">{S.noPartner}</div>
           ))}
 
         {key === "topScorer" &&
           (data.topScorer ? (
             <>
-              <div className="font-body text-lg opacity-85">Top scorer</div>
+              <div className="font-body text-lg opacity-85">{S.topScorer}</div>
               <div className="font-display text-3xl">{data.topScorer.name}</div>
               <StatCounter value={data.topScorer.points} size={displayHero.seasonRecapStat} />
-              <div className="font-body text-lg opacity-85">points this season</div>
+              <div className="font-body text-lg opacity-85">{S.pointsSeason}</div>
             </>
           ) : (
-            <div className="font-body text-lg opacity-85">No points logged yet.</div>
+            <div className="font-body text-lg opacity-85">{S.noPoints}</div>
           ))}
 
         {key === "mostGames" &&
           (data.mostGames ? (
             <>
-              <div className="font-body text-lg opacity-85">Most games</div>
+              <div className="font-body text-lg opacity-85">{S.mostGames}</div>
               <div className="font-display text-3xl">{data.mostGames.name}</div>
               <StatCounter value={data.mostGames.games} size={displayHero.seasonRecapStat} />
-              <div className="font-body text-lg opacity-85">games played</div>
+              <div className="font-body text-lg opacity-85">{S.gamesPlayed}</div>
             </>
           ) : (
-            <div className="font-body text-lg opacity-85">No games logged yet.</div>
+            <div className="font-body text-lg opacity-85">{S.noGames}</div>
           ))}
 
         {key === "redZones" &&
           (data.redZones ? (
             <>
-              <div className="font-body text-lg opacity-85">Red zone regular</div>
+              <div className="font-body text-lg opacity-85">{S.redZone}</div>
               <div className="font-display text-3xl">{data.redZones.name}</div>
               <StatCounter value={data.redZones.count} size={displayHero.seasonRecapStat} />
-              <div className="font-body text-lg opacity-85">chugs taken</div>
+              <div className="font-body text-lg opacity-85">{S.chugs}</div>
             </>
           ) : (
-            <div className="font-body text-lg opacity-85">Nobody&apos;s hit the red zone yet.</div>
+            <div className="font-body text-lg opacity-85">{S.noRed}</div>
           ))}
       </div>
 
       {/* Tap zones, on top of the (pointer-events-none) content — below the
        * z-10 progress bar / close button, which stay clickable. */}
-      <button type="button" aria-label="Previous slide" onClick={prev} className="absolute left-0 top-0 bottom-0 w-1/2" />
-      <button type="button" aria-label="Next slide" onClick={next} className="absolute right-0 top-0 bottom-0 w-1/2" />
+      <button type="button" aria-label={t.monthly.prevSlide} onClick={prev} className="absolute left-0 top-0 bottom-0 w-1/2" />
+      <button type="button" aria-label={t.monthly.nextSlide} onClick={next} className="absolute right-0 top-0 bottom-0 w-1/2" />
     </div>
   );
 }

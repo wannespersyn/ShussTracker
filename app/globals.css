@@ -1,78 +1,160 @@
 @import "tailwindcss";
 
 /* ---------------------------------------------------------------------
- * Shussapp design tokens
- * Extracted from Claude Design project "Shussapp Flow" (Shussapp
- * Flow.dc.html, 15 screens).
- * Do not add new colors/sizes/radii/shadows here without checking the
- * source designs first — everything downstream should reuse these.
+ * Shussapp v2 design tokens — "Scoreboard" redesign (Claude Design canvas
+ * "Shussapp v2 — Scoreboard redesign").
+ * Token NAMES are kept from v1 so every existing utility class (bg-surface,
+ * text-cream, bg-gold, …) re-skins automatically; the VALUES are new.
+ *   cream = primary text color (dark in light mode)
+ *   gold  = amber accent
+ * Themes: <html data-theme="dark|light|system">, set from the `theme` cookie
+ * in app/layout.tsx. "system" follows prefers-color-scheme.
  * ------------------------------------------------------------------- */
 
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* Backgrounds — flat near-black, layered dark -> light */
+  --color-ink: #111111; /* text on amber fills, deepest chrome */
+  --color-surface: #0b0d0c; /* screen background */
+  --color-surface-raised: #1d2224; /* raised tile (was gradient start) */
+  --color-surface-raised-end: #15191a;
+  --color-surface-alt: #1d2224;
+  --color-surface-alt-end: #15191a;
+  --color-surface-deep: #15191a; /* standard card / row fill */
+  --color-surface-panel: #15191a; /* nav, icon buttons, inputs */
+  --color-surface-bloom: #15191a;
+  --color-line: rgba(255, 255, 255, 0.08); /* hairline borders */
+
+  /* Amber — primary accent */
+  --color-gold: #ffb627;
+  --color-gold-hover: #ffd07a;
+  --color-gold-dark: #e09a00;
+  --color-gold-end: #c98200;
+
+  /* Red — mama / losses */
+  --color-red: #ff6b5b;
+  --color-red-bright: #ff6b5b;
+  --color-red-pale: #ff8a7c;
+  --color-red-end: #c2372a;
+
+  /* Text */
+  --color-cream: #f3f1ea;
+
+  /* Green — wins, Elo up */
+  --color-mint: #7fe0a8;
+  --color-muted: #9aa19c; /* secondary text, kickers, labels */
+  --color-soft: #c9cec9; /* tertiary-light text */
+  --color-chip: #2a3033; /* avatars, L tiles, tags */
+  --color-line-strong: rgba(255, 255, 255, 0.12); /* buttons, pills */
+  --color-surface-nav: #1d2224;
+  --color-nav-active: #ffb627; /* active tab, logo ring */
+
+  --color-blue-bright: #4fd1ff;
+  --color-purple-bright: #b48cff;
+
+  /* Shot zones (log mat) */
+  --color-field-near: #2a3033;
+  --color-field-mid: #232a2c;
+  --color-field-far: #1d2224;
+
+  /* Fonts (next/font variables in app/layout.tsx) */
+  --font-display: var(--font-barlow-condensed), sans-serif; /* big numbers, headlines */
+  --font-heading: var(--font-barlow-condensed), sans-serif; /* titles, tabs, buttons */
+  --font-body: var(--font-barlow), sans-serif; /* body copy */
+  --font-mono: var(--font-barlow-condensed), sans-serif; /* stat numbers + kickers (tabular) */
+
+  /* Radii — tighter, sportier */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-cta: 16px;
+  --radius-pill: 999px;
+
+  /* Flat look: no glow shadows, only subtle elevation */
+  --shadow-cta: none;
+  --shadow-cta-lg: none;
+  --shadow-cta-inverted: none;
+  --shadow-fab: none;
+  --shadow-elevation-sm: 0 4px 12px rgba(0, 0, 0, 0.3);
+  --shadow-elevation-md: 0 8px 20px rgba(0, 0, 0, 0.35);
+  --shadow-elevation-lg: 0 12px 28px rgba(0, 0, 0, 0.4);
+  --shadow-elevation-xl: 0 20px 48px rgba(0, 0, 0, 0.5);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --color-surface: #f4f2ec;
+  --color-surface-raised: #ece9e1;
+  --color-surface-raised-end: #ffffff;
+  --color-surface-alt: #ece9e1;
+  --color-surface-alt-end: #ffffff;
+  --color-surface-deep: #ffffff;
+  --color-surface-panel: #ffffff;
+  --color-surface-bloom: #ffffff;
+  --color-line: rgba(0, 0, 0, 0.1);
+  --color-gold: #b07400;
+  --color-gold-hover: #8a5a00;
+  --color-gold-dark: #8a5a00;
+  --color-red: #c2372a;
+  --color-red-bright: #c2372a;
+  --color-red-pale: #a52e23;
+  --color-cream: #141614;
+  --color-mint: #1e8a50;
+  --color-muted: #5e655f;
+  --color-soft: #3a403b;
+  --color-chip: #ece9e1;
+  --color-line-strong: rgba(0, 0, 0, 0.1);
+  --color-surface-nav: #ffffff;
+  --color-nav-active: #141614;
+  --color-field-near: #e3dfd5;
+  --color-field-mid: #ece9e1;
+  --color-field-far: #f4f2ec;
+  --shadow-elevation-sm: 0 4px 12px rgba(0, 0, 0, 0.06);
+  --shadow-elevation-md: 0 8px 20px rgba(0, 0, 0, 0.08);
+}
+
+@media (prefers-color-scheme: light) {
+  :root[data-theme="system"] {
+    color-scheme: light;
+    --color-surface: #f4f2ec;
+    --color-surface-raised: #ece9e1;
+    --color-surface-raised-end: #ffffff;
+    --color-surface-alt: #ece9e1;
+    --color-surface-alt-end: #ffffff;
+    --color-surface-deep: #ffffff;
+    --color-surface-panel: #ffffff;
+    --color-surface-bloom: #ffffff;
+    --color-line: rgba(0, 0, 0, 0.1);
+    --color-gold: #b07400;
+    --color-gold-hover: #8a5a00;
+    --color-gold-dark: #8a5a00;
+    --color-red: #c2372a;
+    --color-red-bright: #c2372a;
+    --color-red-pale: #a52e23;
+    --color-cream: #141614;
+    --color-mint: #1e8a50;
+    --color-muted: #5e655f;
+    --color-soft: #3a403b;
+    --color-chip: #ece9e1;
+    --color-line-strong: rgba(0, 0, 0, 0.1);
+    --color-surface-nav: #ffffff;
+    --color-nav-active: #141614;
+    --color-field-near: #e3dfd5;
+    --color-field-mid: #ece9e1;
+    --color-field-far: #f4f2ec;
+    --shadow-elevation-sm: 0 4px 12px rgba(0, 0, 0, 0.06);
+    --shadow-elevation-md: 0 8px 20px rgba(0, 0, 0, 0.08);
+  }
+}
+
+/* Amber fills keep the bright amber in every theme (text on them is ink),
+ * even where light mode darkens text-gold for contrast. */
 :root {
-  /* Backgrounds — near-black bottle-green, layered dark -> light */
-  --color-ink: #0a0c0a; /* deepest bg (status bar chrome, gold recap slide footer) */
-  --color-surface: #0b0f0c; /* primary screen bg, phone frame fill */
-  --color-surface-raised: #17211b; /* hero/card gradient start (160deg) */
-  --color-surface-raised-end: #0e1411; /* hero/card gradient end */
-  --color-surface-alt: #1d2a1f; /* selected-tile / leaderboard hero gradient start (155deg) */
-  --color-surface-alt-end: #0e1411; /* selected-tile / leaderboard hero gradient end */
-  --color-surface-deep: #131a16; /* standard card / row fill */
-  --color-surface-panel: #141a16; /* nav pill, icon buttons, input fill */
-  --color-surface-bloom: #14201a; /* radial bloom center: team picker mat, onboarding */
-
-  /* Gold — primary accent */
-  --color-gold: #e8b33c;
-  --color-gold-hover: #f5d077; /* link hover only */
-  --color-gold-dark: #c9992f; /* progress-bar gradient end, badge glow */
-  --color-gold-end: #b87a06; /* recap gold-slide gradient end */
-
-  /* Red — "mama" / threat accent */
-  --color-red: #c8342b;
-  --color-red-bright: #e05b4e; /* mama numbers, live badges, sign-out */
-  --color-red-pale: #f2a89e; /* thin-log warning copy, risk-zone label text */
-  --color-red-end: #a81c15; /* gradient end where needed */
-
-  /* Cream — primary text-on-dark */
-  --color-cream: #efe7d6;
-
-  /* Mint — positive/secondary accent (streak deltas, points-up) */
-  --color-mint: #8fbf9c;
-
-  /* Blue/purple — top win-streak tiers (hotter than red), PlayerStatsSummary only */
-  --color-blue-bright: #4fa8e8;
-  --color-purple-bright: #a66be0;
-
-  /* Log-mat shot zones (near -> far field, brighter = closer) */
-  --color-field-near: #1f8f68;
-  --color-field-mid: #167058;
-  --color-field-far: #12594a;
-
-  /* Fonts (wired to next/font variables in app/layout.tsx) */
-  --font-display: var(--font-anton), sans-serif; /* hero numbers, headlines, VS */
-  --font-heading: var(--font-archivo), sans-serif; /* names, section titles, buttons */
-  --font-body: var(--font-archivo), sans-serif; /* body copy */
-  --font-mono: var(--font-ibm-plex-mono), monospace; /* every stat number, timestamp, uppercase meta kicker */
-
-  /* Border radii */
-  --radius-xs: 4px; /* progress-bar segments, step dots */
-  --radius-sm: 9px; /* small icon buttons, plus/minus chips */
-  --radius-md: 13px; /* list rows, small cards, icon buttons */
-  --radius-lg: 18px; /* standard cards */
-  --radius-xl: 22px; /* hero cards, sheets */
-  --radius-cta: 28px; /* primary CTAs */
-  --radius-pill: 999px; /* segmented tabs, nav pill, circular avatars */
-
-  /* Soft ambient glow shadows — no offset "lip", blur only */
-  --shadow-cta: 0 10px 26px rgba(232, 179, 60, 0.24);
-  --shadow-cta-lg: 0 10px 26px rgba(232, 179, 60, 0.24);
-  --shadow-cta-inverted: 0 10px 22px rgba(0, 0, 0, 0.35);
-  --shadow-fab: 0 8px 22px rgba(232, 179, 60, 0.32);
-
-  /* Ambient elevation shadows (pure blur, no lip) */
-  --shadow-elevation-sm: 0 6px 14px rgba(0, 0, 0, 0.35);
-  --shadow-elevation-md: 0 8px 22px rgba(0, 0, 0, 0.4);
-  --shadow-elevation-lg: 0 12px 30px rgba(0, 0, 0, 0.45);
-  --shadow-elevation-xl: 0 20px 50px rgba(0, 0, 0, 0.55); /* max elevation */
+  --color-amber-fill: #ffb627;
 }
 
 @theme inline {
@@ -97,8 +179,16 @@
   --color-red-end: var(--color-red-end);
 
   --color-cream: var(--color-cream);
+  --color-line: var(--color-line);
+  --color-amber: var(--color-amber-fill);
 
   --color-mint: var(--color-mint);
+  --color-muted: var(--color-muted);
+  --color-soft: var(--color-soft);
+  --color-chip: var(--color-chip);
+  --color-line-strong: var(--color-line-strong);
+  --color-surface-nav: var(--color-surface-nav);
+  --color-nav-active: var(--color-nav-active);
 
   --color-blue-bright: var(--color-blue-bright);
   --color-purple-bright: var(--color-purple-bright);
@@ -161,6 +251,18 @@
    * tighter, ~0.06-0.1em. This default matches the mono kicker case. */
   --tracking-kicker: 0.14em;
 
+  /* Mockups use the default line box for every size (see body). */
+  --text-xs--line-height: normal;
+  --text-sm--line-height: normal;
+  --text-base--line-height: normal;
+  --text-lg--line-height: normal;
+  --text-xl--line-height: normal;
+  --text-2xl--line-height: normal;
+  --text-3xl--line-height: normal;
+  --text-4xl--line-height: normal;
+  --text-5xl--line-height: normal;
+  --text-6xl--line-height: normal;
+
   /* Motion */
   --animate-roll: roll 1.6s cubic-bezier(0.15, 0.85, 0.25, 1) forwards;
   --animate-fly: fly 0.5s cubic-bezier(0.2, 0.8, 0.3, 1) forwards;
@@ -180,6 +282,9 @@
     background: var(--color-surface);
     color: var(--color-cream);
     font-family: var(--font-body);
+    /* The design is drawn with the browser's default line box, not
+     * Tailwind's 1.5 — keeps every row as tight as the mockups. */
+    line-height: normal;
   }
 
   a {
@@ -195,17 +300,17 @@
  * Kept as utilities (not tokens) because they combine 2+ properties. */
 @layer components {
   .bg-gradient-hero {
-    background: linear-gradient(160deg, var(--color-surface-raised) 0%, var(--color-surface-raised-end) 60%);
+    background: var(--color-surface-deep);
   }
   .bg-gradient-alt {
-    background: linear-gradient(155deg, var(--color-surface-alt), var(--color-surface-alt-end));
+    background: var(--color-surface-alt);
   }
   .bg-gradient-gold {
-    background: linear-gradient(120deg, var(--color-gold), var(--color-gold-dark));
+    background: var(--color-amber-fill);
   }
   .bg-gradient-event {
     /* live event / bracket header */
-    background: linear-gradient(160deg, var(--color-red), var(--color-red-end));
+    background: var(--color-red-end);
   }
   .bg-stripe-texture {
     /* diagonal hazard-stripe overlay used on red event/bracket headers */
@@ -213,12 +318,12 @@
   }
   .bg-ruled-texture {
     /* faint horizontal rule-line overlay: onboarding, empty state */
-    background-image: linear-gradient(rgba(239, 231, 214, 0.045) 1px, transparent 1px);
+    background-image: none;
     background-size: 100% 34px;
   }
   .bg-gradient-bloom {
     /* radial bloom wash: onboarding + team-picker mat background */
-    background: radial-gradient(120% 80% at 50% 0%, var(--color-surface-bloom) 0%, var(--color-surface) 55%, var(--color-ink) 100%);
+    background: var(--color-surface);
   }
 }
 
@@ -337,5 +442,104 @@
   }
   to {
     background-position: 32px 0;
+  }
+}
+
+/* Light mode keeps the hero scoreboard card dark (mockup "Home — light
+ * mode"), and the viewer's own leaderboard row becomes white with an amber
+ * outline. */
+.hero-invert {
+  /* dark values re-applied locally */
+}
+:root[data-theme="light"] .hero-invert {
+  --color-surface-deep: #141614;
+  --color-surface-raised: #1d2224;
+  --color-chip: #2a3033;
+  --color-cream: #f3f1ea;
+  --color-muted: #9aa19c;
+  --color-soft: #c9cec9;
+  --color-line: rgba(255, 255, 255, 0.08);
+  --color-gold: #ffb627;
+  --color-red: #ff6b5b;
+  --color-mint: #7fe0a8;
+  color: var(--color-cream);
+  border-color: transparent;
+}
+:root[data-theme="light"] .me-row {
+  background: #ffffff;
+  border: 2px solid var(--color-amber-fill);
+}
+@media (prefers-color-scheme: light) {
+  :root[data-theme="system"] .hero-invert {
+    --color-surface-deep: #141614;
+    --color-surface-raised: #1d2224;
+    --color-chip: #2a3033;
+    --color-cream: #f3f1ea;
+    --color-muted: #9aa19c;
+    --color-soft: #c9cec9;
+    --color-line: rgba(255, 255, 255, 0.08);
+    --color-gold: #ffb627;
+    --color-red: #ff6b5b;
+    --color-mint: #7fe0a8;
+    color: var(--color-cream);
+    border-color: transparent;
+  }
+  :root[data-theme="system"] .me-row {
+    background: #ffffff;
+    border: 2px solid var(--color-amber-fill);
+  }
+}
+
+/* "On fire" flair (mockup "Home — on a streak"): while the home screen
+ * shows a 3+ win streak, the whole dark theme heats up to orange — nav
+ * included — with a 3px orange frame around the viewport. */
+:root[data-theme="dark"]:has(.on-fire) {
+  --color-gold: #ff7a2f;
+  --color-gold-hover: #ffa16b;
+  --color-amber-fill: #ff7a2f;
+  --color-ink: #160a04;
+  --color-surface: #0e0b0a;
+  --color-surface-deep: #1c1411;
+  --color-surface-panel: #1c1411;
+  --color-surface-raised: #241a16;
+  --color-surface-nav: #241a16;
+  --color-chip: #2a2321;
+  --color-muted: #b9a79c;
+  --color-line: rgba(255, 122, 47, 0.27);
+  --color-line-strong: rgba(255, 122, 47, 0.4);
+  --color-nav-active: #ff7a2f;
+}
+:root[data-theme="dark"] body:has(.on-fire)::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  box-shadow: inset 0 0 0 3px #ff7a2f;
+  pointer-events: none;
+  z-index: 60;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"]:has(.on-fire) {
+    --color-gold: #ff7a2f;
+    --color-gold-hover: #ffa16b;
+    --color-amber-fill: #ff7a2f;
+    --color-ink: #160a04;
+    --color-surface: #0e0b0a;
+    --color-surface-deep: #1c1411;
+    --color-surface-panel: #1c1411;
+    --color-surface-raised: #241a16;
+    --color-surface-nav: #241a16;
+    --color-chip: #2a2321;
+    --color-muted: #b9a79c;
+    --color-line: rgba(255, 122, 47, 0.27);
+    --color-line-strong: rgba(255, 122, 47, 0.4);
+    --color-nav-active: #ff7a2f;
+  }
+  :root[data-theme="system"] body:has(.on-fire)::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    box-shadow: inset 0 0 0 3px #ff7a2f;
+    pointer-events: none;
+    z-index: 60;
   }
 }

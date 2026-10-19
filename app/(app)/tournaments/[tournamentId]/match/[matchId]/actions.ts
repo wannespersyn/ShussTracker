@@ -1,5 +1,9 @@
 "use server";
 
+import { after } from "next/server";
+import { notifyGameLogged } from "@/lib/notify";
+import { invalidateCrew } from "@/lib/cache-tags";
+
 import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
@@ -30,7 +34,6 @@ export async function playTournamentMatch(input: PlayTournamentMatchInput) {
 
   const { gameId } = await createGameRecord({
     groupId: match.tournament.groupId,
-    eventId: match.tournament.eventId ?? undefined,
     createdBy: userId,
     matType: "4",
     teams: [
@@ -50,5 +53,7 @@ export async function playTournamentMatch(input: PlayTournamentMatchInput) {
 
   await recordMatchResult(input.matchId, gameId, input.winnerEntrantId);
 
+  invalidateCrew(match.tournament.groupId);
+  after(() => notifyGameLogged(gameId, userId).catch(() => {}));
   redirect(`/tournaments/${match.tournamentId}`);
 }

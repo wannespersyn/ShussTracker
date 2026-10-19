@@ -16,7 +16,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     sessionsTable: sessions,
     verificationTokensTable: verificationTokens,
   }),
-  providers: [Google],
+  // Google only hands out verified addresses, so linking by email is safe —
+  // and needed when a user row exists without its Google `account` row
+  // (e.g. a database restored from a dump without the auth tables).
+  providers: [Google({ allowDangerousEmailAccountLinking: true })],
   session: {
     strategy: "database",
   },

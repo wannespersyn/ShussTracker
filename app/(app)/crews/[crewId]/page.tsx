@@ -1,26 +1,29 @@
 import Link from "next/link";
-import { eq } from "drizzle-orm";
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
-import { db } from "@/lib/db";
-import { groups } from "@/lib/db/schema";
 import { requireGroupMember, requireSession } from "@/lib/db/authz";
-import { getCrewBestDuo, getCrewEloLeaderboard, getCrewLeaderboard, getCrewRedZoneLeaderboard } from "@/lib/db/crews";
-import { getCrewRivalries } from "@/lib/db/rivalries";
-import { unpinRivalryAction } from "./rivalries/actions";
+import { getCrew, getCrewInsights } from "@/lib/db/crew-insights";
 import { getCrewGuests } from "@/lib/db/guests";
-import { addGuestAction, removeGuestAction } from "./guests/actions";
-import { initialsFor } from "@/lib/format";
-import { getGroupEvents } from "@/lib/db/events";
 import { getGroupTournaments } from "@/lib/db/tournaments";
-import { AvatarChip, BackButton, Card, ConfirmForm } from "@/components/ui";
-import { CrewLeaderboard } from "@/components/crews/CrewLeaderboard";
-import { SettingsIcon, ChevronRightIcon, ClockIcon, TrophyIcon, PlusIcon } from "@/components/ui/icons";
-import { leaveCrew, createEventAction } from "@/app/(app)/crews/actions";
+import { addGuestAction, removeGuestAction } from "./guests/actions";
+import { leaveCrew } from "@/app/(app)/crews/actions";
+import { getLocale, getT } from "@/lib/i18n/server";
+import { format } from "@/lib/i18n";
+import { firstName, type DuoInsight, type PlayerInsight } from "@/lib/insights";
+import { cn } from "@/lib/cn";
+import { wilsonLowerBound } from "@/lib/ranking";
+import { isPro } from "@/lib/plan";
+import { ConfirmForm } from "@/components/ui";
+import { ChevronRightIcon, PlusIcon, SettingsIcon, TrophyIcon } from "@/components/ui/icons";
+import { Chip, FormDots, IconButton, Kicker, MoveChip, Screen, SegmentLinks, TextTabs } from "@/components/v2";
 
-const TOURNAMENT_FORMAT_LABEL = { single_elim: "Single elim", double_elim: "Double elim", round_robin: "Round robin" } as const;
+const GRID = "grid grid-cols-[28px_minmax(0,1fr)_56px_46px_54px] gap-1.5 items-center";
 
-export default async function CrewPage({ params }: { params: Promise<{ crewId: string }> }) {
-  const { crewId } = await params;
+export default async function CrewPage({
+  params,
+  searchParams,
+}: Readonly<{ params: Promise<{ crewId: string }>; searchParams: Promise<{ view?: string }> }>) {
+  const [{ crewId }, { view }] = await Promise.all([params, searchParams]);
   const session = await requireSession();
   const userId = session.user.id;
 
@@ -30,320 +33,258 @@ export default async function CrewPage({ params }: { params: Promise<{ crewId: s
     notFound();
   }
 
-  const group = await db.query.groups.findFirst({ where: eq(groups.id, crewId) });
+  const group = await getCrew(crewId);
   if (!group) notFound();
 
-  const isOwner = group.createdBy === userId;
-  const leaveAction = leaveCrew.bind(null, crewId);
-
-  const [season, tonight, redZone, elo, events, tournamentList, bestDuo, rivalries, guests] = await Promise.all([
-    getCrewLeaderboard(crewId),
-    getCrewLeaderboard(crewId, { onlyToday: true }),
-    getCrewRedZoneLeaderboard(crewId),
-    getCrewEloLeaderboard(crewId),
-    getGroupEvents(crewId),
-    getGroupTournaments(crewId),
-    getCrewBestDuo(crewId),
-    getCrewRivalries(crewId),
+  const [insights, guests, tournamentList, t, locale] = await Promise.all([
+    getCrewInsights(crewId),
     getCrewGuests(crewId),
+    getGroupTournaments(crewId),
+    getT(),
+    getLocale(),
   ]);
-  const hasGames = season.some((m) => m.gamesPlayed > 0);
-  const startTonightAction = createEventAction.bind(null, crewId);
-  const activeTournaments = tournamentList.filter((t) => t.status !== "completed");
-  const totalMamaHits = redZone.reduce((sum, r) => sum + r.chugs, 0);
-  const ownEntry = season.find((m) => m.userId === userId);
-  const ownRank = ownEntry ? season.indexOf(ownEntry) + 1 : null;
-  const ownWinRate = ownEntry && ownEntry.gamesPlayed > 0 ? Math.round((ownEntry.wins / ownEntry.gamesPlayed) * 100) : null;
-  const duoTotal = bestDuo ? bestDuo.wins + bestDuo.losses : 0;
+  const isOwner = group.createdBy === userId;
+  const h = await headers();
+  const origin = `${h.get("x-forwarded-proto") ?? "https"}://${h.get("host") ?? "shussapp.vercel.app"}`;
+  const showDuos = view === "duos";
+  const ranked = insights.players.filter((p) => p.games > 0);
+  const unplayed = insights.players.filter((p) => p.games === 0);
+  const activeTournaments = tournamentList.filter((x) => x.status !== "completed");
+  const since = insights.firstGameAt
+    ? new Intl.DateTimeFormat(locale === "nl" ? "nl-BE" : "en-GB", { day: "numeric", month: "short" }).format(insights.firstGameAt).replace("Sept", "Sep")
+    : null;
+
+  // Rotating crews rarely repeat a duo 5 times: only drop one-off pairings
+  // when there are enough repeat duos to fill the board.
+  const minDuoGames = insights.duos.filter((d) => d.games >= 2).length >= 5 ? 2 : 1;
+  const duos = insights.duos
+    .filter((d) => d.games >= minDuoGames)
+    .sort((a, b) => wilsonLowerBound(b.wins, b.games) - wilsonLowerBound(a.wins, a.games) || b.games - a.games);
+  const recordStreak = Math.max(0, ...insights.duos.map((d) => d.bestWinStreak));
+  const mostPlayed = Math.max(0, ...insights.duos.map((d) => d.games));
 
   return (
-    <div className="min-h-screen bg-surface flex flex-col pb-30">
-      <div className="relative px-5 pt-3.5 pb-5 bg-gradient-alt border-b border-gold/16">
-        <div className="flex items-center justify-between mb-4">
-          <BackButton href="/crews" />
-          <div className="flex items-center gap-2">
-            <Link
-              href={`/crews/${crewId}/feed`}
-              aria-label="Activity feed"
-              className="w-9.5 h-9.5 rounded-md bg-ink/40 flex items-center justify-center text-cream"
-            >
-              <ClockIcon className="w-4.5 h-4.5" />
-            </Link>
-            <Link
-              href={`/tournaments/new?crewId=${crewId}`}
-              aria-label="Start a tournament"
-              className="w-9.5 h-9.5 rounded-md bg-ink/40 flex items-center justify-center text-cream"
-            >
-              <TrophyIcon className="w-4.5 h-4.5" />
-            </Link>
-            <Link
-              href={`/log?crewId=${crewId}`}
-              aria-label="Log a game"
-              className="w-9.5 h-9.5 rounded-md bg-gold flex items-center justify-center text-ink"
-            >
-              <PlusIcon className="w-4.5 h-4.5" />
-            </Link>
+    <Screen>
+      <header className="flex flex-col gap-1.5">
+        <div className="flex justify-between items-center h-11 gap-2">
+          <h1 className="font-display font-extrabold text-[34px] tracking-[0.02em] uppercase truncate">{group.name}</h1>
+          <div className="flex items-center gap-2 shrink-0">
+            {group.plan === "founding" && isPro(group) && (
+              <span className="flex items-center gap-1.5 h-[32px] px-2.5 rounded-sm border border-gold text-gold font-heading font-bold text-[13px] tracking-[0.1em] uppercase">
+                <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="currentColor" aria-hidden="true">
+                  <path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z" />
+                </svg>
+                {t.crew.founding}
+              </span>
+            )}
             {isOwner && (
-              <Link
-                href={`/crews/${crewId}/manage`}
-                aria-label="Manage crew"
-                className="w-9.5 h-9.5 rounded-md bg-ink/40 flex items-center justify-center text-cream"
-              >
-                <SettingsIcon className="w-4.5 h-4.5" />
-              </Link>
+              <IconButton href={`/crews/${crewId}/manage`} label={t.crew.manage}>
+                <SettingsIcon />
+              </IconButton>
             )}
           </div>
         </div>
-        <div className="flex items-center gap-3.5">
-          <div className="w-15 h-15 rounded-lg bg-gold flex items-center justify-center font-display text-2xl text-ink shrink-0">
-            {group.name.slice(0, 2).toUpperCase()}
-          </div>
-          <div className="min-w-0">
-            <div className="font-display text-[28px] leading-[1.02] text-cream truncate">{group.name}</div>
-            <div className="font-mono font-medium text-[10.5px] tracking-[0.08em] text-cream/50 mt-1.5">
-              {season.length} {season.length === 1 ? "MEMBER" : "MEMBERS"} · CODE {group.inviteCode}
-            </div>
-          </div>
-        </div>
-        <div className="grid grid-cols-4 gap-1.75 mt-4.5">
-          <div className="bg-ink/50 rounded-md px-2.5 py-2.75">
-            <div className="font-mono font-semibold text-base text-gold">{events.length}</div>
-            <div className="font-heading font-medium text-[8.5px] tracking-widest text-cream/45 uppercase mt-1.25">
-              Nights
-            </div>
-          </div>
-          <div className="bg-ink/50 rounded-md px-2.5 py-2.75">
-            <div className="font-mono font-semibold text-base text-red-bright">{totalMamaHits}</div>
-            <div className="font-heading font-medium text-[8.5px] tracking-widest text-cream/45 uppercase mt-1.25">
-              Mama hits
-            </div>
-          </div>
-          <div className="bg-ink/50 rounded-md px-2.5 py-2.75">
-            <div className="font-mono font-semibold text-base text-cream">{ownWinRate !== null ? `${ownWinRate}%` : "–"}</div>
-            <div className="font-heading font-medium text-[8.5px] tracking-widest text-cream/45 uppercase mt-1.25">
-              Win rate
-            </div>
-          </div>
-          <div className="bg-ink/50 rounded-md px-2.5 py-2.75">
-            <div className="flex items-baseline gap-0.5">
-              <span className="font-mono font-semibold text-base text-cream">{ownRank ? `#${ownRank}` : "–"}</span>
-              {ownRank && <span className="font-mono text-[10px] text-cream/40">/{season.length}</span>}
-            </div>
-            <div className="font-heading font-medium text-[8.5px] tracking-widest text-cream/45 uppercase mt-1.25">
-              Your rank
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex flex-col px-5 pt-5 gap-6">
-        {!hasGames ? (
-          <Card variant="flat" className="text-center py-8">
-            <div className="font-display text-2xl text-cream mb-1">No games yet</div>
-            <div className="font-body text-body-sm text-cream/55 max-w-70 mx-auto">
-              Tap + up top to log your crew&apos;s first game — the leaderboard fills in here.
-            </div>
-          </Card>
-        ) : (
-          <>
-            <CrewLeaderboard currentUserId={userId} season={season} tonight={tonight} redZone={redZone} elo={elo} />
-
-            {bestDuo && duoTotal > 0 && (
-              <Card variant="flat" className="flex items-center gap-3.5">
-                <div className="flex -space-x-2">
-                  <AvatarChip initials={initialsFor(bestDuo.aName)} ring="gold" size={34} />
-                  <AvatarChip initials={initialsFor(bestDuo.bName)} ring="mint" size={34} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-heading font-semibold text-[10.5px] tracking-kicker uppercase text-cream/50">
-                    Best partner
-                  </div>
-                  <div className="font-heading font-semibold text-heading text-cream leading-[1.2] mt-0.5 truncate">
-                    {bestDuo.aName.split(" ")[0]} &amp; {bestDuo.bName.split(" ")[0]}
-                  </div>
-                  <div className="font-mono text-[10px] text-cream/42 mt-0.5">
-                    {bestDuo.wins}-{bestDuo.losses} together
-                  </div>
-                </div>
-                <div className="font-display text-2xl text-gold shrink-0">
-                  {Math.round((bestDuo.wins / duoTotal) * 100)}%
-                </div>
-              </Card>
-            )}
-          </>
-        )}
-
-        {/* <div className="flex flex-col gap-2.5">
-          <div className="flex items-center justify-between">
-            <div className="font-heading font-semibold text-[12px] tracking-kicker uppercase text-cream/55">
-              Rivalries
-            </div>
-            <Link href={`/crews/${crewId}/rivalries/new`} className="font-body text-body-sm text-gold">
-              Pin a beef
-            </Link>
-          </div>
-          {rivalries.length === 0 ? (
-            <div className="font-body text-body-sm text-cream/45">
-              Nobody&apos;s pinned a beef yet — start one to track the running score.
-            </div>
-          ) : (
-            rivalries.map((r) => {
-              const total = r.totalMeetings;
-              const aPct = total > 0 ? Math.round((r.aWins * 100) / total) : 50;
-              const unpinAction = unpinRivalryAction.bind(null, r.id);
-              const canUnpin = r.createdBy === userId || isOwner;
-              return (
-                <Card key={r.id} variant="flat" className="flex flex-col gap-2.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="font-heading font-semibold text-body text-cream truncate">
-                      {r.aLabel} <span className="text-cream/35">vs</span> {r.bLabel}
-                    </div>
-                    {canUnpin && (
-                      <ConfirmForm
-                        action={unpinAction}
-                        confirmMessage={`Unpin ${r.aLabel} vs ${r.bLabel}?`}
-                        className="shrink-0"
-                      >
-                        <button type="submit" className="font-heading font-bold text-[11px] tracking-[1.2px] uppercase text-cream/35">
-                          Unpin
-                        </button>
-                      </ConfirmForm>
-                    )}
-                  </div>
-                  {total === 0 ? (
-                    <div className="font-body text-[12.5px] text-cream/45">Haven&apos;t faced off yet.</div>
-                  ) : (
-                    <>
-                      <div className="flex items-center justify-between font-mono font-semibold text-lg text-cream">
-                        <span>{r.aWins}</span>
-                        <span className="font-body text-[12.5px] text-cream/35">{total} meetings</span>
-                        <span>{r.bWins}</span>
-                      </div>
-                      <div className="h-2 rounded-pill bg-cream/8 overflow-hidden flex">
-                        <div className="h-full bg-gold" style={{ width: `${aPct}%` }} />
-                        <div className="h-full bg-red" style={{ width: `${100 - aPct}%` }} />
-                      </div>
-                      {r.insight && (
-                        <div className="flex items-center gap-2">
-                          {r.insight.extended && (
-                            <span className="shrink-0 font-mono font-semibold text-[9px] tracking-[0.08em] text-ink bg-gold rounded-pill px-2 py-1">
-                              LEAD EXTENDED
-                            </span>
-                          )}
-                          <div className="font-body text-[12.5px] leading-snug text-cream/60">{r.insight.text}</div>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </Card>
-              );
-            })
-          )}
-        </div> */}
-
-        <div className="flex flex-col gap-2.5">
-          <div className="font-heading font-semibold text-[12px] tracking-kicker uppercase text-cream/55">
-            Guest players
-          </div>
-          {guests.length > 0 && (
-            <div className="flex flex-col gap-2">
-              {guests.map((g) => {
-                const removeAction = removeGuestAction.bind(null, crewId, g.id);
-                return (
-                  <div
-                    key={g.id}
-                    className="flex items-center gap-3 rounded-xl bg-cream/5 border border-cream/10 px-3.5 py-3"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="font-body font-semibold text-[15px] text-cream truncate">{g.name}</div>
-                      <div className="font-mono text-[10px] text-cream/40 mt-0.5">
-                        Claim code: <span className="text-gold tracking-[2px]">{g.claimToken}</span>
-                      </div>
-                    </div>
-                    {isOwner && (
-                      <ConfirmForm action={removeAction} confirmMessage={`Remove guest ${g.name}?`}>
-                        <button type="submit" className="font-heading font-bold text-[11px] tracking-[1.2px] uppercase text-red-pale">
-                          Remove
-                        </button>
-                      </ConfirmForm>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          <form action={addGuestAction.bind(null, crewId)} className="flex gap-2">
-            <input
-              type="text"
-              name="name"
-              required
-              placeholder="Guest's name"
-              className="flex-1 h-12 rounded-md bg-cream/8 px-3.5 font-body text-[14px] text-cream placeholder:text-cream/40 outline-none border-2 border-transparent focus:border-gold/40"
-            />
-            <button type="submit" className="h-12 px-4 rounded-md bg-gold font-heading font-bold text-sm text-ink">
-              Add
-            </button>
-          </form>
-          <div className="font-body text-[12px] text-cream/40">
-            Guests can be picked into games like anyone else. Hand them their claim code once they&apos;re ready to
-            sign up for real — claiming folds their history into their new account.
-          </div>
-          <Link
-            href="/claim"
-            className="self-start font-heading font-bold text-[11px] tracking-[1.2px] uppercase text-gold"
+        <div className="flex justify-between items-center gap-2">
+          <span className="font-body text-[13px] text-muted truncate">
+            {format(t.crew.meta, { p: ranked.length, g: insights.totalGames })}
+            {since && ` · ${format(t.crew.since, { d: since })}`}
+          </span>
+          <a
+            href="#guests"
+            className="shrink-0 h-9 px-3 rounded-pill border border-dashed border-cream/25 text-cream font-body font-semibold text-[13px] flex items-center gap-1.5"
           >
-            Claim a guest →
-          </Link>
+            <PlusIcon className="w-3.5 h-3.5" />
+            {t.crew.addGuest}
+          </a>
         </div>
+      </header>
 
-        <div className="flex flex-col gap-2.5">
-          <div className="font-heading font-semibold text-[12px] tracking-kicker uppercase text-cream/55">
-            Tournaments
-          </div>
-          {activeTournaments.length === 0 ? (
-            <div className="font-body text-body-sm text-cream/45">Nothing running right now.</div>
+      <TextTabs
+        tabs={[
+          { href: `/crews/${crewId}`, label: t.crew.leaderboard, active: true },
+          { href: `/crews/${crewId}/feed`, label: t.crew.feed, active: false },
+          { href: `/crews/${crewId}/sessions`, label: t.crew.sessions, active: false },
+        ]}
+      />
+
+      <SegmentLinks
+        options={[
+          { href: `/crews/${crewId}`, label: t.crew.players, active: !showDuos },
+          { href: `/crews/${crewId}?view=duos`, label: t.crew.duos, active: showDuos },
+        ]}
+      />
+
+      <section className="rounded-[18px] bg-surface-deep border border-line overflow-hidden" aria-label={t.crew.leaderboard}>
+        <div className={cn(GRID, "px-3.5 py-2.5 border-b border-line font-heading font-semibold text-[12px] tracking-[0.12em] uppercase text-muted")}>
+          <span>#</span>
+          <span>{showDuos ? t.crew.colDuo : t.crew.colPlayer}</span>
+          <span className="text-right">{t.crew.colWl}</span>
+          <span className="text-right">{t.crew.colWin}</span>
+          <span className="text-right">{t.crew.colElo}</span>
+        </div>
+        {showDuos ? (
+          duos.length === 0 ? (
+            <p className="px-3.5 py-4 font-body text-sm text-muted">{t.crew.noDuos}</p>
           ) : (
-            <div className="flex flex-col gap-2">
-              {activeTournaments.map((t) => (
-                <Link key={t.id} href={`/tournaments/${t.id}`}>
-                  <Card className="flex items-center justify-between border-cream/10">
-                    <div className="min-w-0">
-                      <div className="font-heading font-semibold text-body text-cream truncate">{t.name}</div>
-                      <div className="font-mono font-medium text-[10px] tracking-widest uppercase text-cream/40 mt-0.5">
-                        {TOURNAMENT_FORMAT_LABEL[t.format]}
-                      </div>
-                    </div>
-                    <ChevronRightIcon className="w-5 h-5 text-gold/70 shrink-0" />
-                  </Card>
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
+            duos.map((d, i) => (
+              <DuoRow key={d.key} duo={d} index={i} userId={userId} recordStreak={recordStreak} mostPlayed={mostPlayed} t={t} />
+            ))
+          )
+        ) : (
+          [...ranked, ...unplayed].map((p, i) => <PlayerRow key={p.userId} p={p} index={i} userId={userId} t={t} />)
+        )}
+      </section>
+      {showDuos && minDuoGames > 1 && <span className="font-body text-xs text-muted -mt-1.5">{format(t.crew.minGames, { n: minDuoGames })}</span>}
 
-        {(hasGames || !isOwner) && (
-          <div className="flex items-center justify-center gap-5">
-            {hasGames && (
-              <Link
-                href={`/crews/${crewId}/recap`}
-                className="font-heading font-bold text-[11px] tracking-[1.2px] uppercase text-gold/70"
+      <Link
+        href={activeTournaments[0] ? `/tournaments/${activeTournaments[0].id}` : `/tournaments/new?crewId=${crewId}`}
+        className="flex items-center gap-3 px-3.5 py-3 rounded-[16px] bg-surface-deep border border-line text-cream"
+      >
+        <span className="w-10 h-10 rounded-md bg-surface-raised text-gold flex items-center justify-center">
+          <TrophyIcon className="w-5 h-5" />
+        </span>
+        <span className="flex-1 min-w-0 flex flex-col">
+          <span className="font-body font-semibold text-[15px] truncate">{activeTournaments[0]?.name ?? t.crew.tournament}</span>
+          <span className="font-body text-xs text-muted">{t.crew.tournamentSub}</span>
+        </span>
+        <ChevronRightIcon className="w-4 h-4 text-muted" />
+      </Link>
+
+      <section id="guests" className="flex flex-col gap-2 scroll-mt-4" aria-label={t.common.guest}>
+        <Kicker>{t.crew.addGuest}</Kicker>
+        {guests.map((g) => (
+          <div key={g.id} className="flex items-center gap-3 rounded-md bg-surface-deep border border-line px-3.5 py-2.5">
+            <div className="flex-1 min-w-0">
+              <div className="font-body font-semibold text-[15px] truncate">{g.name}</div>
+              {g.claimToken && (
+                <div className="font-body text-xs text-muted">
+                  {t.more.claimCode} <span className="font-heading font-bold tracking-[0.12em] text-gold">{g.claimToken}</span>
+                </div>
+              )}
+            </div>
+            {g.claimToken && (
+              <a
+                href={`https://wa.me/?text=${encodeURIComponent(format(t.crew.claimMessage, { name: g.name, crew: group.name, url: `${origin}/claim?code=${g.claimToken}`, code: g.claimToken }))}`}
+                target="_blank"
+                rel="noreferrer"
+                className="h-9 px-3 rounded-pill bg-amber text-ink font-heading font-bold text-xs tracking-[0.06em] uppercase flex items-center"
               >
-                Season recap
-              </Link>
+                {t.crew.sendClaim}
+              </a>
             )}
-            {!isOwner && (
-              <ConfirmForm action={leaveAction} confirmMessage={`Leave ${group.name}?`}>
-                <button
-                  type="submit"
-                  className="font-heading font-bold text-[11px] tracking-[1.2px] uppercase text-cream/35"
-                >
-                  Leave crew
+            {isOwner && (
+              <ConfirmForm action={removeGuestAction.bind(null, crewId, g.id)} confirmMessage={format(t.more.removeGuest, { name: g.name })}>
+                <button type="submit" className="font-heading font-bold text-xs tracking-[0.1em] uppercase text-red">
+                  {t.more.remove}
                 </button>
               </ConfirmForm>
             )}
           </div>
+        ))}
+        <form action={addGuestAction.bind(null, crewId)} className="flex gap-2">
+          <input
+            type="text"
+            name="name"
+            required
+            placeholder={t.more.guestName}
+            aria-label={t.more.guestName}
+            className="flex-1 h-11 rounded-md bg-surface-panel border border-line px-3.5 font-body text-sm text-cream placeholder:text-muted outline-none focus:border-gold/60"
+          />
+          <button type="submit" className="h-11 px-4 rounded-md bg-amber font-heading font-bold text-sm uppercase text-ink">
+            {t.crew.addGuest}
+          </button>
+        </form>
+      </section>
+
+      <div className="flex items-center justify-center gap-5 pt-1">
+        {insights.totalGames > 0 && (
+          <Link href={`/crews/${crewId}/recap`} className="font-heading font-bold text-xs tracking-[0.1em] uppercase text-gold">
+            {t.more.seasonRecap}
+          </Link>
+        )}
+        <Link href="/claim" className="font-heading font-bold text-xs tracking-[0.1em] uppercase text-muted">
+          {t.more.claimGuest}
+        </Link>
+        {!isOwner && (
+          <ConfirmForm action={leaveCrew.bind(null, crewId)} confirmMessage={format(t.more.leaveConfirm, { crew: group.name })}>
+            <button type="submit" className="font-heading font-bold text-xs tracking-[0.1em] uppercase text-muted">
+              {t.more.leaveCrew}
+            </button>
+          </ConfirmForm>
         )}
       </div>
-    </div>
+    </Screen>
+  );
+}
+
+type T = Awaited<ReturnType<typeof getT>>;
+
+function PlayerRow({ p, index, userId, t }: Readonly<{ p: PlayerInsight; index: number; userId: string; t: T }>) {
+  const isMe = p.userId === userId;
+  const played = p.games > 0;
+  return (
+    <Link
+      href={`/players/${p.userId}`}
+      className={cn(
+        GRID,
+        "min-h-12 px-3.5 py-1 border-b border-cream/5 text-cream",
+        isMe && "bg-surface-raised shadow-[inset_3px_0_0_var(--color-gold)]",
+      )}
+    >
+      <span className={cn("font-display font-extrabold text-lg", index === 0 && played ? "text-gold" : "text-muted")}>
+        {played ? index + 1 : "–"}
+      </span>
+      <span className="flex flex-col min-w-0">
+        <span className="font-body font-semibold text-[15px] truncate">{firstName(p.name)}</span>
+        <span className="flex items-center gap-1.25 mt-0.75 overflow-hidden">
+          {played && <MoveChip move={p.move} />}
+          {p.streak && p.streak.kind === "W" && p.streak.n >= 3 && <Chip tone="hot">{format(t.crew.streak, { n: p.streak.n })}</Chip>}
+          {p.isGuest && <Chip tone="guest">{t.common.guest.toUpperCase()}</Chip>}
+          <FormDots form={p.form.slice(-5)} />
+        </span>
+      </span>
+      <span className="text-right font-display font-semibold text-[17px] tabular-nums">{played ? `${p.wins}–${p.losses}` : "—"}</span>
+      <span className="text-right font-display font-semibold text-[17px] text-soft">{played ? `${p.winPct}%` : ""}</span>
+      <span className="text-right font-display font-extrabold text-[19px] tabular-nums">{p.elo}</span>
+    </Link>
+  );
+}
+
+function DuoRow({
+  duo,
+  index,
+  userId,
+  recordStreak,
+  mostPlayed,
+  t,
+}: Readonly<{ duo: DuoInsight; index: number; userId: string; recordStreak: number; mostPlayed: number; t: T }>) {
+  const mine = duo.a.id === userId || duo.b.id === userId;
+  const partner = duo.a.id === userId ? duo.b : duo.a;
+  const href = mine ? `/duos?with=${partner.id}` : `/players/${duo.a.id}`;
+  return (
+    <Link
+      href={href}
+      className={cn(
+        GRID,
+        "min-h-12 px-3.5 py-1 border-b border-cream/5 text-cream",
+        mine && "bg-surface-raised shadow-[inset_3px_0_0_var(--color-gold)]",
+      )}
+    >
+      <span className={cn("font-display font-extrabold text-lg", index === 0 ? "text-gold" : "text-muted")}>{index + 1}</span>
+      <span className="flex flex-col min-w-0">
+        <span className="font-body font-semibold text-[15px] truncate">
+          {firstName(duo.a.name)} & {firstName(duo.b.name)}
+        </span>
+        <span className="flex items-center gap-1.25 mt-0.75 overflow-hidden">
+          {duo.bestWinStreak === recordStreak && recordStreak >= 3 && <Chip tone="hot">{format(t.crew.record, { n: recordStreak })}</Chip>}
+          {duo.games === mostPlayed && <Chip tone="info">{t.crew.mostPlayed.toUpperCase()}</Chip>}
+        </span>
+      </span>
+      <span className="text-right font-display font-semibold text-[17px] tabular-nums">
+        {duo.wins}–{duo.losses}
+      </span>
+      <span className="text-right font-display font-semibold text-[17px] text-soft">{duo.winPct}%</span>
+      <span className="text-right font-display font-extrabold text-[19px] tabular-nums">{duo.duoElo}</span>
+    </Link>
   );
 }

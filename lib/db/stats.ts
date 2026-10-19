@@ -1,6 +1,6 @@
 import { eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { events, games, gameTeamPlayers, groupMembers, shots } from "@/lib/db/schema";
+import { games, gameTeamPlayers, groupMembers, shots } from "@/lib/db/schema";
 import { scoreForPlayers as scoreFor } from "@/lib/scoring";
 
 export type ShotDistributionEntry = { fieldHit: string; label: string; count: number; pct: number };
@@ -215,13 +215,11 @@ export async function getPlayerStatsSummary(userId: string): Promise<PlayerStats
 
 export type StatsPerson = { id: string; name: string };
 export type StatsCrew = { id: string; name: string; memberCount: number };
-export type StatsEvent = { id: string; name: string; crewId: string; date: string };
 export type StatsFieldCounts = { far: number; mid: number; near: number; risk: number; miss: number };
 export type StatsTeam = { userIds: string[]; won: boolean; points: number; shots: Record<string, StatsFieldCounts> };
 export type StatsGame = {
   id: string;
   crewId: string | null;
-  eventId: string | null;
   matType: "2" | "4" | "8";
   playedAt: string;
   teams: StatsTeam[];
@@ -229,7 +227,6 @@ export type StatsGame = {
 export type StatsExplorerData = {
   people: StatsPerson[];
   crews: StatsCrew[];
-  events: StatsEvent[];
   games: StatsGame[];
   /** True once any game in scope has a "2" or "3" shot on record — lets the
    * explorer collapse the far/mid/near breakdown into a single HIT filter
@@ -251,7 +248,7 @@ function tallyShots(playerShots: { fieldHit: string }[]): StatsFieldCounts {
 
 /** Everything the Stats deep-dive page needs to filter and aggregate
  * client-side in one shot: every game (with per-player shot tallies) across
- * every crew the user belongs to, plus the people/crews/events those games
+ * every crew the user belongs to, plus the people/crews those games
  * reference. Small enough (a hobby-league's worth of games) to ship whole
  * and let the filter chips slice it in the browser, matching how the design
  * itself was built (see the `Component` class in the source .dc.html). */
@@ -261,7 +258,7 @@ export async function getStatsExplorerData(userId: string): Promise<StatsExplore
     with: { group: { with: { members: { with: { user: true } } } } },
   });
   if (memberships.length === 0) {
-    return { people: [], crews: [], events: [], games: [], hasZoneData: false };
+    return { people: [], crews: [], games: [], hasZoneData: false };
   }
 
   const groupIds = memberships.map((m) => m.groupId);
@@ -274,11 +271,6 @@ export async function getStatsExplorerData(userId: string): Promise<StatsExplore
     return { id: m.group.id, name: m.group.name, memberCount: m.group.members.length };
   });
 
-  const groupEvents = await db.query.events.findMany({ where: inArray(events.groupId, groupIds) });
-  const eventList: StatsEvent[] = groupEvents
-    .filter((e) => e.groupId !== null)
-    .map((e) => ({ id: e.id, name: e.name, crewId: e.groupId as string, date: e.date }));
-
   const groupGames = await db.query.games.findMany({
     where: inArray(games.groupId, groupIds),
     with: { teams: { with: { players: { with: { shots: true } } } } },
@@ -287,7 +279,6 @@ export async function getStatsExplorerData(userId: string): Promise<StatsExplore
   const gameList: StatsGame[] = groupGames.map((g) => ({
     id: g.id,
     crewId: g.groupId,
-    eventId: g.eventId,
     matType: g.matType,
     playedAt: g.playedAt.toISOString(),
     teams: g.teams.map((t) => {
@@ -306,5 +297,5 @@ export async function getStatsExplorerData(userId: string): Promise<StatsExplore
     g.teams.some((t) => Object.values(t.shots).some((s) => s.mid > 0 || s.far > 0)),
   );
 
-  return { people: [...peopleById.values()], crews, events: eventList, games: gameList, hasZoneData };
+  return { people: [...peopleById.values()], crews, games: gameList, hasZoneData };
 }

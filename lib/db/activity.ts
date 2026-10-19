@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { gameComments, gameReactions, games } from "@/lib/db/schema";
 
@@ -22,7 +22,8 @@ export async function getComment(commentId: string) {
 /** A tap toggles: inserting the reaction if absent, removing it if it's
  * already there — one row per (game, user, reaction), enforced by the
  * schema's unique constraint. */
-export async function toggleReaction(gameId: string, userId: string, reaction: Reaction) {
+/** Returns true when the reaction was added (false when removed). */
+export async function toggleReaction(gameId: string, userId: string, reaction: Reaction): Promise<boolean> {
   const existing = await db.query.gameReactions.findFirst({
     where: and(
       eq(gameReactions.gameId, gameId),
@@ -32,9 +33,10 @@ export async function toggleReaction(gameId: string, userId: string, reaction: R
   });
   if (existing) {
     await db.delete(gameReactions).where(eq(gameReactions.id, existing.id));
-  } else {
-    await db.insert(gameReactions).values({ id: randomUUID(), gameId, userId, reaction });
+    return false;
   }
+  await db.insert(gameReactions).values({ id: randomUUID(), gameId, userId, reaction });
+  return true;
 }
 
 export type GameComment = { id: string; userId: string; userName: string; text: string; createdAt: Date };
@@ -86,30 +88,37 @@ export type FeedGame = {
   id: string;
   playedAt: Date;
   matType: "2" | "4" | "8";
+  photoUrl: string | null;
   teams: { label: string; finalRank: number | null; playerNames: string[] }[];
   commentCount: number;
   reactions: ReactionTally[];
+  mama: number;
 };
 
 /** Recent games in a crew, newest first, with comment/reaction summaries —
  * the crew activity feed: what happened lately, not just who's ahead. */
 export async function getCrewActivityFeed(groupId: string, viewerId: string, limit = 25): Promise<FeedGame[]> {
+  // Only the newest `limit` games, and only the columns the feed shows.
   const groupGames = await db.query.games.findMany({
     where: eq(games.groupId, groupId),
+    orderBy: desc(games.playedAt),
+    limit,
+    columns: { id: true, playedAt: true, matType: true, photoUrl: true },
     with: {
-      teams: { with: { players: { with: { user: true } } } },
-      comments: true,
+      teams: {
+        columns: { teamLabel: true, finalRank: true },
+        with: { players: { columns: { userId: true }, with: { user: { columns: { name: true } }, shots: { columns: { fieldHit: true } } } } },
+      },
+      comments: { columns: { id: true } },
       reactions: true,
     },
   });
 
-  return groupGames
-    .sort((a, b) => b.playedAt.getTime() - a.playedAt.getTime())
-    .slice(0, limit)
-    .map((g) => ({
+  return groupGames.map((g) => ({
       id: g.id,
       playedAt: g.playedAt,
       matType: g.matType,
+      photoUrl: g.photoUrl,
       teams: [...g.teams]
         .sort((a, b) => (a.finalRank ?? 99) - (b.finalRank ?? 99))
         .map((t) => ({
@@ -119,5 +128,6 @@ export async function getCrewActivityFeed(groupId: string, viewerId: string, lim
         })),
       commentCount: g.comments.length,
       reactions: tallyReactions(g.reactions, viewerId),
+      mama: g.teams.reduce((n, t) => n + t.players.reduce((m, p) => m + p.shots.filter((s) => s.fieldHit === "mama").length, 0), 0),
     }));
 }

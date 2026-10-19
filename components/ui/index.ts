@@ -9,3 +9,4 @@ export { LeaderboardRow } from "./LeaderboardRow";
 export { ConfirmForm } from "./ConfirmForm";
 export { AutoSubmitToggle } from "./AutoSubmitToggle";
 export { InfoButton } from "./InfoButton";
+export { SegmentedForm } from "./Segmented";

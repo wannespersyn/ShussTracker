@@ -260,7 +260,6 @@ export async function createTournament(
   groupId: string,
   createdBy: string,
   name: string,
-  eventId: string | undefined,
   entrantPairs: [string, string][],
   format: TournamentFormat,
 ): Promise<string> {
@@ -306,7 +305,6 @@ export async function createTournament(
     executor.insert(tournaments).values({
       id: tournamentId,
       groupId,
-      ...(eventId ? { eventId } : {}),
       name,
       format,
       status: "active",
@@ -381,7 +379,6 @@ export type TournamentDetail = {
   status: "setup" | "active" | "completed";
   groupId: string;
   groupName: string;
-  eventId: string | null;
   /** Single-elim: the whole bracket. Double-elim: the winners side only. */
   winnersRounds: TournamentMatchView[][];
   /** Double-elim only. */
@@ -483,7 +480,6 @@ export async function getTournament(tournamentId: string): Promise<TournamentDet
     status: t.status,
     groupId: t.groupId,
     groupName: t.group.name,
-    eventId: t.eventId,
     winnersRounds,
     losersRounds,
     grandFinal,

@@ -53,7 +53,7 @@ export function DuoPairingBoard({
   return (
     <div className="flex flex-col gap-3.5">
       {teams.map((t, i) => (
-        <div key={t.id} className="rounded-lg bg-cream/5 border border-cream/10 p-3.5 pb-4">
+        <div key={t.id} className="rounded-[14px] bg-surface-deep border border-line p-3 pb-3.5">
           <div className="flex items-center gap-2 mb-2.5">
             <div className="w-3.5 h-3.5 rounded-pill shrink-0" style={{ background: capRingPairs[t.color].light }} />
             <input
@@ -64,7 +64,7 @@ export function DuoPairingBoard({
                 if (e.target.value.trim() === "") renameTeam(t.id, `Team ${i + 1}`);
               }}
               placeholder={`Team ${i + 1}`}
-              className="flex-1 min-w-0 bg-transparent border-none outline-none font-mono font-semibold text-[10px] tracking-kicker uppercase text-cream/70 focus:text-cream"
+              className="flex-1 min-w-0 bg-transparent border-none outline-none font-heading font-semibold text-[12px] tracking-[0.14em] uppercase text-muted focus:text-cream"
             />
           </div>
           <div className="flex gap-2.5">
@@ -74,10 +74,10 @@ export function DuoPairingBoard({
                 type="button"
                 onClick={() => tapPlayer(p.id)}
                 className={cn(
-                  "flex-1 h-16 rounded-md font-heading font-semibold text-lg flex items-center justify-center",
+                  "flex-1 h-12 rounded-md font-body font-semibold text-[15px] flex items-center justify-center",
                   selectedPlayerId === p.id
-                    ? "bg-gold/20 border-2 border-gold text-gold"
-                    : "bg-cream/8 border-2 border-transparent text-cream",
+                    ? "bg-amber/20 border-2 border-gold text-gold"
+                    : "bg-surface-raised border-2 border-transparent text-cream",
                 )}
               >
                 {shortNames[p.id] ?? p.name}
@@ -89,7 +89,7 @@ export function DuoPairingBoard({
       <button
         type="button"
         onClick={shuffleDuos}
-        className="h-13 rounded-md border-2 border-dashed border-cream/22 flex items-center justify-center gap-2 font-heading font-bold text-base tracking-[1.6px] uppercase text-cream/65"
+        className="h-11 rounded-md border border-dashed border-cream/25 flex items-center justify-center gap-2 font-heading font-bold text-sm tracking-[0.1em] uppercase text-soft"
       >
         ↻ Shuffle the duos
       </button>

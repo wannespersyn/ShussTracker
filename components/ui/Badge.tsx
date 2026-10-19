@@ -1,4 +1,4 @@
-import { capFaceGradient, capInkColor, capRingGradient, type CapRingColor } from "@/lib/theme/tokens";
+import type { CapRingColor } from "@/lib/theme/tokens";
 import { cn } from "@/lib/cn";
 import { LockIcon } from "@/components/ui/icons";
 
@@ -10,6 +10,13 @@ type BadgeProps = {
   locked?: boolean;
   selected?: boolean;
   onClick?: () => void;
+};
+
+const RING_FILL: Record<CapRingColor, string> = {
+  gold: "bg-amber text-ink",
+  red: "bg-red text-ink",
+  mint: "bg-mint text-ink",
+  cream: "bg-surface-raised text-cream",
 };
 
 export function Badge({
@@ -27,36 +34,17 @@ export function Badge({
       onClick={onClick}
       className={cn(
         "relative flex flex-col items-center gap-2 rounded-xl border px-1.5 py-3.5 text-center",
-        selected ? "bg-gold/10 border-gold/30" : "bg-transparent border-transparent",
+        selected ? "bg-surface-raised border-gold/50" : "bg-transparent border-transparent",
       )}
     >
-      {locked && <LockIcon className="absolute top-2.5 right-2.5 w-2.75 h-2.75 text-cream/45" />}
+      {locked && <LockIcon className="absolute top-2.5 right-2.5 w-2.75 h-2.75 text-muted" />}
       <div
-        className="relative rounded-pill"
-        style={{
-          width: 74,
-          height: 74,
-          background: locked ? "rgba(239,231,214,0.1)" : capRingGradient(ring),
-          boxShadow: "inset 0 0 0 1px rgba(0,0,0,.5), inset 0 -2px 3px rgba(0,0,0,.35), inset 0 2px 3px rgba(255,255,255,.12)",
-        }}
+        className={cn(
+          "w-16 h-16 rounded-lg flex items-center justify-center font-display font-extrabold text-[22px]",
+          locked ? "bg-surface-deep border border-dashed border-cream/20 text-cream/30" : RING_FILL[ring],
+        )}
       >
-        <div
-          className={cn(
-            "absolute inset-2 rounded-pill flex items-center justify-center font-display text-[19px]",
-            locked && "bg-surface/60 text-cream/30",
-          )}
-          style={
-            locked
-              ? undefined
-              : {
-                  background: capFaceGradient(ring),
-                  boxShadow: "inset 0 1px 2px rgba(0,0,0,.45), inset 0 -1px 1px rgba(255,255,255,.16), 0 0 0 1px rgba(0,0,0,.35)",
-                  color: capInkColor(ring),
-                }
-          }
-        >
-          {glyph}
-        </div>
+        {glyph}
       </div>
       <div
         className={cn(
@@ -66,7 +54,7 @@ export function Badge({
       >
         {name}
       </div>
-      <div className={cn("font-body text-caption leading-[1.2]", locked ? "text-cream/25" : "text-cream/55")}>
+      <div className={cn("font-body text-caption leading-[1.2]", locked ? "text-cream/25" : "text-muted")}>
         {sub}
       </div>
     </button>

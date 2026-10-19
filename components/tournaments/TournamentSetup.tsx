@@ -1,3 +1,12 @@
+/**
+ * TournamentSetup
+ *
+ * New-tournament wizard: pick players, shuffle into duos, choose a format
+ * (with live match counts per format) and create the bracket.
+ *
+ * Data: calls createTournamentAction (server action), which redirects.
+ * Notes: double elim needs a power-of-two duo count; copy lives in t.tour.
+ */
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
@@ -7,6 +16,8 @@ import { pairIntoDuos, shuffleIntoDuos, toTeamPlayers, type Duo, type RosterPlay
 import { cn } from "@/lib/cn";
 import { createTournamentAction } from "@/app/(app)/tournaments/new/actions";
 import type { TournamentFormat } from "@/lib/db/tournaments";
+import { useT } from "@/lib/i18n/client";
+import { format as fmt, type Dictionary } from "@/lib/i18n";
 
 type FormatOption = {
   value: TournamentFormat;
@@ -21,57 +32,47 @@ type FormatOption = {
  * actual duo count — not generic marketing text. Double elim additionally
  * needs an exact power-of-two duo count (see `lib/db/tournaments.ts`), so
  * it's disabled with a concrete instruction when the count doesn't fit. */
-function formatOptionsFor(duoCount: number): FormatOption[] {
+function formatOptionsFor(duoCount: number, T: Dictionary["tour"]): FormatOption[] {
   const singleGames = Math.max(duoCount - 1, 0);
   const doubleGames = Math.max(duoCount * 2 - 2, 0);
   const robinGames = Math.round((duoCount * (duoCount - 1)) / 2);
   const doubleValid = duoCount >= 4 && (duoCount & (duoCount - 1)) === 0;
 
+  const v = { n: duoCount };
   return [
     {
       value: "single_elim",
-      label: "SINGLE ELIM",
-      tagline: "One loss and you're out.",
-      preview: `${duoCount} duos · ${singleGames} matches to a champion`,
-      suggestion:
-        duoCount >= 6
-          ? "Best fit — fastest way to a winner with this many duos."
-          : "Solid default — quick and decisive.",
+      label: T.singleLabel,
+      tagline: T.singleTag,
+      preview: fmt(T.singlePreview, { n: duoCount, g: singleGames }),
+      suggestion: duoCount >= 6 ? T.singleBest : T.singleDefault,
     },
     {
       value: "double_elim",
-      label: "DOUBLE ELIM",
-      tagline: "Lose twice before you're out.",
-      preview: doubleValid
-        ? `${duoCount} duos · up to ${doubleGames} matches, room for a comeback`
-        : "Needs 4, 8, 16… duos",
-      suggestion: doubleValid
-        ? duoCount <= 8
-          ? "Best fit — forgiving bracket for a medium field."
-          : "Works, but it'll be a longer night."
-        : `You have ${duoCount} — add or drop a duo to reach a power of two.`,
-      disabledReason: doubleValid ? undefined : `Needs an exact power-of-two duo count (4, 8, 16…) — you have ${duoCount}.`,
+      label: T.doubleLabel,
+      tagline: T.doubleTag,
+      preview: doubleValid ? fmt(T.doublePreview, { n: duoCount, g: doubleGames }) : T.doubleNeeds,
+      suggestion: doubleValid ? (duoCount <= 8 ? T.doubleBest : T.doubleLong) : fmt(T.doubleFix, v),
+      disabledReason: doubleValid ? undefined : fmt(T.doubleReason, v),
     },
     {
       value: "round_robin",
-      label: "ROUND ROBIN",
-      tagline: "Everyone plays everyone, ranked by wins.",
-      preview: `${duoCount} duos · ${robinGames} matches total`,
-      suggestion:
-        duoCount <= 6
-          ? "Best fit — nobody's eliminated early."
-          : `That's ${robinGames} matches — a long night for ${duoCount} duos.`,
+      label: T.robinLabel,
+      tagline: T.robinTag,
+      preview: fmt(T.robinPreview, { n: duoCount, g: robinGames }),
+      suggestion: duoCount <= 6 ? T.robinBest : fmt(T.robinLong, { n: duoCount, g: robinGames }),
     },
   ];
 }
 
 export function TournamentSetup({
   groupId,
-  eventId,
   roster,
   presetEntrantIds,
-}: Readonly<{ groupId: string; eventId?: string; roster: RosterPlayer[]; presetEntrantIds?: string[] }>) {
+}: Readonly<{ groupId: string; roster: RosterPlayer[]; presetEntrantIds?: string[] }>) {
   const [isPending, startTransition] = useTransition();
+  const { t } = useT();
+  const T = t.tour;
   const players = useMemo<TeamPlayer[]>(() => toTeamPlayers(roster), [roster]);
 
   const presetTeams = useMemo<Duo[] | null>(() => {
@@ -86,13 +87,12 @@ export function TournamentSetup({
     () => presetTeams?.flatMap((t) => t.players.map((p) => p.id)) ?? (players.length % 2 === 0 ? players.map((p) => p.id) : []),
   );
   const [teams, setTeams] = useState<Duo[] | null>(presetTeams);
-  const [name, setName] = useState("Tournament");
+  const [name, setName] = useState(T.defaultName);
   const [format, setFormat] = useState<TournamentFormat>("single_elim");
 
   const canShuffle = selectedIds.length >= 4 && selectedIds.length % 2 === 0;
-  const eventQuery = eventId ? `&eventId=${eventId}` : "";
-  const chwaziHref = `/chwazi?crewId=${groupId}${eventQuery}`;
-  const formatOptions = useMemo(() => formatOptionsFor(teams?.length ?? 0), [teams]);
+  const chwaziHref = `/chwazi?crewId=${groupId}`;
+  const formatOptions = useMemo(() => formatOptionsFor(teams?.length ?? 0, T), [teams, T]);
   const selectedFormatOption = formatOptions.find((f) => f.value === format);
   const canStart = Boolean(teams) && teams!.length >= 2 && !selectedFormatOption?.disabledReason;
 
@@ -111,8 +111,7 @@ export function TournamentSetup({
     startTransition(() => {
       createTournamentAction({
         groupId,
-        eventId,
-        name: name.trim() || "Tournament",
+        name: name.trim() || T.defaultName,
         format,
         entrantPairs: teams.map((t) => [t.players[0]!.id, t.players[1]!.id] as [string, string]),
       });
@@ -124,10 +123,10 @@ export function TournamentSetup({
       <header className="flex items-center gap-3.5">
         <BackButton href={`/crews/${groupId}`} />
         <div>
-          <div className="font-heading font-bold text-label-kicker tracking-kicker uppercase text-cream/45">
-            New tournament
+          <div className="font-heading font-bold text-label-kicker tracking-kicker uppercase text-muted">
+            {T.newKicker}
           </div>
-          <div className="font-display text-display-sm text-cream mt-1">Set the bracket</div>
+          <div className="font-display text-display-sm text-cream mt-1">{T.setBracket}</div>
         </div>
       </header>
 
@@ -135,14 +134,14 @@ export function TournamentSetup({
         type="text"
         value={name}
         onChange={(e) => setName(e.target.value)}
-        placeholder="Tournament name"
-        className="h-13 rounded-lg bg-cream/8 px-4 font-body text-cream placeholder:text-cream/40 outline-none border-2 border-transparent focus:border-gold/40"
+        placeholder={T.namePh}
+        className="h-13 rounded-lg bg-cream/8 px-4 font-body text-cream placeholder:text-muted outline-none border-2 border-transparent focus:border-gold/40"
       />
 
       {!teams ? (
         <>
-          <div className="font-body text-body-sm text-cream/55">
-            Who&apos;s playing? Pick an even number — {selectedIds.length} selected.
+          <div className="font-body text-body-sm text-muted">
+            {fmt(T.pickEven, { n: selectedIds.length })}
           </div>
           <div className="flex flex-wrap gap-2">
             {players.map((p) => {
@@ -154,7 +153,7 @@ export function TournamentSetup({
                   onClick={() => toggle(p.id)}
                   className={cn(
                     "px-4 h-11 rounded-md font-heading font-bold text-sm",
-                    picked ? "bg-gold text-ink" : "bg-cream/8 text-cream/70",
+                    picked ? "bg-gold text-ink" : "bg-cream/8 text-soft",
                   )}
                 >
                   {p.name}
@@ -164,23 +163,23 @@ export function TournamentSetup({
           </div>
           <div className="mt-auto flex flex-col gap-2.5">
             <PrimaryButton className="h-16 w-full" size="lg" disabled={!canShuffle} onClick={shuffle}>
-              Shuffle into duos
+              {T.shuffle}
             </PrimaryButton>
             <LinkButton href={chwaziHref} variant="outline">
-              Or use Chwazi (balance by skill)
+              {T.orChwazi}
             </LinkButton>
           </div>
         </>
       ) : (
         <>
-          <div className="font-body text-body-sm text-cream/55">
-            {teams.length} duos. Tap two names to swap.
+          <div className="font-body text-body-sm text-muted">
+            {fmt(T.duosSwap, { n: teams.length })}
           </div>
           <DuoPairingBoard players={teams.flatMap((t) => t.players)} teams={teams} onChange={setTeams} />
 
           <div className="flex flex-col gap-2.5">
-            <div className="font-heading font-semibold text-[12px] tracking-kicker uppercase text-cream/55">
-              Pick a format
+            <div className="font-heading font-semibold text-[12px] tracking-kicker uppercase text-muted">
+              {T.pickFormat}
             </div>
             <div className="flex flex-col gap-2.5">
               {formatOptions.map((opt) => (
@@ -190,7 +189,7 @@ export function TournamentSetup({
           </div>
 
           <PrimaryButton className="mt-auto h-16 w-full" size="lg" disabled={isPending || !canStart} onClick={start}>
-            {isPending ? "Building bracket…" : "Start tournament"}
+            {isPending ? T.building : T.start}
           </PrimaryButton>
         </>
       )}
@@ -203,6 +202,7 @@ function FormatTile({
   selected,
   onClick,
 }: Readonly<{ option: FormatOption; selected: boolean; onClick: () => void }>) {
+  const { t } = useT();
   const disabled = Boolean(option.disabledReason);
   return (
     <button
@@ -222,12 +222,12 @@ function FormatTile({
         <div className="font-display text-xl tracking-[0.4px] text-cream">{option.label}</div>
         {selected && !disabled && (
           <span className="font-mono font-semibold text-[10px] tracking-widest uppercase text-gold shrink-0">
-            Selected
+            {t.tour.selected}
           </span>
         )}
       </div>
-      <div className="font-body text-[14px] text-cream/70">{option.tagline}</div>
-      <div className="font-mono font-medium text-[11.5px] tracking-wide text-cream/45">{option.preview}</div>
+      <div className="font-body text-[14px] text-soft">{option.tagline}</div>
+      <div className="font-mono font-medium text-[11.5px] tracking-wide text-muted">{option.preview}</div>
       <div className={cn("font-body text-[13px] mt-0.5", disabled ? "text-red-pale" : "text-gold/80")}>
         {option.disabledReason ?? option.suggestion}
       </div>

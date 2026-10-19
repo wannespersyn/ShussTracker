@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { tournamentMatches, groups } from "@/lib/db/schema";
 import { requireSession, requireGroupMember } from "@/lib/db/authz";
 import { MatchPlayer } from "@/components/tournaments/MatchPlayer";
+import { getT } from "@/lib/i18n/server";
 
 export default async function TournamentMatchPage({
   params,
@@ -33,24 +34,25 @@ export default async function TournamentMatchPage({
   if (!match.entrantA || !match.entrantB || match.gameId) notFound();
 
   const group = await db.query.groups.findFirst({ where: eq(groups.id, match.tournament.groupId) });
+  const P = (await getT()).more.player;
 
   const entrantA = match.entrantA;
   const entrantB = match.entrantB;
 
   const teamA = {
     entrantId: entrantA.id,
-    label: `${entrantA.player1.name?.split(" ")[0] ?? "Player"} & ${entrantA.player2.name?.split(" ")[0] ?? "Player"}`,
+    label: `${entrantA.player1.name?.split(" ")[0] ?? P} & ${entrantA.player2.name?.split(" ")[0] ?? P}`,
     players: [
-      { id: entrantA.player1Id, name: entrantA.player1.name ?? "Player" },
-      { id: entrantA.player2Id, name: entrantA.player2.name ?? "Player" },
+      { id: entrantA.player1Id, name: entrantA.player1.name ?? P },
+      { id: entrantA.player2Id, name: entrantA.player2.name ?? P },
     ] as [{ id: string; name: string }, { id: string; name: string }],
   };
   const teamB = {
     entrantId: entrantB.id,
-    label: `${entrantB.player1.name?.split(" ")[0] ?? "Player"} & ${entrantB.player2.name?.split(" ")[0] ?? "Player"}`,
+    label: `${entrantB.player1.name?.split(" ")[0] ?? P} & ${entrantB.player2.name?.split(" ")[0] ?? P}`,
     players: [
-      { id: entrantB.player1Id, name: entrantB.player1.name ?? "Player" },
-      { id: entrantB.player2Id, name: entrantB.player2.name ?? "Player" },
+      { id: entrantB.player1Id, name: entrantB.player1.name ?? P },
+      { id: entrantB.player2Id, name: entrantB.player2.name ?? P },
     ] as [{ id: string; name: string }, { id: string; name: string }],
   };
 

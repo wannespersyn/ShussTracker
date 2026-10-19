@@ -5,7 +5,7 @@ export function scoreForShots(shots: { fieldHit: string }[]): number {
 }
 
 /** Sums a team's score from its players' shots — shared by any code that
- * needs a game/team's point total (stats, H2H, event standings). */
+ * needs a game/team's point total (stats, H2H). */
 export function scoreForPlayers(players: { shots: { fieldHit: string }[] }[]): number {
   return players.reduce((sum, p) => sum + scoreForShots(p.shots), 0);
 }
