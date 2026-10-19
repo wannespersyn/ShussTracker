@@ -116,3 +116,23 @@ export type FeedGame = {
   mama: number;
   photoPath: string | null;
 };
+
+export type Achievement = {
+  id: string;
+  cat: "streak" | "games" | "shots" | "social";
+  name: string;
+  desc: string;
+  icon: "flame" | "bolt" | "crown" | "star" | "target";
+  have: number;
+  need: number;
+  got: boolean;
+};
+
+export type PlayerProfile = {
+  player: { id: string; name: string | null; image: string | null; isGuest: boolean; isSelf: boolean };
+  crew: { id: string; name: string; rankedPlayers: number } | null;
+  stats: PlayerInsight | null;
+  achievements: Achievement[];
+  nemesis: { opponentId: string; opponentName: string; wins: number; losses: number } | null;
+  opponents: { userId: string; name: string; timesPlayed: number }[];
+};

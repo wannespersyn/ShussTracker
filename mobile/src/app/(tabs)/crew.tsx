@@ -11,6 +11,7 @@
 import { useState } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { router } from "expo-router";
 import { useAuth } from "@/auth/AuthProvider";
 import { useCrew } from "@/lib/crew";
 import { format, useT } from "@/lib/i18n";
@@ -120,7 +121,11 @@ export default function Crew() {
                 players.map((p, i) => {
                   const played = p.games > 0;
                   return (
-                    <View key={p.userId} style={[styles.row, p.userId === userId && styles.mine]}>
+                    <Pressable
+                      key={p.userId}
+                      onPress={() => router.push({ pathname: "/player/[id]", params: { id: p.userId } })}
+                      style={({ pressed }) => [styles.row, p.userId === userId && styles.mine, pressed && { opacity: 0.7 }]}
+                    >
                       <Txt style={[styles.cRank, styles.rank, i === 0 && played && { color: colors.gold }]}>{played ? i + 1 : "–"}</Txt>
                       <View style={[styles.cName, { gap: 3 }]}>
                         <Txt v="bodySemi" numberOfLines={1}>
@@ -135,7 +140,7 @@ export default function Crew() {
                       <Txt style={[styles.cNum, styles.num]}>{played ? `${p.wins}–${p.losses}` : "—"}</Txt>
                       <Txt style={[styles.cNum, styles.num, { color: colors.soft }]}>{played ? `${p.winPct}%` : ""}</Txt>
                       <Txt style={[styles.cElo, styles.elo]}>{p.elo}</Txt>
-                    </View>
+                    </Pressable>
                   );
                 })}
 

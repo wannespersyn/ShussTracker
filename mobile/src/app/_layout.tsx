@@ -48,6 +48,7 @@ function RootStack() {
       <Stack.Protected guard={status === "signedIn"}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="game/[id]" />
+        <Stack.Screen name="player/[id]" />
       </Stack.Protected>
       <Stack.Protected guard={status === "signedOut"}>
         <Stack.Screen name="sign-in" />

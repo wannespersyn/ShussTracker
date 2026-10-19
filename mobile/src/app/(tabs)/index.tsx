@@ -7,7 +7,8 @@
  *
  * Data: GET /api/v1/crews/{crewId}
  */
-import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "@/auth/AuthProvider";
 import { useCrew } from "@/lib/crew";
@@ -110,14 +111,18 @@ export default function Home() {
           <Card style={{ gap: 10 }}>
             <Kicker>{format(t.home.top3, { crew: crew.name })}</Kicker>
             {ranked.slice(0, 3).map((p, i) => (
-              <View key={p.userId} style={styles.topRow}>
+              <Pressable
+                key={p.userId}
+                onPress={() => router.push({ pathname: "/player/[id]", params: { id: p.userId } })}
+                style={({ pressed }) => [styles.topRow, pressed && { opacity: 0.7 }]}
+              >
                 <Txt style={[styles.topRank, i === 0 && { color: colors.gold }]}>{i + 1}</Txt>
                 <Avatar name={p.name} size={32} />
                 <Txt v="bodySemi" style={{ flex: 1 }} numberOfLines={1}>
                   {p.userId === userId ? t.common.you : first(p.name)}
                 </Txt>
                 <Txt style={styles.topElo}>{p.elo}</Txt>
-              </View>
+              </Pressable>
             ))}
           </Card>
         )}
