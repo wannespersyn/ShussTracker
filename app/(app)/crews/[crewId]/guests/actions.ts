@@ -22,7 +22,7 @@ export async function removeGuestAction(groupId: string, guestId: string) {
   const userId = await requireUserId();
   await requireGroupOwner(userId, groupId);
 
-  await removeGuestPlayer(guestId);
+  await removeGuestPlayer(groupId, guestId);
   invalidateCrew(groupId);
   revalidatePath(`/crews/${groupId}`);
 }

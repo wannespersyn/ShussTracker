@@ -28,7 +28,11 @@ The Expo app talks to the same Next.js backend as the website, through
 | GET / POST | `/crews` | — / `{ name }` | `{ crews }` / `{ crewId }` |
 | POST | `/crews/join` | `{ code }` | `{ crewId }` |
 | GET | `/crews/{id}` | | `{ crew, insights, guests, tournaments }` |
+| PATCH / DELETE | `/crews/{id}` | owner: `{ name?, trackShotZones? }` / — | 204 |
+| POST | `/crews/{id}/invite-code` | owner | `{ inviteCode }` |
+| DELETE | `/crews/{id}/members/{userId}` | owner | 204 (a guest without games is deleted) |
 | GET | `/crews/{id}/feed?limit=25` | | `{ games }` |
+| GET | `/crews/{id}/recap` | | `{ crewName, monthly, season }` |
 | POST | `/crews/{id}/leave` | | 204 (409 for the owner) |
 | POST | `/crews/{id}/guests` | `{ name }` | `{ userId, claimToken }` |
 | POST | `/claim` | `{ code }` | 204 |
@@ -41,6 +45,11 @@ The Expo app talks to the same Next.js backend as the website, through
 | GET | `/players/{id}` | | `{ player, crew, stats, achievements, nemesis, opponents }` |
 | GET | `/players/{a}/vs/{b}` | | `{ a, b, crew, aWins, bWins, meetings }` |
 | GET | `/stats` | | Deep stats payload |
+| POST | `/tournaments` | `{ groupId, name, format, entrantPairs }` | `{ tournamentId }` |
+| GET | `/tournaments/{id}` | | `{ tournament }` |
+| POST | `/tournaments/{id}/matches/{matchId}` | `{ winnerEntrantId, shotsByPlayer? }` | `{ gameId }` |
+| GET / POST | `/feedback` | — / `{ type, text, groupId? }` | `{ ideas }` / 201 |
+| POST | `/feedback/{id}/vote` | | `{ ideas }` |
 
 `POST /games` teams: `[{ label?, playerIds, finalRank }]`; 2-mat = 2 teams of 1,
 4-mat = 2 teams of 2, 8-mat = 4 teams of 2; ranks 1..n. Shots:

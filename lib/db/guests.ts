@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq, or } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { runAtomic } from "@/lib/db/batch";
 import { users, groupMembers, gameTeamPlayers, tournamentEntrants } from "@/lib/db/schema";
@@ -50,8 +50,22 @@ export async function findGuestByClaimCode(rawCode: string) {
   return user?.isGuest ? user : null;
 }
 
-export async function removeGuestPlayer(guestId: string) {
-  await db.delete(users).where(eq(users.id, guestId));
+/** Removes a guest from a crew. A guest who never played is deleted
+ * outright; one with games or tournament entries only leaves the crew, so
+ * everyone's history stays intact (and the claim code still works). */
+export async function removeGuestPlayer(groupId: string, guestId: string) {
+  const [played, entered] = await Promise.all([
+    db.query.gameTeamPlayers.findFirst({ where: eq(gameTeamPlayers.userId, guestId), columns: { id: true } }),
+    db.query.tournamentEntrants.findFirst({
+      where: or(eq(tournamentEntrants.player1Id, guestId), eq(tournamentEntrants.player2Id, guestId)),
+      columns: { id: true },
+    }),
+  ]);
+  if (played || entered) {
+    await db.delete(groupMembers).where(and(eq(groupMembers.groupId, groupId), eq(groupMembers.userId, guestId)));
+  } else {
+    await db.delete(users).where(eq(users.id, guestId));
+  }
 }
 
 /** Merges a guest's history onto a real, signed-in account: every FK that
