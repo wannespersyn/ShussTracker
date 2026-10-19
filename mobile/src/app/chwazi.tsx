@@ -33,10 +33,7 @@ export default function ChwaziScreen() {
   const [phase, setPhase] = useState<"select" | "shuffling" | "result">("select");
   const [teams, setTeams] = useState<Team[] | null>(null);
 
-  const roster = useMemo(
-    () => [...(q.data?.insights.players ?? [])].sort((a, b) => b.elo - a.elo).map((p) => ({ id: p.userId, name: p.name })),
-    [q.data],
-  );
+  const roster = useMemo(() => [...(q.data?.insights.players ?? [])].sort((a, b) => b.elo - a.elo).map((p) => ({ id: p.userId, name: p.name })), [q.data]);
   const ratings = useMemo(() => Object.fromEntries((q.data?.insights.players ?? []).map((p) => [p.userId, p.elo])), [q.data]);
   const short = useMemo(() => shortNamesFor(roster), [roster]);
 
@@ -56,7 +53,13 @@ export default function ChwaziScreen() {
     setPhase("shuffling");
     setTimeout(() => {
       const players = roster.filter((p) => picked.includes(p.id));
-      setTeams(mat === "2" ? pairIntoSolos(shuffleIntoDuos(players).flatMap((x) => x.players)) : balanced ? balanceIntoDuos(players, ratings) : shuffleIntoDuos(players));
+      setTeams(
+        mat === "2"
+          ? pairIntoSolos(shuffleIntoDuos(players).flatMap((x) => x.players))
+          : balanced
+            ? balanceIntoDuos(players, ratings)
+            : shuffleIntoDuos(players),
+      );
       setPhase("result");
     }, 900);
   }
@@ -105,7 +108,9 @@ export default function ChwaziScreen() {
                 return (
                   <Pressable key={p.id} onPress={() => toggle(p.id)} style={[styles.player, on && styles.playerOn]}>
                     <Avatar name={p.name} size={34} />
-                    <Txt v="bodySemi" numberOfLines={1} style={{ fontSize: 13 }}>{short[p.id]}</Txt>
+                    <Txt v="bodySemi" numberOfLines={1} style={{ fontSize: 13 }}>
+                      {short[p.id]}
+                    </Txt>
                     <Txt style={{ color: colors.muted, fontSize: 11 }}>{ratings[p.id]}</Txt>
                   </Pressable>
                 );
@@ -117,7 +122,12 @@ export default function ChwaziScreen() {
                   <Txt v="bodySemi">{t.chwazi.balance}</Txt>
                   <Txt style={{ color: colors.muted, fontSize: 12 }}>{t.chwazi.balanceSub}</Txt>
                 </View>
-                <Switch value={balanced} onValueChange={setBalanced} trackColor={{ true: colors.gold, false: colors.chip }} thumbColor={balanced ? colors.ink : colors.muted} />
+                <Switch
+                  value={balanced}
+                  onValueChange={setBalanced}
+                  trackColor={{ true: colors.gold, false: colors.chip }}
+                  thumbColor={balanced ? colors.ink : colors.muted}
+                />
               </View>
             )}
             <Button label={ready ? "CHWAZI!" : format(t.log.pickMore, { n: need - picked.length })} disabled={!ready} onPress={go} />
@@ -140,7 +150,9 @@ export default function ChwaziScreen() {
                   {team.players.map((p) => (
                     <View key={p.id} style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
                       <Avatar name={p.name} size={34} />
-                      <Txt v="bodySemi" style={{ flex: 1 }} numberOfLines={1}>{short[p.id]}</Txt>
+                      <Txt v="bodySemi" style={{ flex: 1 }} numberOfLines={1}>
+                        {short[p.id]}
+                      </Txt>
                       <Txt style={{ color: colors.muted, fontFamily: fonts.headBold }}>{ratings[p.id]}</Txt>
                     </View>
                   ))}
@@ -187,7 +199,16 @@ const styles = StyleSheet.create({
     borderColor: "rgba(243,241,234,0.06)",
   },
   playerOn: { backgroundColor: colors.raised, borderColor: colors.gold },
-  toggle: { flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: 14, backgroundColor: colors.deep, borderWidth: 1, borderColor: colors.line },
+  toggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: colors.deep,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
   team: { gap: 10, padding: 14, borderRadius: radius.xl, backgroundColor: colors.deep, borderWidth: 2 },
   teamLabel: { fontFamily: fonts.display, fontSize: 14, letterSpacing: 2 },
 });

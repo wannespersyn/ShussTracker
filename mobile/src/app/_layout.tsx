@@ -51,6 +51,15 @@ function RootStack() {
         <Stack.Screen name="player/[id]" />
         <Stack.Screen name="crews/new" options={{ presentation: "modal" }} />
         <Stack.Screen name="chwazi" />
+        <Stack.Screen name="crews/[id]/manage" />
+        <Stack.Screen name="crews/[id]/guests" />
+        <Stack.Screen name="tournaments/new" />
+        <Stack.Screen name="tournaments/[id]/index" />
+        <Stack.Screen name="tournaments/[id]/match/[matchId]" />
+        <Stack.Screen name="recap/[crewId]" options={{ presentation: "fullScreenModal" }} />
+        <Stack.Screen name="vs/[a]/[b]" />
+        <Stack.Screen name="stats" />
+        <Stack.Screen name="feedback" />
       </Stack.Protected>
       <Stack.Protected guard={status === "signedOut"}>
         <Stack.Screen name="sign-in" />

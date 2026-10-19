@@ -64,6 +64,10 @@ export type SessionInsight = {
   games: number;
   players: number;
   mvp: { userId: string; name: string; wins: number; eloDelta: number } | null;
+  movers: { userId: string; name: string; delta: number }[];
+  mamaKings: { names: string[]; count: number } | null;
+  ironLiver: { name: string; games: number } | null;
+  duoOfNight: { names: string; wins: number; losses: number } | null;
   lines: { userId: string; name: string; games: number; wins: number; mama: number }[];
 };
 
@@ -77,7 +81,7 @@ export type CrewDetail = {
     firstGameAt: string | null;
   };
   guests: { id: string; name: string; claimToken: string | null }[];
-  tournaments: { id: string; name: string; status: string }[];
+  tournaments: { id: string; name: string; format: string; status: "setup" | "active" | "completed"; createdAt: string }[];
 };
 
 export type Reaction = "fire" | "laugh" | "beer" | "skull";
@@ -139,4 +143,79 @@ export type PlayerProfile = {
   achievements: Achievement[];
   nemesis: { opponentId: string; opponentName: string; wins: number; losses: number } | null;
   opponents: { userId: string; name: string; timesPlayed: number }[];
+};
+
+export type StatsFieldCounts = { far: number; mid: number; near: number; risk: number; miss: number };
+export type StatsGame = {
+  id: string;
+  crewId: string | null;
+  matType: "2" | "4" | "8";
+  playedAt: string;
+  teams: { userIds: string[]; won: boolean; points: number; shots: Record<string, StatsFieldCounts> }[];
+};
+export type StatsData = {
+  people: { id: string; name: string }[];
+  crews: { id: string; name: string; memberCount: number }[];
+  games: StatsGame[];
+  hasZoneData: boolean;
+};
+
+export type HeadToHead = {
+  a: { id: string; name: string | null; stats: PlayerInsight | null };
+  b: { id: string; name: string | null; stats: PlayerInsight | null };
+  crew: { id: string; name: string } | null;
+  aWins: number;
+  bWins: number;
+  meetings: { gameId: string; playedAt: string; aWon: boolean; aScore: number; bScore: number; matType: "2" | "4" | "8" }[];
+};
+
+export type TournamentFormat = "single_elim" | "double_elim" | "round_robin";
+export type TournamentEntrant = { id: string; seed: number; names: string; playerIds: [string, string] };
+export type TournamentMatch = {
+  id: string;
+  bracket: "winners" | "losers" | "grand_final" | "round_robin";
+  round: number;
+  slot: number;
+  entrantA: TournamentEntrant | null;
+  entrantB: TournamentEntrant | null;
+  winnerEntrantId: string | null;
+  gameId: string | null;
+};
+export type Tournament = {
+  id: string;
+  name: string;
+  format: TournamentFormat;
+  status: "setup" | "active" | "completed";
+  groupId: string;
+  groupName: string;
+  winnersRounds: TournamentMatch[][];
+  losersRounds: TournamentMatch[][];
+  grandFinal: TournamentMatch | null;
+  roundRobinRounds: TournamentMatch[][];
+  standings: { entrant: TournamentEntrant; wins: number; played: number }[];
+  championEntrant: TournamentEntrant | null;
+};
+
+export type RecapStory = { kicker: string; big: string; bigSize: number; line: string; foot: string; tone: "amber" | "ink" | "panel" | "red" };
+export type Recap = {
+  crewName: string;
+  monthly: { month: string; slides: RecapStory[] } | null;
+  season: {
+    label: string;
+    showedUp: { games: number; nights: number };
+    biggestWin: { winnerNames: string; loserNames: string; margin: number } | null;
+    bestDuo: { names: string; wins: number; losses: number } | null;
+    redZones: { name: string; count: number } | null;
+    topScorer: { name: string; points: number } | null;
+    mostGames: { name: string; games: number } | null;
+  };
+};
+
+export type Idea = {
+  id: string;
+  text: string;
+  status: "new" | "under_review" | "planned" | "in_progress" | "done" | "declined";
+  votes: number;
+  votedByMe: boolean;
+  mine: boolean;
 };

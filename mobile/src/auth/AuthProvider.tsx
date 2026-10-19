@@ -12,6 +12,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { api, setUnauthorizedHandler, tokenStore } from "@/api/client";
 import type { Me, SignInResponse } from "@/api/types";
+import { storedPushToken } from "@/lib/push";
 
 type Status = "loading" | "signedOut" | "signedIn";
 type Ctx = {
@@ -65,7 +66,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         finish(await api<SignInResponse>("/auth/apple", { method: "POST", body: { identityToken, fullName } })),
       signInDev: async (email) => finish(await api<SignInResponse>("/auth/dev", { method: "POST", body: { email } })),
       signOut: async () => {
-        await api("/auth/logout", { method: "POST", body: {} }).catch(() => {});
+        const pushToken = await storedPushToken();
+        await api("/auth/logout", { method: "POST", body: pushToken ? { pushToken } : {} }).catch(() => {});
         await clear();
       },
       refreshMe: async () => setMe(await api<Me>("/me")),

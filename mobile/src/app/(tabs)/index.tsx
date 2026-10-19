@@ -75,7 +75,10 @@ export default function Home() {
                 </View>
               </View>
               {mine.streak && mine.streak.n >= 3 && (
-                <Chip tone={mine.streak.kind === "W" ? "hot" : "neutral"} label={format(mine.streak.kind === "W" ? t.home.winStreak : t.home.loseStreak, { n: mine.streak.n })} />
+                <Chip
+                  tone={mine.streak.kind === "W" ? "hot" : "neutral"}
+                  label={format(mine.streak.kind === "W" ? t.home.winStreak : t.home.loseStreak, { n: mine.streak.n })}
+                />
               )}
             </Card>
 

@@ -9,10 +9,10 @@
  * Data: GET /api/v1/crews/{crewId}, GET /api/v1/crews/{crewId}/feed
  */
 import { useState } from "react";
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
-import { apiUrl } from "@/api/client";
+import { api, apiUrl } from "@/api/client";
 import { useAuth } from "@/auth/AuthProvider";
 import { useCrew } from "@/lib/crew";
 import { format, useT } from "@/lib/i18n";
@@ -22,15 +22,17 @@ import { CenterState, Chip, ErrorState, FormDots, Segmented, Txt } from "@/compo
 import { CrewSwitcher } from "@/components/CrewSwitcher";
 import { NoCrew } from "@/components/crew/NoCrew";
 import { Feed } from "@/components/crew/Feed";
+import { Sessions } from "@/components/crew/Sessions";
+import { LinkRow } from "@/components/Header";
 import { colors, fonts } from "@/theme";
 
 const first = (name: string) => name.trim().split(/\s+/)[0] ?? name;
 
 export default function Crew() {
   const { t } = useT();
-  const { me } = useAuth();
-  const { crew, version } = useCrew();
-  const [section, setSection] = useState<"board" | "feed">("board");
+  const { me, refreshMe } = useAuth();
+  const { crew, version, invalidate } = useCrew();
+  const [section, setSection] = useState<"board" | "feed" | "sessions">("board");
   const [view, setView] = useState<"players" | "duos">("players");
   const q = useQuery<CrewDetail>(crew ? `/crews/${crew.id}` : null, version);
   const feed = useQuery<{ games: FeedGame[] }>(crew && section === "feed" ? `/crews/${crew.id}/feed?limit=40` : null, version);
@@ -40,6 +42,21 @@ export default function Crew() {
   if (!q.data) return <CenterState />;
 
   const { insights } = q.data;
+
+  function leave(crewId: string, crewName: string) {
+    Alert.alert(format(t.more.leaveConfirm, { crew: crewName }), undefined, [
+      { text: t.game.cancel, style: "cancel" },
+      {
+        text: t.more.leaveCrew,
+        style: "destructive",
+        onPress: async () => {
+          await api(`/crews/${crewId}/leave`, { method: "POST" }).catch(() => null);
+          await refreshMe().catch(() => {});
+          invalidate();
+        },
+      },
+    ]);
+  }
 
   function invite(crewName: string, code: string) {
     const url = apiUrl(`/crews/join?code=${code}`);
@@ -80,14 +97,16 @@ export default function Crew() {
         </View>
         <CrewSwitcher />
         <View style={styles.tabs}>
-          {(["board", "feed"] as const).map((id) => (
+          {(["board", "feed", "sessions"] as const).map((id) => (
             <Pressable
               key={id}
               onPress={() => setSection(id)}
               style={[styles.tab, section === id && styles.tabOn]}
               accessibilityState={{ selected: section === id }}
             >
-              <Text style={[styles.tabText, section === id && { color: colors.cream }]}>{id === "board" ? t.crew.leaderboard : t.crew.feed}</Text>
+              <Text style={[styles.tabText, section === id && { color: colors.cream }]}>
+                {id === "board" ? t.crew.leaderboard : id === "feed" ? t.crew.feed : t.crew.sessions}
+              </Text>
             </Pressable>
           ))}
         </View>
@@ -100,6 +119,8 @@ export default function Crew() {
           ) : (
             <ActivityIndicator color={colors.gold} style={{ marginTop: 24 }} />
           ))}
+
+        {section === "sessions" && <Sessions sessions={insights.sessions} />}
 
         {section === "board" && (
           <>
@@ -182,6 +203,35 @@ export default function Crew() {
             {view === "duos" && minDuoGames > 1 && <Txt style={{ color: colors.muted, fontSize: 12 }}>{format(t.crew.minGames, { n: minDuoGames })}</Txt>}
           </>
         )}
+        <View style={{ gap: 8, marginTop: 12 }}>
+          {(() => {
+            const active = q.data.tournaments.find((x) => x.status !== "completed");
+            return (
+              <LinkRow
+                label={active ? active.name : t.crew.tournament}
+                sub={t.crew.tournamentSub}
+                onPress={() =>
+                  active
+                    ? router.push({ pathname: "/tournaments/[id]", params: { id: active.id } })
+                    : router.push({ pathname: "/tournaments/new", params: { crewId: crew.id } })
+                }
+              />
+            );
+          })()}
+          {insights.totalGames > 0 && (
+            <LinkRow label={t.more.seasonRecap} onPress={() => router.push({ pathname: "/recap/[crewId]", params: { crewId: crew.id } })} />
+          )}
+          <LinkRow
+            label={t.manage.guests}
+            sub={`${q.data.guests.length}`}
+            onPress={() => router.push({ pathname: "/crews/[id]/guests", params: { id: crew.id } })}
+          />
+          {q.data.crew.isOwner ? (
+            <LinkRow label={t.crew.manage} onPress={() => router.push({ pathname: "/crews/[id]/manage", params: { id: crew.id } })} />
+          ) : (
+            <LinkRow label={t.more.leaveCrew} danger onPress={() => leave(crew.id, crew.name)} />
+          )}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );

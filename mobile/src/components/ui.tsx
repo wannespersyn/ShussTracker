@@ -126,7 +126,12 @@ export function Segmented<T extends string>({ value, options, onChange }: { valu
       {options.map((o) => {
         const active = o.id === value;
         return (
-          <Pressable key={o.id} onPress={() => onChange(o.id)} style={[styles.segment, active && { backgroundColor: colors.gold }]} accessibilityState={{ selected: active }}>
+          <Pressable
+            key={o.id}
+            onPress={() => onChange(o.id)}
+            style={[styles.segment, active && { backgroundColor: colors.gold }]}
+            accessibilityState={{ selected: active }}
+          >
             <Text style={[styles.segmentText, { color: active ? colors.ink : colors.muted }]}>{o.label}</Text>
           </Pressable>
         );
@@ -138,7 +143,13 @@ export function Segmented<T extends string>({ value, options, onChange }: { valu
 export function CenterState({ title, body, children }: { title?: string; body?: string; children?: ReactNode }) {
   return (
     <View style={styles.center}>
-      {title ? <Txt v="display" style={{ fontSize: 28, textAlign: "center" }}>{title}</Txt> : <ActivityIndicator color={colors.gold} />}
+      {title ? (
+        <Txt v="display" style={{ fontSize: 28, textAlign: "center" }}>
+          {title}
+        </Txt>
+      ) : (
+        <ActivityIndicator color={colors.gold} />
+      )}
       {body ? <Txt style={{ color: colors.muted, textAlign: "center", maxWidth: 300 }}>{body}</Txt> : null}
       {children}
     </View>

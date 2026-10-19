@@ -20,7 +20,7 @@ import { useAuth } from "@/auth/AuthProvider";
 import { useCrew } from "@/lib/crew";
 import { format, useT } from "@/lib/i18n";
 import { useQuery } from "@/lib/useQuery";
-import { Avatar, CenterState, ErrorState, Kicker, Txt } from "@/components/ui";
+import { Avatar, Button, CenterState, ErrorState, Kicker, Txt } from "@/components/ui";
 import { PhotoButton } from "@/components/game/PhotoButton";
 import { colors, fonts, radius } from "@/theme";
 
@@ -31,7 +31,7 @@ export default function GameScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { t, locale } = useT();
   const { me } = useAuth();
-  const { invalidate } = useCrew();
+  const { invalidate, setCrewId } = useCrew();
   const q = useQuery<GameDetail>(`/games/${id}`);
   const [reactions, setReactions] = useState<ReactionTally[] | null>(null);
   const [comments, setComments] = useState<GameComment[] | null>(null);
@@ -56,7 +56,9 @@ export default function GameScreen() {
     minute: "2-digit",
   }).format(new Date(game.playedAt));
   const matLabel = game.matType === "2" ? "1V1" : game.matType === "4" ? "2V2" : "8-MAT";
-  const zoneTotals = (["1", "2", "3", "mama", "miss"] as const).map((z) => [z, game.teams.reduce((n, tm) => n + tm.players.reduce((m, p) => m + p.shots[z], 0), 0)] as const);
+  const zoneTotals = (["1", "2", "3", "mama", "miss"] as const).map(
+    (z) => [z, game.teams.reduce((n, tm) => n + tm.players.reduce((m, p) => m + p.shots[z], 0), 0)] as const,
+  );
   const tracked = zoneTotals.some(([z, n]) => z !== "mama" && n > 0);
 
   async function react(reaction: Reaction) {
@@ -115,12 +117,7 @@ export default function GameScreen() {
           keyboardShouldPersistTaps="handled"
         >
           {shownPhoto && (
-            <Image
-              source={{ uri: apiUrl(shownPhoto), headers: authHeaders() }}
-              style={styles.photo}
-              contentFit="cover"
-              accessibilityLabel={t.game.photoAlt}
-            />
+            <Image source={{ uri: apiUrl(shownPhoto), headers: authHeaders() }} style={styles.photo} contentFit="cover" accessibilityLabel={t.game.photoAlt} />
           )}
 
           <Kicker>{t.game.result}</Kicker>
@@ -130,9 +127,7 @@ export default function GameScreen() {
             return (
               <View key={i} style={[styles.team, won && { borderColor: colors.gold }]}>
                 <View style={[styles.rank, won ? { backgroundColor: colors.gold } : { backgroundColor: colors.chip }]}>
-                  <Text style={[styles.rankText, { color: won ? colors.ink : colors.soft }]}>
-                    {multi ? ORD[(tm.finalRank ?? i + 1) - 1] : won ? "W" : "L"}
-                  </Text>
+                  <Text style={[styles.rankText, { color: won ? colors.ink : colors.soft }]}>{multi ? ORD[(tm.finalRank ?? i + 1) - 1] : won ? "W" : "L"}</Text>
                 </View>
                 <View style={{ flex: 1, gap: 2 }}>
                   <Txt style={styles.teamName} numberOfLines={1}>
@@ -158,7 +153,9 @@ export default function GameScreen() {
               {zoneTotals.map(([z, n]) => (
                 <View key={z} style={styles.zone}>
                   <Txt style={[styles.zoneN, z === "mama" && { color: colors.red }]}>{n}</Txt>
-                  <Txt v="label" style={{ fontSize: 10 }}>{z === "mama" ? t.common.mama : z === "miss" ? t.more.miss : format(t.more.field, { n: z })}</Txt>
+                  <Txt v="label" style={{ fontSize: 10 }}>
+                    {z === "mama" ? t.common.mama : z === "miss" ? t.more.miss : format(t.more.field, { n: z })}
+                  </Txt>
                 </View>
               ))}
             </View>
@@ -169,7 +166,11 @@ export default function GameScreen() {
           <Kicker>{t.game.reactions}</Kicker>
           <View style={{ flexDirection: "row", gap: 8 }}>
             {shownReactions.map((r) => (
-              <Pressable key={r.reaction} onPress={() => react(r.reaction)} style={[styles.reaction, r.reactedByMe && { borderColor: colors.gold, backgroundColor: colors.raised }]}>
+              <Pressable
+                key={r.reaction}
+                onPress={() => react(r.reaction)}
+                style={[styles.reaction, r.reactedByMe && { borderColor: colors.gold, backgroundColor: colors.raised }]}
+              >
                 <Text style={{ fontSize: 20 }}>{GLYPH[r.reaction]}</Text>
                 {r.count > 0 && <Txt style={{ fontFamily: fonts.headBold }}>{r.count}</Txt>}
               </Pressable>
@@ -182,7 +183,9 @@ export default function GameScreen() {
             <View key={c.id} style={styles.comment}>
               <Avatar name={c.userName} size={30} />
               <View style={{ flex: 1 }}>
-                <Txt v="bodySemi" style={{ fontSize: 13 }}>{first(c.userName)}</Txt>
+                <Txt v="bodySemi" style={{ fontSize: 13 }}>
+                  {first(c.userName)}
+                </Txt>
                 <Txt>{c.text}</Txt>
               </View>
               {c.userId === me?.user.id && (
@@ -192,6 +195,17 @@ export default function GameScreen() {
               )}
             </View>
           ))}
+
+          {!game.tournamentId && game.crew && (
+            <Button
+              label={t.game.rematch}
+              kind="outline"
+              onPress={() => {
+                if (game.crew) setCrewId(game.crew.id);
+                router.navigate({ pathname: "/log", params: { teams: game.teams.flatMap((tm) => tm.players.map((p) => p.id)).join(",") } });
+              }}
+            />
+          )}
 
           {game.canDelete && (
             <Pressable onPress={confirmDelete} style={{ alignSelf: "center", padding: 12, marginTop: 8 }}>
@@ -226,17 +240,56 @@ const styles = StyleSheet.create({
   round: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: colors.panel },
   content: { padding: 20, gap: 12, paddingBottom: 24 },
   photo: { width: "100%", aspectRatio: 4 / 3, borderRadius: radius.lg, backgroundColor: colors.deep },
-  team: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, borderRadius: radius.lg, backgroundColor: colors.deep, borderWidth: 2, borderColor: colors.line },
+  team: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 12,
+    borderRadius: radius.lg,
+    backgroundColor: colors.deep,
+    borderWidth: 2,
+    borderColor: colors.line,
+  },
   rank: { minWidth: 40, height: 40, borderRadius: radius.sm, alignItems: "center", justifyContent: "center", paddingHorizontal: 6 },
   rankText: { fontFamily: fonts.display, fontSize: 18 },
   teamName: { fontFamily: fonts.headBold, fontSize: 19, color: colors.cream, textTransform: "uppercase" },
   zones: { flexDirection: "row", gap: 6 },
   zone: { flex: 1, alignItems: "center", paddingVertical: 8, borderRadius: radius.sm, backgroundColor: colors.deep, borderWidth: 1, borderColor: colors.line },
   zoneN: { fontFamily: fonts.display, fontSize: 20 },
-  reaction: { flex: 1, height: 48, flexDirection: "row", gap: 6, alignItems: "center", justifyContent: "center", borderRadius: radius.md, backgroundColor: colors.deep, borderWidth: 1, borderColor: colors.line },
+  reaction: {
+    flex: 1,
+    height: 48,
+    flexDirection: "row",
+    gap: 6,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.md,
+    backgroundColor: colors.deep,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
   comment: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
-  composer: { flexDirection: "row", gap: 8, paddingHorizontal: 16, paddingVertical: 10, borderTopWidth: 1, borderTopColor: colors.line, backgroundColor: colors.surface },
-  input: { flex: 1, height: 44, borderRadius: radius.md, backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line, paddingHorizontal: 12, color: colors.cream, fontFamily: fonts.body, fontSize: 15 },
+  composer: {
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: colors.line,
+    backgroundColor: colors.surface,
+  },
+  input: {
+    flex: 1,
+    height: 44,
+    borderRadius: radius.md,
+    backgroundColor: colors.panel,
+    borderWidth: 1,
+    borderColor: colors.line,
+    paddingHorizontal: 12,
+    color: colors.cream,
+    fontFamily: fonts.body,
+    fontSize: 15,
+  },
   send: { height: 44, paddingHorizontal: 16, borderRadius: radius.md, backgroundColor: colors.gold, justifyContent: "center" },
   sendText: { fontFamily: fonts.headBold, fontSize: 15, letterSpacing: 0.8, color: colors.ink, textTransform: "uppercase" },
 });

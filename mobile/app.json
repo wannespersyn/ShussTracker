@@ -46,6 +46,13 @@
           "photosPermission": "Shussapp uses your photos so you can add a picture of the mat to a game.",
           "cameraPermission": "Shussapp uses the camera so you can snap the mat after a game."
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/android-icon-monochrome.png",
+          "color": "#ffb627"
+        }
       ]
     ],
     "experiments": {

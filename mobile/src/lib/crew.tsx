@@ -29,7 +29,9 @@ export function CrewProvider({ children }: { children: ReactNode }) {
   const [version, setVersion] = useState(0);
 
   useEffect(() => {
-    SecureStore.getItemAsync(KEY).then(setCrewIdState).catch(() => {});
+    SecureStore.getItemAsync(KEY)
+      .then(setCrewIdState)
+      .catch(() => {});
   }, []);
 
   const value = useMemo<Ctx>(() => {

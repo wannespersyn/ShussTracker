@@ -45,7 +45,11 @@ export function Feed({ games }: { games: FeedGame[] }) {
             const [winner, ...rest] = g.teams;
             const reacted = g.reactions.filter((r) => r.count > 0);
             return (
-              <Pressable key={g.id} onPress={() => router.push({ pathname: "/game/[id]", params: { id: g.id } })} style={({ pressed }) => [styles.card, pressed && { opacity: 0.85 }]}>
+              <Pressable
+                key={g.id}
+                onPress={() => router.push({ pathname: "/game/[id]", params: { id: g.id } })}
+                style={({ pressed }) => [styles.card, pressed && { opacity: 0.85 }]}
+              >
                 <View style={{ flex: 1, gap: 4 }}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                     <Text style={styles.win}>W</Text>
@@ -76,8 +80,26 @@ export function Feed({ games }: { games: FeedGame[] }) {
 }
 
 const styles = StyleSheet.create({
-  card: { flexDirection: "row", gap: 12, alignItems: "center", padding: 12, borderRadius: radius.lg, backgroundColor: colors.deep, borderWidth: 1, borderColor: colors.line },
-  win: { fontFamily: fonts.display, fontSize: 13, color: colors.ink, backgroundColor: colors.gold, paddingHorizontal: 6, paddingVertical: 1, borderRadius: 5, overflow: "hidden" },
+  card: {
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "center",
+    padding: 12,
+    borderRadius: radius.lg,
+    backgroundColor: colors.deep,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  win: {
+    fontFamily: fonts.display,
+    fontSize: 13,
+    color: colors.ink,
+    backgroundColor: colors.gold,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 5,
+    overflow: "hidden",
+  },
   meta: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 2 },
   metaText: { fontSize: 12, color: colors.muted, fontFamily: fonts.bodySemi },
   thumb: { width: 64, height: 64, borderRadius: radius.md, backgroundColor: colors.raised },

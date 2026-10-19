@@ -26,7 +26,7 @@ const first = (name: string) => name.trim().split(/\s+/)[0] ?? name;
 const ordinal = (n: number, locale: string) => {
   if (locale === "nl") return `${n}e`;
   const r100 = n % 100;
-  const suffix = r100 >= 11 && r100 <= 13 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[n % 10] ?? "th";
+  const suffix = r100 >= 11 && r100 <= 13 ? "th" : (({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[n % 10] ?? "th");
   return `${n}${suffix}`;
 };
 
@@ -57,7 +57,9 @@ export default function DuosTab() {
       const myMama = duo.a.id === userId ? duo.mamaA : duo.mamaB;
       const theirMama = duo.a.id === userId ? duo.mamaB : duo.mamaA;
       const totalMama = myMama + theirMama;
-      const ranking = duos.filter((d) => d.games >= Math.min(5, duo.games)).sort((a, b) => wilsonLowerBound(b.wins, b.games) - wilsonLowerBound(a.wins, a.games));
+      const ranking = duos
+        .filter((d) => d.games >= Math.min(5, duo.games))
+        .sort((a, b) => wilsonLowerBound(b.wins, b.games) - wilsonLowerBound(a.wins, a.games));
       const duoRank = ranking.findIndex((d) => d.key === duo.key) + 1;
       const dateFmt = new Intl.DateTimeFormat(locale === "nl" ? "nl-BE" : "en-GB", { weekday: "short", day: "numeric", month: "short" });
       return (
@@ -148,8 +150,13 @@ export default function DuosTab() {
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      <ScrollView contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={q.refreshing} onRefresh={q.reload} tintColor={colors.gold} />}>
-        <Txt v="display" style={{ textTransform: "uppercase" }}>{t.duo.title}</Txt>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={q.refreshing} onRefresh={q.reload} tintColor={colors.gold} />}
+      >
+        <Txt v="display" style={{ textTransform: "uppercase" }}>
+          {t.duo.title}
+        </Txt>
         <CrewSwitcher />
         {mine.length > 1 && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
@@ -160,7 +167,9 @@ export default function DuosTab() {
                 <Pressable key={d.key} onPress={() => setPartnerId(p.id)} style={[styles.partner, active && styles.partnerOn]}>
                   <Avatar name={p.name} size={30} />
                   <View>
-                    <Txt v="bodySemi" style={{ fontSize: 14 }}>{first(p.name)}</Txt>
+                    <Txt v="bodySemi" style={{ fontSize: 14 }}>
+                      {first(p.name)}
+                    </Txt>
                     <Txt style={{ color: colors.muted, fontSize: 11 }}>{`${d.wins}–${d.losses}`}</Txt>
                   </View>
                 </Pressable>
@@ -184,9 +193,28 @@ const styles = StyleSheet.create({
   record: { fontFamily: fonts.display, fontSize: 56, lineHeight: 58, color: colors.cream },
   stats: { flexDirection: "row", gap: 1, borderRadius: 16, overflow: "hidden", borderWidth: 1, borderColor: colors.line },
   bar: { flexDirection: "row", height: 12, borderRadius: 6, overflow: "hidden", gap: 2 },
-  game: { flexDirection: "row", alignItems: "center", gap: 10, padding: 10, borderRadius: radius.md, backgroundColor: colors.deep, borderWidth: 1, borderColor: colors.line },
+  game: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 10,
+    borderRadius: radius.md,
+    backgroundColor: colors.deep,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
   wl: { width: 30, height: 30, borderRadius: radius.sm, alignItems: "center", justifyContent: "center" },
   wlText: { fontFamily: fonts.display, fontSize: 15 },
-  partner: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999, backgroundColor: colors.deep, borderWidth: 1.5, borderColor: colors.line },
+  partner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: colors.deep,
+    borderWidth: 1.5,
+    borderColor: colors.line,
+  },
   partnerOn: { borderColor: colors.gold, backgroundColor: colors.raised },
 });

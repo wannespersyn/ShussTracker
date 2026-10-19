@@ -9,7 +9,8 @@
  *
  * Data: POST /api/v1/games; calls `onSaved(gameId)` afterwards.
  * Notes: the crew's "track every shot" setting is the default for step 2.
- * Teams picked in Chwazi arrive as `presetPlayerIds` and skip step 1.
+ * Teams picked in Chwazi arrive as `presetPlayerIds` and skip step 1;
+ * tournament matches pass `lockedTeams` + their own `submit`.
  */
 import { useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
@@ -32,31 +33,41 @@ const ZONES: { hit: FieldHit; label: string }[] = [
 ];
 const needFor = (m: Mat) => (m === "8" ? 8 : m === "2" ? 2 : 4);
 
+export type SaveResult = {
+  matType: Mat;
+  teams: { id: string; label: string; playerIds: string[]; finalRank: number }[];
+  shotsByPlayer: { playerId: string; fieldHit: FieldHit }[];
+};
+
 export function LogGame({
   detail,
   onSaved,
   presetPlayerIds,
+  lockedTeams,
+  submit,
 }: {
   detail: CrewDetail;
   onSaved: (gameId: string) => void;
   /** Ordered player ids from Chwazi (pairs for duos); opens on the result step. */
   presetPlayerIds?: string[];
+  /** Fixed teams (tournament match): result step only, no going back. */
+  lockedTeams?: Team[];
+  /** Custom save (tournament match); resolves with the new game's id. */
+  submit?: (result: SaveResult) => Promise<string>;
 }) {
   const { t } = useT();
   const ORD = [t.more.ord1, t.more.ord2, t.more.ord3, t.more.ord4];
 
   // Most active players first, like the website.
-  const roster = useMemo(
-    () => [...detail.insights.players].sort((a, b) => b.games - a.games).map((p) => ({ id: p.userId, name: p.name })),
-    [detail],
-  );
+  const roster = useMemo(() => [...detail.insights.players].sort((a, b) => b.games - a.games).map((p) => ({ id: p.userId, name: p.name })), [detail]);
   const ratings = useMemo(() => Object.fromEntries(detail.insights.players.map((p) => [p.userId, p.elo])), [detail]);
-  const duoRecords = useMemo(
-    () => Object.fromEntries(detail.insights.duos.map((d) => [[d.a.id, d.b.id].sort().join("|"), `${d.wins}–${d.losses}`])),
-    [detail],
-  );
+  const duoRecords = useMemo(() => Object.fromEntries(detail.insights.duos.map((d) => [[d.a.id, d.b.id].sort().join("|"), `${d.wins}–${d.losses}`])), [detail]);
   const short = useMemo(() => shortNamesFor(roster), [roster]);
   const [preset] = useState(() => {
+    if (lockedTeams) {
+      const n = lockedTeams.reduce((k, x) => k + x.players.length, 0);
+      return { mat: String(n) as Mat, ids: lockedTeams.flatMap((x) => x.players.map((p) => p.id)), teams: lockedTeams };
+    }
     const players = (presetPlayerIds ?? []).map((id) => roster.find((p) => p.id === id)).filter((p) => !!p);
     if (![2, 4, 8].includes(players.length) || players.length !== presetPlayerIds?.length) return null;
     return { mat: String(players.length) as Mat, ids: players.map((p) => p.id), teams: players.length === 2 ? pairIntoSolos(players) : pairIntoDuos(players) };
@@ -141,24 +152,33 @@ export function LogGame({
     setSaving(true);
     setError(null);
     try {
-      const res = await api<{ gameId: string }>("/games", {
-        method: "POST",
-        body: {
-          groupId: detail.crew.id,
-          matType: mat,
-          teams: teams.map((x) => ({ label: x.label, playerIds: x.players.map((p) => p.id), finalRank: finalOrder.indexOf(x.id) + 1 })),
-          shotsByPlayer: Object.entries(shots).flatMap(([playerId, byHit]) =>
-            Object.entries(byHit).flatMap(([hit, n]) => Array.from({ length: n ?? 0 }, () => ({ playerId, fieldHit: hit }))),
-          ),
-        },
-      });
+      const result: SaveResult = {
+        matType: mat,
+        teams: teams.map((x) => ({ id: x.id, label: x.label, playerIds: x.players.map((p) => p.id), finalRank: finalOrder.indexOf(x.id) + 1 })),
+        shotsByPlayer: Object.entries(shots).flatMap(([playerId, byHit]) =>
+          Object.entries(byHit).flatMap(([hit, n]) => Array.from({ length: n ?? 0 }, () => ({ playerId, fieldHit: hit as FieldHit }))),
+        ),
+      };
+      const gameId = submit
+        ? await submit(result)
+        : (
+            await api<{ gameId: string }>("/games", {
+              method: "POST",
+              body: {
+                groupId: detail.crew.id,
+                matType: result.matType,
+                teams: result.teams.map(({ id: _id, ...x }) => x),
+                shotsByPlayer: result.shotsByPlayer,
+              },
+            })
+          ).gameId;
       setStep("setup");
       setPicked([]);
       setTeams(null);
       setOrder([]);
       setShots({});
       setHistory([]);
-      onSaved(res.gameId);
+      onSaved(gameId);
     } catch (e) {
       setError(e instanceof ApiError && e.status === 0 ? t.app.offline : (e as Error).message);
     } finally {
@@ -171,7 +191,9 @@ export function LogGame({
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.between}>
           <View style={{ width: 84 }} />
-          <Txt v="heading" style={styles.title}>{t.log.title}</Txt>
+          <Txt v="heading" style={styles.title}>
+            {t.log.title}
+          </Txt>
           <Pressable onPress={() => router.push("/chwazi")} style={styles.chwazi}>
             <Txt style={{ fontFamily: fonts.bodySemi, fontSize: 13 }}>🎲 Chwazi</Txt>
           </Pressable>
@@ -199,7 +221,9 @@ export function LogGame({
                 const on = picked.includes(p.id);
                 return (
                   <Pressable key={p.id} onPress={() => toggle(p.id)} style={[styles.player, on && styles.playerOn]} accessibilityState={{ selected: on }}>
-                    <Txt v="bodySemi" numberOfLines={1} style={{ fontSize: 14 }}>{name(p.id)}</Txt>
+                    <Txt v="bodySemi" numberOfLines={1} style={{ fontSize: 14 }}>
+                      {name(p.id)}
+                    </Txt>
                     {ratings[p.id] !== undefined && <Txt style={styles.small}>{ratings[p.id]}</Txt>}
                   </Pressable>
                 );
@@ -223,7 +247,9 @@ export function LogGame({
                   {team.players.map((p) => (
                     <Pressable key={p.id} onPress={() => tapToSwap(p.id)} style={[styles.swapChip, swapFrom === p.id && styles.playerOn]}>
                       <Avatar name={p.name} size={26} />
-                      <Txt v="bodySemi" numberOfLines={1} style={{ flex: 1, fontSize: 14 }}>{name(p.id)}</Txt>
+                      <Txt v="bodySemi" numberOfLines={1} style={{ flex: 1, fontSize: 14 }}>
+                        {name(p.id)}
+                      </Txt>
                     </Pressable>
                   ))}
                 </View>
@@ -247,16 +273,22 @@ export function LogGame({
   return (
     <ScrollView contentContainerStyle={styles.content}>
       <View style={styles.between}>
-        <Pressable onPress={() => setStep("setup")} hitSlop={10}>
-          <Txt style={styles.link}>‹ {t.common.back}</Txt>
-        </Pressable>
+        {lockedTeams ? (
+          <View style={{ width: 50 }} />
+        ) : (
+          <Pressable onPress={() => setStep("setup")} hitSlop={10}>
+            <Txt style={styles.link}>‹ {t.common.back}</Txt>
+          </Pressable>
+        )}
         <Txt v="heading">{t.log.title}</Txt>
         <View style={{ width: 50 }} />
       </View>
 
       <View style={styles.toggle}>
         <View style={{ flex: 1 }}>
-          <Txt v="bodySemi" style={{ fontSize: 14 }}>{t.log.trackShots}</Txt>
+          <Txt v="bodySemi" style={{ fontSize: 14 }}>
+            {t.log.trackShots}
+          </Txt>
           <Txt style={styles.small}>{zones ? t.log.trackOn : t.log.trackOff}</Txt>
         </View>
         <Switch value={zones} onValueChange={setZones} trackColor={{ true: colors.gold, false: colors.chip }} thumbColor={zones ? colors.ink : colors.muted} />
@@ -275,7 +307,15 @@ export function LogGame({
         const r = finalOrder.indexOf(team.id);
         const placed = r > -1 && (order.includes(team.id) || complete);
         const first = placed && r === 0;
-        const record = team.players.length === 2 ? duoRecords[team.players.map((p) => p.id).sort().join("|")] : undefined;
+        const record =
+          team.players.length === 2
+            ? duoRecords[
+                team.players
+                  .map((p) => p.id)
+                  .sort()
+                  .join("|")
+              ]
+            : undefined;
         return (
           <View key={team.id} style={[styles.resultTeam, first && { borderColor: colors.gold }]}>
             <Pressable onPress={() => tapTeam(team.id)} style={styles.resultHead}>
@@ -306,7 +346,9 @@ export function LogGame({
                   <View style={styles.between}>
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
                       <Avatar name={p.name} size={28} />
-                      <Txt v="bodySemi" numberOfLines={1}>{name(p.id)}</Txt>
+                      <Txt v="bodySemi" numberOfLines={1}>
+                        {name(p.id)}
+                      </Txt>
                     </View>
                     {zones ? (
                       <Txt style={styles.small}>{`${total} ${t.log.shots}`}</Txt>
@@ -379,7 +421,16 @@ export function LogGame({
 const styles = StyleSheet.create({
   content: { padding: 20, gap: 14, paddingBottom: 48 },
   title: { textAlign: "center", fontSize: 24 },
-  chwazi: { width: 84, height: 36, borderRadius: 999, alignItems: "center", justifyContent: "center", backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line },
+  chwazi: {
+    width: 84,
+    height: 36,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.panel,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
   between: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
   count: { fontFamily: fonts.display, fontSize: 18, color: colors.muted },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
@@ -410,19 +461,62 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: "transparent",
   },
-  toggle: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, borderRadius: 14, backgroundColor: colors.deep, borderWidth: 1, borderColor: colors.line },
-  undo: { height: 32, paddingHorizontal: 12, borderRadius: 999, justifyContent: "center", backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line },
-  resultTeam: { borderRadius: 16, backgroundColor: colors.deep, borderWidth: 2, borderColor: colors.line, paddingHorizontal: 14, paddingTop: 6, paddingBottom: 4 },
+  toggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: colors.deep,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  undo: {
+    height: 32,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    justifyContent: "center",
+    backgroundColor: colors.panel,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  resultTeam: {
+    borderRadius: 16,
+    backgroundColor: colors.deep,
+    borderWidth: 2,
+    borderColor: colors.line,
+    paddingHorizontal: 14,
+    paddingTop: 6,
+    paddingBottom: 4,
+  },
   resultHead: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: 8 },
   teamName: { fontFamily: fonts.headBold, fontSize: 19, color: colors.cream },
   badge: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.sm, backgroundColor: colors.raised },
   badgeText: { fontFamily: fonts.display, fontSize: 13, letterSpacing: 1.2, color: colors.muted },
   playerRow: { gap: 6, paddingVertical: 8, borderTopWidth: 1, borderTopColor: "rgba(243,241,234,0.06)" },
-  stepper: { width: 44, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: colors.raised, borderWidth: 1, borderColor: colors.lineStrong },
+  stepper: {
+    width: 44,
+    height: 36,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.raised,
+    borderWidth: 1,
+    borderColor: colors.lineStrong,
+  },
   stepperPlus: { backgroundColor: "rgba(255,107,91,0.13)", borderColor: "rgba(255,107,91,0.4)" },
   stepperText: { fontFamily: fonts.bodyBold, fontSize: 18, color: colors.cream },
   mama: { width: 26, textAlign: "center", fontFamily: fonts.display, fontSize: 22, color: "#5b6460" },
-  zone: { flex: 1, height: 44, borderRadius: radius.sm, alignItems: "center", justifyContent: "center", backgroundColor: colors.raised, borderWidth: 1, borderColor: colors.line },
+  zone: {
+    flex: 1,
+    height: 44,
+    borderRadius: radius.sm,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.raised,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
   zoneLabel: { fontFamily: fonts.display, fontSize: 15 },
   zoneCount: { fontFamily: fonts.bodyBold, fontSize: 11 },
 });

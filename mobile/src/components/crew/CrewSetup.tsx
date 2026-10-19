@@ -73,7 +73,9 @@ export function CrewSetup({ onDone }: { onDone?: (crewId: string) => void }) {
     <View style={{ gap: 14 }}>
       <View style={{ gap: 6 }}>
         <Kicker>{t.join.kicker}</Kicker>
-        <Txt v="display" style={{ fontSize: 40, lineHeight: 42, textTransform: "uppercase" }}>{t.join.title}</Txt>
+        <Txt v="display" style={{ fontSize: 40, lineHeight: 42, textTransform: "uppercase" }}>
+          {t.join.title}
+        </Txt>
         <Txt style={{ color: colors.soft }}>{t.join.sub}</Txt>
       </View>
 
@@ -107,14 +109,7 @@ export function CrewSetup({ onDone }: { onDone?: (crewId: string) => void }) {
       ) : (
         <View style={{ gap: 10 }}>
           <Kicker>{t.join.name}</Kicker>
-          <TextInput
-            value={name}
-            onChangeText={setName}
-            placeholder={t.join.namePh}
-            placeholderTextColor={colors.dim}
-            maxLength={40}
-            style={styles.input}
-          />
+          <TextInput value={name} onChangeText={setName} placeholder={t.join.namePh} placeholderTextColor={colors.dim} maxLength={40} style={styles.input} />
           <Txt style={{ color: colors.muted, fontSize: 13 }}>{t.join.free}</Txt>
           <Button label={t.join.create} disabled={!name.trim()} loading={busy === "crew"} onPress={submit} />
         </View>

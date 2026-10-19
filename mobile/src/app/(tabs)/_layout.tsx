@@ -6,10 +6,12 @@
  */
 import { NativeTabs } from "expo-router/native-tabs";
 import { useT } from "@/lib/i18n";
+import { usePushNotifications } from "@/lib/push";
 import { colors } from "@/theme";
 
 export default function TabsLayout() {
-  const { t } = useT();
+  const { t, locale } = useT();
+  usePushNotifications(true, locale);
   return (
     <NativeTabs backgroundColor={colors.deep} tintColor={colors.gold} labelStyle={{ color: colors.muted }}>
       <NativeTabs.Trigger name="index">
