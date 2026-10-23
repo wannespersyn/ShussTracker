@@ -23,8 +23,12 @@ export default async function LogGamePage({
   const session = await requireSession();
   const t = await getT();
   const { crewId, teams, casual, rematch } = await searchParams;
-  const [start, celebrations] = await Promise.all([hasBeta(session.user.id, "start"), hasBeta(session.user.id, "celebrations")]);
-  const beta = { start, celebrations };
+  const [start, celebrations, mat] = await Promise.all([
+    hasBeta(session.user.id, "start"),
+    hasBeta(session.user.id, "celebrations"),
+    hasBeta(session.user.id, "mat"),
+  ]);
+  const beta = { start, celebrations, mat };
 
   // Rematch — same crew, same teams, fresh game. Self-contained: it skips
   // the crew/night picking below entirely since the original game already
@@ -57,7 +61,6 @@ export default async function LogGamePage({
         roster={rematchRoster}
         lockedTeams={lockedTeams}
         backHref={`/game/${rematch}`}
-        trackShotZones={rematchGroup?.trackShotZones ?? false}
         crewName={rematchGroup?.name}
         beta={beta}
       />
@@ -150,7 +153,6 @@ export default async function LogGamePage({
       roster={roster}
       presetPlayerIds={presetPlayerIds}
       backHref={crewPickerHref}
-      trackShotZones={group?.trackShotZones ?? false}
       ratings={ratings}
       duoRecords={duoRecords}
       crewName={group?.name}

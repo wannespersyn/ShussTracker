@@ -22,7 +22,7 @@ export function BetaPill({ children, tone = "gold" }: Readonly<{ children: React
 }
 
 // Inline colours: fixed brand fills that must look the same in light + dark.
-const TILE: Record<BetaKey, string> = { wrapped: "#ffb627", start: "#ff6b1a", celebrations: "#c8261a" };
+const TILE: Record<BetaKey, string> = { wrapped: "#ffb627", start: "#ff6b1a", celebrations: "#c8261a", mat: "#e0a43a" };
 
 export function BetaTile({ feature, size = 48 }: Readonly<{ feature: BetaKey; size?: number }>) {
   return (
@@ -41,6 +41,12 @@ export function BetaTile({ feature, size = 48 }: Readonly<{ feature: BetaKey; si
           </>
         )}
         {feature === "celebrations" && <path d="M4 18L4 8l4.5 4L12 5l3.5 7L20 8v10z" />}
+        {feature === "mat" && (
+          <>
+            <rect x="7" y="2.5" width="10" height="19" rx="2" />
+            <path d="M12 6.5l2.5 3h-5zM12 17.5l2.5-3h-5z" />
+          </>
+        )}
       </svg>
     </span>
   );

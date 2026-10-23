@@ -12,6 +12,7 @@ export const BETA_FEATURES = [
   { key: "wrapped", addedAt: "2026-10-23", tone: "gold" },
   { key: "start", addedAt: "2026-10-23", tone: "orange" },
   { key: "celebrations", addedAt: "2026-10-23", tone: "red" },
+  { key: "mat", addedAt: "2026-10-24", tone: "gold" },
 ] as const;
 
 export type BetaKey = (typeof BETA_FEATURES)[number]["key"];

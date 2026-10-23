@@ -62,7 +62,6 @@ export default async function TournamentMatchPage({
       tournamentId={tournamentId}
       teamA={teamA}
       teamB={teamB}
-      trackShotZones={group?.trackShotZones ?? false}
     />
   );
 }

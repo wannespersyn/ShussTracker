@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { runAtomic } from "@/lib/db/batch";
-import { games, gameTeams, gameTeamPlayers, shots } from "@/lib/db/schema";
+import { capMoves, gameRounds, gameRoundTeams, gameThrows, games, gameTeams, gameTeamPlayers, shots } from "@/lib/db/schema";
+import type { MatGameLog } from "@/lib/mat";
 import { assertValidTeamSize } from "@/lib/db/authz";
 
 export type FieldHit = "1" | "2" | "3" | "mama" | "miss";
@@ -19,6 +20,8 @@ export type CreateGameInput = {
   matType: "2" | "4" | "8";
   teams: GameTeamInput[];
   shotsByPlayer: ShotInput[];
+  /** Beta mat logger: every round, throw and cap move. Team indexes follow `teams`. */
+  mat?: MatGameLog;
 };
 
 export type CreatedGameTeam = { gameTeamId: string; label: string; playerIds: string[]; finalRank: number };
@@ -44,12 +47,16 @@ export async function createGameRecord(
     return { gameTeamId, team };
   });
 
+  const mat = input.mat ? matRows(input.mat, teamInserts.map((x) => x.gameTeamId), playerIdToGameTeamPlayerId, gameId) : null;
+
   await runAtomic((executor) => [
     executor.insert(games).values({
       id: gameId,
       groupId: input.groupId,
       createdBy: input.createdBy,
       matType: input.matType,
+      matA1Corner: input.mat?.a1Corner ?? null,
+      endedBy: input.mat?.endedBy ?? null,
     }),
     ...teamInserts.map(({ gameTeamId, team }) =>
       executor.insert(gameTeams).values({
@@ -80,6 +87,14 @@ export async function createGameRecord(
           ),
         ]
       : []),
+    ...(mat
+      ? [
+          ...(mat.rounds.length ? [executor.insert(gameRounds).values(mat.rounds)] : []),
+          ...(mat.roundTeams.length ? [executor.insert(gameRoundTeams).values(mat.roundTeams)] : []),
+          ...(mat.throws.length ? [executor.insert(gameThrows).values(mat.throws)] : []),
+          ...(mat.moves.length ? [executor.insert(capMoves).values(mat.moves)] : []),
+        ]
+      : []),
   ]);
 
   return {
@@ -91,6 +106,38 @@ export async function createGameRecord(
       finalRank: team.finalRank,
     })),
   };
+}
+
+/** Flattens a MatGameLog into rows with pre-generated ids (so the whole game
+ * still goes out as one atomic batch). Rejects players that aren't in the game. */
+function matRows(log: MatGameLog, teamIds: string[], gtp: Map<string, string>, gameId: string) {
+  const player = (id: string) => {
+    const v = gtp.get(id);
+    if (!v) throw new Error("Mat log references a player who isn't in this game");
+    return v;
+  };
+  const team = (i: number | null) => (i === null ? null : (teamIds[i] ?? null));
+  const rounds: (typeof gameRounds.$inferInsert)[] = [];
+  const roundTeams: (typeof gameRoundTeams.$inferInsert)[] = [];
+  const throws: (typeof gameThrows.$inferInsert)[] = [];
+  const moves: (typeof capMoves.$inferInsert)[] = [];
+  for (const r of log.rounds) {
+    const roundId = randomUUID();
+    rounds.push({ id: roundId, gameId, number: r.number, complete: r.complete });
+    r.teams.forEach((x, i) => teamIds[i] && roundTeams.push({ roundId, gameTeamId: teamIds[i], sips: x.sips, mama: x.mama }));
+    for (const t of r.throws) {
+      const throwId = randomUUID();
+      throws.push({ id: throwId, roundId, seq: t.seq, gameTeamPlayerId: player(t.playerId), slot: t.slot, kind: t.kind, skipReason: t.skipReason, capNo: t.capNo });
+      for (const m of t.moves) {
+        moves.push({
+          throwId, capNo: m.capNo, capOwnerId: player(m.ownerId), isThrownCap: m.isThrownCap,
+          fromX: Math.round(m.fromX), fromY: Math.round(m.fromY), fromSpot: m.fromSpot,
+          toX: Math.round(m.toX), toY: Math.round(m.toY), toSpot: m.toSpot, toCountsFor: team(m.toCountsForTeam),
+        });
+      }
+    }
+  }
+  return { rounds, roundTeams, throws, moves };
 }
 
 export type RematchSource = {

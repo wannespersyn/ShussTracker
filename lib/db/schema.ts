@@ -114,12 +114,8 @@ export const groups = pgTable("group", {
     .notNull()
     .references(() => users.id),
   createdAt: timestamp("created_at").notNull().defaultNow(),
-  // Off by default — most crews never actually pin down which of the 1/2/3
-  // field zones a cap landed in mid-game, they just log the mama hits. A
-  // crew can opt into full zone tracking here; stats/achievements that need
-  // that granularity fall back to a collapsed hit/miss/mama view (see
-  // lib/db/stats.ts, lib/db/achievements.ts) whenever the underlying games
-  // don't actually have "2"/"3" shots recorded, regardless of this flag.
+  // Legacy: the crew default for the old per-zone shot counter. No longer read
+  // or set (shot tracking is now the beta mat logger); kept so old rows stay valid.
   trackShotZones: boolean("track_shot_zones").notNull().default(false),
   // Crew Pro. "founding" = crews that existed before v2 launched; they get
   // Pro free until `proUntil`. No paywall is enforced yet (see lib/plan.ts).
@@ -154,6 +150,11 @@ export const games = pgTable("game", {
   matType: matTypeEnum("mat_type").notNull(),
   // Photo of the mat (Vercel Blob URL), shown on the game page, feed and recap.
   photoUrl: text("photo_url"),
+  // Mat logger (beta): corner A1 started in ("TL" | "TR" | "BL" | "BR", as seen
+  // with the mat upright on a phone) and how the game ended ("pints_empty").
+  // Null for games logged without the mat.
+  matA1Corner: text("mat_a1_corner"),
+  endedBy: text("ended_by"),
 });
 
 export const gameTeams = pgTable("game_team", {
@@ -198,6 +199,81 @@ export const shots = pgTable("shot", {
   defense: boolean("defense").notNull().default(false),
   ownGoal: boolean("own_goal").notNull().default(false),
   timestamp: timestamp("timestamp").notNull().defaultNow(),
+});
+
+/* -----------------------------------------------------------------------
+ * Mat logger (beta) — every cap movement of a game, so any stat can be
+ * recomputed later. game → rounds → throws → cap moves. Spots are stored as
+ * they were judged when logging ("L1".."R3" zones, "ML"/"MR" mamas,
+ * "box:a1" shooting boxes, "waiting", "off", "none", "miss"), next to the raw
+ * mat coordinates (landscape mat space, 824×265), so a later change to the
+ * mat geometry never rewrites history.
+ * --------------------------------------------------------------------- */
+
+export const gameRounds = pgTable("game_round", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  gameId: uuid("game_id")
+    .notNull()
+    .references(() => games.id, { onDelete: "cascade" }),
+  number: integer("number").notNull(),
+  // False for the round that was still going when a team emptied its pints.
+  complete: boolean("complete").notNull().default(true),
+});
+
+/** Drinking result of a round per team: sips from caps lying in that team's
+ * zones, or `mama` (empty the pints, nobody sips). */
+export const gameRoundTeams = pgTable("game_round_team", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  roundId: uuid("round_id")
+    .notNull()
+    .references(() => gameRounds.id, { onDelete: "cascade" }),
+  gameTeamId: uuid("game_team_id")
+    .notNull()
+    .references(() => gameTeams.id, { onDelete: "cascade" }),
+  sips: integer("sips").notNull().default(0),
+  mama: boolean("mama").notNull().default(false),
+});
+
+/** One turn. `kind`: "normal", "bonus" (extra throw, last of the round, with
+ * the cap lying in their shooting box) or "skipped" (`skipReason`
+ * "cap_knocked" = their waiting cap was shot away, "box_empty" = the cap in
+ * their box was gone by the time of the extra throw). */
+export const gameThrows = pgTable("game_throw", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  roundId: uuid("round_id")
+    .notNull()
+    .references(() => gameRounds.id, { onDelete: "cascade" }),
+  seq: integer("seq").notNull(),
+  gameTeamPlayerId: uuid("game_team_player_id")
+    .notNull()
+    .references(() => gameTeamPlayers.id, { onDelete: "cascade" }),
+  slot: text("slot").notNull(),
+  kind: text("kind").notNull(),
+  skipReason: text("skip_reason"),
+  // Cap number within the game (caps are numbered as they enter play).
+  capNo: integer("cap_no"),
+});
+
+/** Every cap that moved during a throw: the thrown cap itself
+ * (`isThrownCap`) and each cap it knocked. `toCountsFor` = the team that
+ * zone/mama counts for, null when it counts for nobody. */
+export const capMoves = pgTable("cap_move", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  throwId: uuid("throw_id")
+    .notNull()
+    .references(() => gameThrows.id, { onDelete: "cascade" }),
+  capNo: integer("cap_no").notNull(),
+  capOwnerId: uuid("cap_owner_id")
+    .notNull()
+    .references(() => gameTeamPlayers.id, { onDelete: "cascade" }),
+  isThrownCap: boolean("is_thrown_cap").notNull(),
+  fromX: integer("from_x"),
+  fromY: integer("from_y"),
+  fromSpot: text("from_spot").notNull(),
+  toX: integer("to_x"),
+  toY: integer("to_y"),
+  toSpot: text("to_spot").notNull(),
+  toCountsFor: uuid("to_counts_for").references(() => gameTeams.id, { onDelete: "set null" }),
 });
 
 /* -----------------------------------------------------------------------
@@ -412,6 +488,7 @@ export const gamesRelations = relations(games, ({ one, many }) => ({
   teams: many(gameTeams),
   comments: many(gameComments),
   reactions: many(gameReactions),
+  rounds: many(gameRounds),
 }));
 
 export const gameCommentsRelations = relations(gameComments, ({ one }) => ({
@@ -446,6 +523,27 @@ export const gameTeamPlayersRelations = relations(
     shots: many(shots),
   }),
 );
+
+export const gameRoundsRelations = relations(gameRounds, ({ one, many }) => ({
+  game: one(games, { fields: [gameRounds.gameId], references: [games.id] }),
+  teams: many(gameRoundTeams),
+  throws: many(gameThrows),
+}));
+
+export const gameRoundTeamsRelations = relations(gameRoundTeams, ({ one }) => ({
+  round: one(gameRounds, { fields: [gameRoundTeams.roundId], references: [gameRounds.id] }),
+  gameTeam: one(gameTeams, { fields: [gameRoundTeams.gameTeamId], references: [gameTeams.id] }),
+}));
+
+export const gameThrowsRelations = relations(gameThrows, ({ one, many }) => ({
+  round: one(gameRounds, { fields: [gameThrows.roundId], references: [gameRounds.id] }),
+  thrower: one(gameTeamPlayers, { fields: [gameThrows.gameTeamPlayerId], references: [gameTeamPlayers.id] }),
+  moves: many(capMoves),
+}));
+
+export const capMovesRelations = relations(capMoves, ({ one }) => ({
+  throw: one(gameThrows, { fields: [capMoves.throwId], references: [gameThrows.id] }),
+}));
 
 export const shotsRelations = relations(shots, ({ one }) => ({
   gameTeamPlayer: one(gameTeamPlayers, {

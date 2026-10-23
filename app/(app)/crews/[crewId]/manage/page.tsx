@@ -12,11 +12,11 @@ import { getLocale, getT } from "@/lib/i18n/server";
 import { format } from "@/lib/i18n";
 import { firstName } from "@/lib/insights";
 import { cn } from "@/lib/cn";
-import { AutoSubmitToggle, ConfirmForm } from "@/components/ui";
+import { ConfirmForm } from "@/components/ui";
 import { Avatar, Kicker, Screen } from "@/components/v2";
 import { ShareButton } from "@/components/game/ShareButton";
 import { AddGuestDialog } from "@/components/crews/AddGuestDialog";
-import { renameCrewAction, regenerateInviteCodeAction, removeCrewMemberAction, deleteCrewAction, setTrackShotZonesAction } from "./actions";
+import { renameCrewAction, regenerateInviteCodeAction, removeCrewMemberAction, deleteCrewAction } from "./actions";
 
 export default async function ManageCrewPage({ params }: Readonly<{ params: Promise<{ crewId: string }> }>) {
   const { crewId } = await params;
@@ -101,16 +101,6 @@ export default async function ManageCrewPage({ params }: Readonly<{ params: Prom
           />
         </div>
       </section>
-
-      <form action={setTrackShotZonesAction.bind(null, crewId)}>
-        <div className="flex items-center gap-3 min-h-15 px-3.5 py-2 rounded-[14px] bg-surface-deep border border-line">
-          <span className="flex-1 flex flex-col">
-            <span className="font-body font-semibold text-[15px]">{t.manage.track}</span>
-            <span className="font-body text-xs text-muted">{t.manage.trackSub}</span>
-          </span>
-          <AutoSubmitToggle name="trackShotZones" defaultChecked={group.trackShotZones} ariaLabel={t.manage.track} />
-        </div>
-      </form>
 
       {topGuest && (
         <section aria-label={t.manage.guests} className="flex flex-col gap-2.5 p-3.5 rounded-[16px] bg-surface-raised border border-gold/35">
