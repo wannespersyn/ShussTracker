@@ -5,6 +5,8 @@ import { getFlair, getLocale, getT } from "@/lib/i18n/server";
 import { format } from "@/lib/i18n";
 import { firstName } from "@/lib/insights";
 import { cn } from "@/lib/cn";
+import { hasBeta } from "@/lib/db/beta";
+import { streakTier } from "@/lib/streak-tier";
 import { LinkButton } from "@/components/ui";
 import {
   FlameIcon,
@@ -100,6 +102,9 @@ export default async function HomePage({
   const myLine = lastSession?.lines.find((l) => l.userId === userId);
 
   const onFire = flair && me?.streak?.kind === "W" && me.streak.n >= 3;
+  // Beta: the flame gets hotter (red → blue → purple) with longer streaks.
+  const heat = onFire && me?.streak && (await hasBeta(userId, "celebrations")) ? streakTier(me.streak.n) : null;
+  const fireTitle = heat ? [t.home.onFire, t.beta.celebrate.tierHot, t.beta.celebrate.tierBlue, t.beta.celebrate.tierLegend][heat.level] : t.home.onFire;
   const chasers = ranked
     .filter((p) => p.userId !== userId)
     .slice(0, 2)
@@ -124,12 +129,13 @@ export default async function HomePage({
       .split(" ");
 
   return (
-    <Screen className={onFire ? "on-fire" : undefined}>
+    <Screen className={onFire ? cn("on-fire", heat && heat.level > 0 && `heat-${heat.level}`) : undefined}>
       {header}
 
       {onFire && me?.streak && (
         <section
-          className="rounded-[22px] bg-[#ff7a2f] text-[#160a04] p-4.5 flex items-center gap-3.5"
+          className="rounded-[22px] p-4.5 flex items-center gap-3.5"
+          style={{ backgroundColor: heat?.flame ?? "#ff7a2f", color: heat?.onFlame ?? "#160a04" }}
           aria-label={t.home.onFire}
         >
           <svg
@@ -142,7 +148,7 @@ export default async function HomePage({
           </svg>
           <span className="flex flex-col">
             <span className="font-display font-extrabold text-[46px] leading-[0.95]! uppercase">
-              {t.home.onFire}
+              {fireTitle}
             </span>
             <span className="font-heading font-bold text-[19px] tracking-[0.04em] uppercase">
               {format(t.home.onFireSub, {

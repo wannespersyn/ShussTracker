@@ -10,6 +10,9 @@ import { cn } from "@/lib/cn";
 import { photoSrc } from "@/lib/photo";
 import { Screen, TextTabs } from "@/components/v2";
 import { ReactionIcon } from "@/components/game/ReactionIcon";
+import { hasBeta } from "@/lib/db/beta";
+import { seasonFor } from "@/lib/wrapped";
+import { WrappedBanner } from "@/components/beta/WrappedBanner";
 
 type Item =
   | {
@@ -108,6 +111,7 @@ export default async function CrewFeedPage({
           {group.name}
         </h1>
       </header>
+      {(await hasBeta(userId, "wrapped")) && <WrappedBanner variant="feed" season={seasonLabel(t)} />}
       <TextTabs
         tabs={[
           {
@@ -375,4 +379,9 @@ function CapGlyph() {
       <path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z" />
     </svg>
   );
+}
+
+function seasonLabel(t: Awaited<ReturnType<typeof getT>>) {
+  const sz = seasonFor(new Date());
+  return format(sz.half === "autumn" ? t.beta.wrapped.seasonAutumn : t.beta.wrapped.seasonSpring, { year: sz.year });
 }

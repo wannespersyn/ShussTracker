@@ -5,7 +5,7 @@ import { TEAM_COLORS, type Duo, type TeamPlayer } from "@/lib/teams";
 import type { CapRingColor } from "@/lib/theme/tokens";
 import { initialsFor } from "@/lib/format";
 import { playTournamentMatch } from "@/app/(app)/tournaments/[tournamentId]/match/[matchId]/actions";
-import type { FieldHit } from "@/lib/db/games";
+import type { ShotInput } from "@/lib/db/games";
 
 type MatchTeam = {
   entrantId: string;
@@ -53,7 +53,7 @@ export function MatchPlayer({
   async function handleComplete(result: {
     matType: "2" | "4" | "8";
     teams: { label: string; playerIds: string[]; finalRank: number }[];
-    shotsByPlayer: { playerId: string; fieldHit: FieldHit }[];
+    shotsByPlayer: ShotInput[];
   }) {
     const winner = result.teams.find((t) => t.finalRank === 1)!;
     const winnerEntrantId = winner.playerIds.includes(teamA.players[0].id) ? teamA.entrantId : teamB.entrantId;

@@ -12,10 +12,13 @@ export function DuoPairingBoard({
   players,
   teams,
   onChange,
+  hideShuffle = false,
 }: Readonly<{
   players: TeamPlayer[];
   teams: Duo[];
   onChange: (teams: Duo[]) => void;
+  /** The caller renders its own shuffle/balance controls (log wizard). */
+  hideShuffle?: boolean;
 }>) {
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const shortNames = useMemo(() => shortNamesFor(players), [players]);
@@ -86,6 +89,7 @@ export function DuoPairingBoard({
           </div>
         </div>
       ))}
+      {!hideShuffle && (
       <button
         type="button"
         onClick={shuffleDuos}
@@ -93,6 +97,7 @@ export function DuoPairingBoard({
       >
         ↻ Shuffle the duos
       </button>
+      )}
     </div>
   );
 }

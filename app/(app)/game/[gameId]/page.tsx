@@ -19,6 +19,9 @@ import { ReactionIcon } from "@/components/game/ReactionIcon";
 import { addCommentAction, deleteCommentAction, deleteGameAction, toggleReactionAction, uploadGamePhotoAction } from "./actions";
 import { canDeleteGame } from "@/lib/db/game-permissions";
 import { ConfirmForm } from "@/components/ui";
+import { hasBeta } from "@/lib/db/beta";
+import { getCelebration } from "@/lib/db/celebrate";
+import { Celebration } from "@/components/beta/Celebration";
 
 
 export default async function GamePage({ params }: Readonly<{ params: Promise<{ gameId: string }> }>) {
@@ -50,6 +53,7 @@ export default async function GamePage({ params }: Readonly<{ params: Promise<{ 
   ]);
   const elo = insights?.gameElo[gameId] ?? {};
   const mayDelete = await canDeleteGame(game, userId);
+  const celebration = (await hasBeta(userId, "celebrations")) ? await getCelebration(gameId, userId) : [];
   const teams = [...game.teams].sort((a, b) => (a.finalRank ?? 99) - (b.finalRank ?? 99));
   const multi = teams.length > 2;
   const when = new Intl.DateTimeFormat(locale === "nl" ? "nl-BE" : "en-GB", {
@@ -61,10 +65,12 @@ export default async function GamePage({ params }: Readonly<{ params: Promise<{ 
     timeZone: "Europe/Brussels",
   }).format(game.playedAt).replace("Sept", "Sep").replace(",", " ·");
   const matLabel = (game.matType === "2" ? "1V1" : game.matType === "4" ? "2V2" : "8-MAT") + (crew ? ` · ${crew.name.toUpperCase()}` : "");
-  const zoneTracked = game.teams.some((tm) => tm.players.some((p) => p.shots.some((s) => s.fieldHit !== "mama")));
+  const zoneTracked = game.teams.some((tm) => tm.players.some((p) => p.shots.some((s) => s.fieldHit !== "mama" || s.defense)));
+  const defenseTotal = game.teams.reduce((acc, tm) => acc + tm.players.reduce((a, p) => a + p.shots.filter((s) => s.defense).length, 0), 0);
 
   return (
     <Screen nav={false} className="gap-3 pb-0">
+      {celebration.length > 0 && <Celebration gameId={gameId} moments={celebration} />}
       <header className="flex items-center justify-between h-11">
         <Link
           href={game.groupId ? `/crews/${game.groupId}/feed` : "/home"}
@@ -135,7 +141,9 @@ export default async function GamePage({ params }: Readonly<{ params: Promise<{ 
                   {tm.players
                     .map((p) => {
                       const m = p.shots.filter((s) => s.fieldHit === "mama").length;
-                      return m > 0 ? `${firstName(p.user.name ?? "")} ${format(t.feed.mamaN, { n: m })}` : null;
+                      const dn = p.shots.filter((s) => s.defense).length;
+                      const parts = [m > 0 ? format(t.feed.mamaN, { n: m }) : null, dn > 0 ? format(t.log.defenses, { n: dn }) : null].filter(Boolean);
+                      return parts.length > 0 ? `${firstName(p.user.name ?? "")} ${parts.join(", ")}` : null;
                     })
                     .filter(Boolean)
                     .join(" · ") || "—"}
@@ -156,9 +164,9 @@ export default async function GamePage({ params }: Readonly<{ params: Promise<{ 
       </section>
 
       {zoneTracked && (
-        <div className="grid grid-cols-5 gap-1.5">
+        <div className={cn("grid gap-1.5", defenseTotal > 0 ? "grid-cols-6" : "grid-cols-5")}>
           {(["1", "2", "3", "mama", "miss"] as const).map((fh) => {
-            const n = game.teams.reduce((acc, tm) => acc + tm.players.reduce((a, p) => a + p.shots.filter((s) => s.fieldHit === fh).length, 0), 0);
+            const n = game.teams.reduce((acc, tm) => acc + tm.players.reduce((a, p) => a + p.shots.filter((s) => s.fieldHit === fh && !s.defense).length, 0), 0);
             return (
               <div key={fh} className="rounded-sm bg-surface-deep border border-line py-2 text-center">
                 <div className={cn("font-display font-extrabold text-xl", fh === "mama" ? "text-red" : "text-cream")}>{n}</div>
@@ -168,6 +176,12 @@ export default async function GamePage({ params }: Readonly<{ params: Promise<{ 
               </div>
             );
           })}
+          {defenseTotal > 0 && (
+            <div className="rounded-sm bg-surface-deep border border-gold/40 py-2 text-center">
+              <div className="font-display font-extrabold text-xl text-gold">{defenseTotal}</div>
+              <div className="font-body font-semibold text-[10px] uppercase tracking-[0.08em] text-muted">{t.log.defend}</div>
+            </div>
+          )}
         </div>
       )}
 

@@ -30,6 +30,29 @@ const barlowCondensed = localFont({
   ],
 });
 
+// Beta motion pieces (components/beta/Stage) use the design's display and
+// body faces; not preloaded so regular pages don't pay for them.
+const bigShoulders = localFont({
+  variable: "--font-bigs",
+  display: "swap",
+  preload: false,
+  src: [
+    { path: "./fonts/big-shoulders-display-latin-700-normal.woff2", weight: "700" },
+    { path: "./fonts/big-shoulders-display-latin-900-normal.woff2", weight: "900" },
+  ],
+});
+
+const archivo = localFont({
+  variable: "--font-archivo",
+  display: "swap",
+  preload: false,
+  src: [
+    { path: "./fonts/archivo-latin-400-normal.woff2", weight: "400" },
+    { path: "./fonts/archivo-latin-600-normal.woff2", weight: "600" },
+    { path: "./fonts/archivo-latin-800-normal.woff2", weight: "800" },
+  ],
+});
+
 export async function generateMetadata(): Promise<Metadata> {
   const t = getDictionary(await getLocale());
   return {
@@ -56,7 +79,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang={locale}
       data-theme={theme}
-      className={`${barlow.variable} ${barlowCondensed.variable} h-full antialiased`}
+      className={`${barlow.variable} ${barlowCondensed.variable} ${bigShoulders.variable} ${archivo.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         <I18nProvider locale={locale} dictionary={getDictionary(locale)}>

@@ -1,0 +1,105 @@
+/* Beta "Who starts?" motion, ported 1:1 from the Animaties designs:
+ * 3-2-1 Shuss (cd*), cap toss (ts*), teams draw (tm*) and the Chwazi finger
+ * picker (ch*). The design loops become one-shots here. */
+
+/* ── 3-2-1 Shuss ─────────────────────────────────────────── 4.4s ── */
+.cdBg { animation: cdBg 4.4s both steps(1); }
+@keyframes cdBg { 0% { background: #0E0E0F; } 20% { background: #FF6B1A; } 40% { background: #C8261A; } 60% { background: #FFC23D; } 92%, 100% { background: #0E0E0F; } }
+.cdLbl { animation: cdLbl 4.4s both steps(1); }
+@keyframes cdLbl { 0% { color: #B8B8B4; } 20% { color: #0E0E0F; } 40% { color: #FFE1DC; } 60% { color: #0E0E0F; } 92%, 100% { color: #B8B8B4; } }
+.cdNum { position: absolute; left: 0; right: 0; top: 250px; text-align: center; font-size: 340px; line-height: 1; opacity: 0; }
+.cdN3 { animation: cdN3 4.4s both; }
+@keyframes cdN3 { 0% { opacity: 0; transform: scale(2.6); } 3% { opacity: 1; transform: scale(0.9); } 6%, 15% { opacity: 1; transform: scale(1); } 19.9% { opacity: 0; transform: scale(0.5); } 100% { opacity: 0; } }
+.cdN2 { animation: cdN2 4.4s both; }
+@keyframes cdN2 { 0%, 20% { opacity: 0; transform: scale(2.6); } 23% { opacity: 1; transform: scale(0.9); } 26%, 35% { opacity: 1; transform: scale(1); } 39.9% { opacity: 0; transform: scale(0.5); } 100% { opacity: 0; } }
+.cdN1 { animation: cdN1 4.4s both; }
+@keyframes cdN1 { 0%, 40% { opacity: 0; transform: scale(2.6); } 43% { opacity: 1; transform: scale(0.9); } 46%, 55% { opacity: 1; transform: scale(1); } 59.9% { opacity: 0; transform: scale(0.5); } 100% { opacity: 0; } }
+.cdGo { animation: cdGo 4.4s both; }
+@keyframes cdGo { 0%, 60% { opacity: 0; transform: scale(3) rotate(-10deg); } 64% { opacity: 1; transform: scale(0.92) rotate(-5deg); } 67%, 86% { opacity: 1; transform: scale(1) rotate(-5deg); } 91%, 100% { opacity: 0; transform: scale(1.2) rotate(-5deg); } }
+.cdRing { position: absolute; left: 95px; top: 322px; width: 200px; height: 200px; border-radius: 50%; opacity: 0; }
+.cdR3 { animation: cdR3 4.4s both; }
+@keyframes cdR3 { 0%, 2% { opacity: 0; transform: scale(0.6); } 3% { opacity: 0.9; } 18%, 100% { opacity: 0; transform: scale(2.6); } }
+.cdR2 { animation: cdR2 4.4s both; }
+@keyframes cdR2 { 0%, 22% { opacity: 0; transform: scale(0.6); } 23% { opacity: 0.9; } 38%, 100% { opacity: 0; transform: scale(2.6); } }
+.cdR1 { animation: cdR1 4.4s both; }
+@keyframes cdR1 { 0%, 42% { opacity: 0; transform: scale(0.6); } 43% { opacity: 0.9; } 58%, 100% { opacity: 0; transform: scale(2.6); } }
+.cdSh { animation: cdSh 4.4s both; }
+@keyframes cdSh { 0%, 61% { opacity: 0; transform: translateY(0) scale(0.3) rotate(0); } 63% { opacity: 1; } 80% { opacity: 1; transform: translateY(-260px) scale(1) rotate(400deg); } 88%, 100% { opacity: 0; transform: translateY(-300px) scale(0.8) rotate(520deg); } }
+
+/* ── Cap toss ────────────────────────────────────────────── 1.7s ── */
+.tsCoin { position: relative; width: 200px; height: 200px; transform-style: preserve-3d; -webkit-transform-style: preserve-3d; }
+.tsFace { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+.tsBack { transform: rotateX(180deg); }
+.tsIdle { animation: tsIdle 2.4s ease-in-out infinite; }
+@keyframes tsIdle { 0%, 100% { transform: translateY(0) rotateX(0); } 50% { transform: translateY(-14px) rotateX(18deg); } }
+.tsF { animation: tsF 1.7s both; }
+@keyframes tsF { 0% { transform: translateY(0) rotateX(0) scale(1); animation-timing-function: cubic-bezier(0.2, 0.7, 0.4, 1); } 42% { transform: translateY(-320px) rotateX(900deg) scale(1.25); animation-timing-function: cubic-bezier(0.6, 0, 0.85, 0.45); } 84% { transform: translateY(0) rotateX(1800deg) scale(1); } 91% { transform: translateY(-26px) rotateX(1800deg) scale(1); } 100% { transform: translateY(0) rotateX(1800deg) scale(1); } }
+.tsB { animation: tsB 1.7s both; }
+@keyframes tsB { 0% { transform: translateY(0) rotateX(0) scale(1); animation-timing-function: cubic-bezier(0.2, 0.7, 0.4, 1); } 42% { transform: translateY(-320px) rotateX(990deg) scale(1.25); animation-timing-function: cubic-bezier(0.6, 0, 0.85, 0.45); } 84% { transform: translateY(0) rotateX(1980deg) scale(1); } 91% { transform: translateY(-26px) rotateX(1980deg) scale(1); } 100% { transform: translateY(0) rotateX(1980deg) scale(1); } }
+.tsSh0 { animation: tsSh0 2.4s ease-in-out infinite; }
+@keyframes tsSh0 { 0%, 100% { transform: scale(1); opacity: 0.5; } 50% { transform: scale(0.85); opacity: 0.35; } }
+.tsSh { animation: tsSh 1.7s both; }
+@keyframes tsSh { 0% { transform: scale(1); opacity: 0.5; } 42% { transform: scale(0.3); opacity: 0.12; } 84% { transform: scale(1); opacity: 0.5; } 91% { transform: scale(0.85); } 100% { transform: scale(1); opacity: 0.5; } }
+.tsRes { animation: tsRes 2.2s both; }
+@keyframes tsRes { 0%, 68% { opacity: 0; transform: translateY(16px) scale(0.8); } 78% { opacity: 1; transform: translateY(0) scale(1.08); } 84%, 100% { opacity: 1; transform: none; } }
+.tsGlow { animation: tsGlow 2.2s both; }
+@keyframes tsGlow { 0%, 64% { opacity: 0; } 70% { opacity: 0.5; } 100% { opacity: 0.16; } }
+
+/* ── Teams draw ──────────────────────────────────────────── 7s, holds from 55% ── */
+.tmChip {
+  position: absolute; left: 95px; top: 0; width: 200px; height: 52px; border-radius: 999px;
+  display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 18px;
+  background: #2A2A2A; color: #FFFFFF; opacity: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  animation: tmChip 7s both;
+}
+@keyframes tmChip {
+  0% { opacity: 0; transform: translate(0, var(--y0)) scale(0.6); }
+  6% { opacity: 1; transform: translate(0, var(--y0)); }
+  12% { transform: translate(var(--x1), var(--y1)) rotate(var(--r1)); }
+  19% { transform: translate(var(--x2), var(--y2)) rotate(var(--r2)); }
+  26% { transform: translate(var(--x3), var(--y3)) rotate(var(--r3)); }
+  33% { transform: translate(var(--x4), var(--y4)) rotate(var(--r4)); }
+  40% { opacity: 1; transform: translate(0, var(--y5)); background: #2A2A2A; color: #FFFFFF; }
+  50% { transform: translate(0, var(--yf)) scale(1.06); background: var(--c); color: var(--fc); animation-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1); }
+  55%, 100% { opacity: 1; transform: translate(0, var(--yf)); background: var(--c); color: var(--fc); }
+}
+.tmPanel { animation: tmPanel 7s both; }
+@keyframes tmPanel { 0%, 44% { opacity: 0; transform: scale(0.94); } 52%, 100% { opacity: 1; transform: none; } }
+.tmVs { animation: tmVs 7s both; }
+@keyframes tmVs { 0%, 54% { opacity: 0; transform: scale(2.4) rotate(-12deg); } 59% { opacity: 1; transform: scale(0.9) rotate(-6deg); } 62%, 100% { opacity: 1; transform: scale(1) rotate(-6deg); } }
+.tmDice { animation: tmDice 7s both; }
+@keyframes tmDice { 0% { transform: rotate(0); } 40%, 100% { transform: rotate(1080deg); } }
+.tmHl1 { animation: tmHl1 7s both; }
+@keyframes tmHl1 { 0%, 44% { opacity: 1; } 48%, 100% { opacity: 0; } }
+.tmHl2 { animation: tmHl2 7s both; }
+@keyframes tmHl2 { 0%, 46% { opacity: 0; transform: translateY(10px); } 52%, 100% { opacity: 1; transform: none; } }
+.tmBtns { animation: tmBtns 7s both; }
+@keyframes tmBtns { 0%, 56% { opacity: 0; transform: translateY(16px); pointer-events: none; } 62%, 100% { opacity: 1; transform: none; pointer-events: auto; } }
+
+/* ── Chwazi finger picker ────────────────────────────────── */
+.chRing { position: absolute; width: 96px; height: 96px; margin: -48px 0 0 -48px; animation: chIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+@keyframes chIn { from { opacity: 0; transform: scale(0.2); } 60% { opacity: 1; transform: scale(1.1); } to { opacity: 1; transform: scale(1); } }
+.chRipple { animation: chRipple 1.1s ease-out infinite; }
+@keyframes chRipple { 0% { opacity: 0.55; transform: scale(1); } 100% { opacity: 0; transform: scale(1.9); } }
+.chBeat { animation: chBeat 1.6s both; }
+@keyframes chBeat { 0% { transform: scale(1); } 25% { transform: scale(1.15); } 50% { transform: scale(1); } 75% { transform: scale(1.15); } 100% { transform: scale(1); } }
+.chGone { animation: chGone 0.35s both; }
+@keyframes chGone { to { opacity: 0; transform: scale(0); } }
+.chWin { animation: chWin 0.6s both; }
+@keyframes chWin { 0% { transform: scale(1); } 50% { transform: scale(1.35); } 100% { transform: scale(1.2); } }
+.chFill { animation: chFill 0.8s 0.15s cubic-bezier(0.4, 0, 0.2, 1) both; }
+@keyframes chFill { 0% { opacity: 0; transform: scale(1); } 5% { opacity: 1; transform: scale(1); } 100% { opacity: 1; transform: scale(30); } }
+.chResult { animation: chResult 0.6s 0.7s both; }
+@keyframes chResult { 0% { opacity: 0; transform: scale(0.6); } 60% { opacity: 1; transform: scale(1.08); } 100% { opacity: 1; transform: scale(1); } }
+.chHint { animation: chHint 0.4s both; }
+@keyframes chHint { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .cdBg, .cdLbl, .cdN3, .cdN2, .cdN1, .cdR3, .cdR2, .cdR1, .cdSh, .tsIdle, .tsF, .tsB, .tsSh0, .tsSh, .tsRes, .tsGlow,
+  .tmChip, .tmPanel, .tmVs, .tmDice, .tmHl1, .tmHl2, .tmBtns, .chRing, .chRipple, .chBeat, .chGone, .chWin, .chFill, .chResult, .chHint {
+    animation-duration: 0.01s !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+  }
+  .cdGo { animation: none !important; opacity: 1; transform: rotate(-5deg); }
+}

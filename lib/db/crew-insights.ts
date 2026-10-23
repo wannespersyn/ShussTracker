@@ -23,48 +23,57 @@ type CachedCrewData = {
  * invalidated by the server actions that change it — see lib/cache-tags.ts.
  * Stored with plain-number dates so it survives the cache's JSON round trip. */
 function loadCrewData(groupId: string): Promise<CachedCrewData> {
-  return unstable_cache(
-    async (): Promise<CachedCrewData> => {
-      const [members, rows] = await Promise.all([
-        db.query.groupMembers.findMany({ where: eq(groupMembers.groupId, groupId), with: { user: true } }),
-        db.query.games.findMany({
-          where: eq(games.groupId, groupId),
-          columns: { id: true, playedAt: true, matType: true },
+  return unstable_cache(() => fetchCrewData(groupId), ["crew-data-v1", groupId], {
+    tags: [crewTag(groupId), ALL_CREWS_TAG],
+    revalidate: CREW_CACHE_SECONDS,
+  })();
+}
+
+async function fetchCrewData(groupId: string): Promise<CachedCrewData> {
+  const [members, rows] = await Promise.all([
+    db.query.groupMembers.findMany({ where: eq(groupMembers.groupId, groupId), with: { user: true } }),
+    db.query.games.findMany({
+      where: eq(games.groupId, groupId),
+      columns: { id: true, playedAt: true, matType: true },
+      with: {
+        teams: {
+          columns: { finalRank: true },
           with: {
-            teams: {
-              columns: { finalRank: true },
-              with: {
-                players: {
-                  columns: { userId: true },
-                  with: { user: { columns: { name: true, isGuest: true } }, shots: { columns: { fieldHit: true } } },
-                },
-              },
+            players: {
+              columns: { userId: true },
+              with: { user: { columns: { name: true, isGuest: true } }, shots: { columns: { fieldHit: true } } },
             },
           },
-        }),
-      ]);
-      return {
-        members: members.map((m) => ({ id: m.userId, name: m.user.name ?? "Player", isGuest: m.user.isGuest })),
-        games: rows.map((g) => ({
-          id: g.id,
-          playedAt: g.playedAt.getTime(),
-          matType: g.matType,
-          teams: g.teams.map((t) => ({
-            rank: t.finalRank,
-            players: t.players.map((p) => ({
-              id: p.userId,
-              name: p.user.name ?? "Player",
-              isGuest: p.user.isGuest,
-              mama: p.shots.filter((x) => x.fieldHit === "mama").length,
-              shots: p.shots.length,
-            })),
-          })),
+        },
+      },
+    }),
+  ]);
+  return {
+    members: members.map((m) => ({ id: m.userId, name: m.user.name ?? "Player", isGuest: m.user.isGuest })),
+    games: rows.map((g) => ({
+      id: g.id,
+      playedAt: g.playedAt.getTime(),
+      matType: g.matType,
+      teams: g.teams.map((t) => ({
+        rank: t.finalRank,
+        players: t.players.map((p) => ({
+          id: p.userId,
+          name: p.user.name ?? "Player",
+          isGuest: p.user.isGuest,
+          mama: p.shots.filter((x) => x.fieldHit === "mama").length,
+          shots: p.shots.length,
         })),
-      };
-    },
-    ["crew-data-v1", groupId],
-    { tags: [crewTag(groupId), ALL_CREWS_TAG], revalidate: CREW_CACHE_SECONDS },
-  )();
+      })),
+    })),
+  };
+}
+
+/** The cached crew history with real Dates — for callers that need to
+ * replay it differently (e.g. "before vs after this game" in the beta
+ * celebrations, or a season-only slice for Wrapped). */
+export async function getCrewHistory(groupId: string, opts: { fresh?: boolean } = {}): Promise<{ members: InsightPlayerRef[]; games: InsightGame[] }> {
+  const data = opts.fresh ? await fetchCrewData(groupId) : await loadCrewData(groupId);
+  return { members: data.members, games: data.games.map((g) => ({ ...g, playedAt: new Date(g.playedAt) })) };
 }
 
 /** Insights are recomputed per request from the cached history (cheap, and

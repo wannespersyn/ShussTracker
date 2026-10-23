@@ -85,6 +85,20 @@
       "when": 1792411314388,
       "tag": "0011_push_locale",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792755658949,
+      "tag": "0012_shot_defense",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1792758037881,
+      "tag": "0013_beta",
+      "breakpoints": true
     }
   ]
 }

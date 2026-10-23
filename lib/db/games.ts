@@ -7,6 +7,10 @@ import { assertValidTeamSize } from "@/lib/db/authz";
 
 export type FieldHit = "1" | "2" | "3" | "mama" | "miss";
 
+/** One logged cap. `defense` = it came from a defending flick; `ownGoal` =
+ * it ended in a zone scoring for the other team (see schema `shot`). */
+export type ShotInput = { playerId: string; fieldHit: FieldHit; defense?: boolean; ownGoal?: boolean };
+
 export type GameTeamInput = { label: string; playerIds: string[]; finalRank: number };
 
 export type CreateGameInput = {
@@ -14,7 +18,7 @@ export type CreateGameInput = {
   createdBy: string;
   matType: "2" | "4" | "8";
   teams: GameTeamInput[];
-  shotsByPlayer: { playerId: string; fieldHit: FieldHit }[];
+  shotsByPlayer: ShotInput[];
 };
 
 export type CreatedGameTeam = { gameTeamId: string; label: string; playerIds: string[]; finalRank: number };
@@ -70,6 +74,8 @@ export async function createGameRecord(
             input.shotsByPlayer.map((s) => ({
               gameTeamPlayerId: playerIdToGameTeamPlayerId.get(s.playerId)!,
               fieldHit: s.fieldHit,
+              defense: s.defense === true,
+              ownGoal: s.defense === true && s.ownGoal === true,
             })),
           ),
         ]

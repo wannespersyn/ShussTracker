@@ -1,4 +1,4 @@
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { games, gameTeamPlayers, groupMembers, shots } from "@/lib/db/schema";
 import { scoreForPlayers as scoreFor } from "@/lib/scoring";
@@ -15,7 +15,7 @@ export async function getShotDistribution(
     .select({ fieldHit: shots.fieldHit })
     .from(shots)
     .innerJoin(gameTeamPlayers, eq(shots.gameTeamPlayerId, gameTeamPlayers.id))
-    .where(eq(gameTeamPlayers.userId, userId));
+    .where(and(eq(gameTeamPlayers.userId, userId), eq(shots.defense, false)));
 
   const counts = new Map<string, number>();
   for (const r of rows) counts.set(r.fieldHit, (counts.get(r.fieldHit) ?? 0) + 1);
@@ -138,8 +138,8 @@ export async function getRecentGamesDetail(userId: string, limit = 3): Promise<R
       id: game.id,
       playedAt: game.playedAt,
       result: myTeam.finalRank === 1 ? "W" : "L",
-      myScore: scoreFor(myTeam.players),
-      oppScore: rival ? scoreFor(rival.players) : 0,
+      myScore: scoreFor(myTeam.players, game.teams.filter((t) => t.id !== myTeam.id).flatMap((t) => t.players)),
+      oppScore: rival ? scoreFor(rival.players, game.teams.filter((t) => t.id !== rival.id).flatMap((t) => t.players)) : 0,
       opponentLabel: rival ? rival.players.map((p) => p.user.name?.split(" ")[0] ?? "Player").join(" & ") : "—",
       teammateLabel:
         teammates.length > 0
@@ -234,9 +234,10 @@ export type StatsExplorerData = {
   hasZoneData: boolean;
 };
 
-function tallyShots(playerShots: { fieldHit: string }[]): StatsFieldCounts {
+function tallyShots(playerShots: { fieldHit: string; defense?: boolean }[]): StatsFieldCounts {
   const c: StatsFieldCounts = { far: 0, mid: 0, near: 0, risk: 0, miss: 0 };
-  for (const s of playerShots) {
+  // Zone accuracy is about your own throws; defenses are counted separately.
+  for (const s of playerShots.filter((x) => !x.defense)) {
     if (s.fieldHit === "3") c.far++;
     else if (s.fieldHit === "2") c.mid++;
     else if (s.fieldHit === "1") c.near++;
@@ -283,12 +284,8 @@ export async function getStatsExplorerData(userId: string): Promise<StatsExplore
     playedAt: g.playedAt.toISOString(),
     teams: g.teams.map((t) => {
       const shots: Record<string, StatsFieldCounts> = {};
-      let points = 0;
-      for (const p of t.players) {
-        const counts = tallyShots(p.shots);
-        shots[p.userId] = counts;
-        points += counts.near + counts.mid * 2 + counts.far * 3;
-      }
+      for (const p of t.players) shots[p.userId] = tallyShots(p.shots);
+      const points = scoreFor(t.players, g.teams.filter((x) => x.id !== t.id).flatMap((x) => x.players));
       return { userIds: t.players.map((p) => p.userId), won: t.finalRank === 1, points, shots };
     }),
   }));

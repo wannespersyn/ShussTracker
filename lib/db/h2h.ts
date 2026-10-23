@@ -58,8 +58,8 @@ export async function getHeadToHead(userIdA: string, userIdB: string): Promise<H
         gameId: game.id,
         playedAt: game.playedAt,
         aWon,
-        aScore: scoreFor(teamA.players),
-        bScore: scoreFor(teamB.players),
+        aScore: scoreFor(teamA.players, game.teams.filter((t) => t.id !== teamA.id).flatMap((t) => t.players)),
+        bScore: scoreFor(teamB.players, game.teams.filter((t) => t.id !== teamB.id).flatMap((t) => t.players)),
         matType: game.matType,
       };
     })

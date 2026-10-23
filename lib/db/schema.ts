@@ -11,7 +11,7 @@ import {
   unique,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import type { AdapterAccountType } from "next-auth/adapters";
 
 /* -----------------------------------------------------------------------
@@ -36,6 +36,12 @@ export const users = pgTable("user", {
   // lib/db/guests.ts), so the token only ever needs to resolve once.
   isGuest: boolean("is_guest").notNull().default(false),
   claimToken: text("claim_token").unique(),
+  // Shussapp Beta is opt-in per person (Settings › Beta). `betaDisabled`
+  // holds the keys of beta features the user switched off individually
+  // while staying in the beta; see lib/beta.ts for the feature registry.
+  betaOptIn: boolean("beta_opt_in").notNull().default(false),
+  betaJoinedAt: timestamp("beta_joined_at"),
+  betaDisabled: text("beta_disabled").array().notNull().default(sql`'{}'::text[]`),
 });
 
 export const accounts = pgTable(
@@ -185,6 +191,12 @@ export const shots = pgTable("shot", {
     .notNull()
     .references(() => gameTeamPlayers.id, { onDelete: "cascade" }),
   fieldHit: fieldHitEnum("field_hit").notNull(),
+  // Defending: the defender's flick moved an opponent's cap. Whatever that
+  // flick changes is the defender's shot. `fieldHit` is where the cap ended
+  // up ("miss" = stopped, nothing scored). `ownGoal` = it ended up in a zone
+  // that scores for the other team, so those points go to them.
+  defense: boolean("defense").notNull().default(false),
+  ownGoal: boolean("own_goal").notNull().default(false),
   timestamp: timestamp("timestamp").notNull().defaultNow(),
 });
 
@@ -341,6 +353,11 @@ export const feedback = pgTable("feedback", {
   type: feedbackTypeEnum("type").notNull(),
   text: text("text").notNull(),
   status: feedbackStatusEnum("status").notNull().default("new"),
+  // Set when the feedback is about a beta feature (key from lib/beta.ts);
+  // `rating` is the 1–4 score from the beta feedback sheet, or 1/4 for a
+  // quick thumbs down/up.
+  feature: text("feature"),
+  rating: integer("rating"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
