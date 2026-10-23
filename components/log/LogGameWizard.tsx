@@ -11,6 +11,7 @@ import { balanceIntoDuos, pairIntoDuos, pairIntoSolos, shuffleIntoDuos, toTeamPl
 import { logGame } from "@/app/(app)/log/actions";
 import { Avatar } from "@/components/v2";
 import { MatLogger } from "@/components/log/MatLogger";
+import { BetaPill } from "@/components/beta/BetaUi";
 import { ZONES, type MatGameLog } from "@/lib/mat";
 import { WhoStarts } from "@/components/beta/WhoStarts";
 import { TeamFingers } from "@/components/beta/TeamFingers";
@@ -259,7 +260,10 @@ export function LogGameWizard({
       className="flex items-center gap-3 min-h-12 px-3.5 py-1 rounded-[14px] bg-surface-deep border border-line text-left text-cream"
     >
       <span className="flex-1 flex flex-col">
-        <span className="font-body font-semibold text-sm">{t.mat.useMat}</span>
+        <span className="flex items-center gap-2 font-body font-semibold text-sm">
+          {t.mat.useMat}
+          <BetaPill>{t.beta.pill}</BetaPill>
+        </span>
         <span className="font-body text-xs text-muted">{t.mat.useMatSub}</span>
       </span>
       <span className={cn("w-12 h-7 rounded-pill p-0.75 flex", useMat ? "bg-amber justify-end" : "bg-chip justify-start")}>

@@ -171,7 +171,7 @@ export const nl: Dictionary = {
     helpHide: "Niet meer tonen",
     helpOk: "Begrepen",
     useMat: "Loggen op de mat",
-    useMatSub: "Beta: sleep elke dop, slokken per ronde, elk schot bewaard",
+    useMatSub: "Sleep elke dop, slokken per ronde, elk schot bewaard",
   },
   log: {
     stepPlayers: "Spelers",

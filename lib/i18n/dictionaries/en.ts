@@ -172,7 +172,7 @@ export const en = {
     helpHide: "Don't show again",
     helpOk: "Got it",
     useMat: "Log on the mat",
-    useMatSub: "Beta: drag every cap, sips per round, every shot saved",
+    useMatSub: "Drag every cap, sips per round, every shot saved",
   },
   log: {
     stepPlayers: "Players",

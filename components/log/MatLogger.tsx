@@ -12,6 +12,7 @@ import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/client";
 import { format } from "@/lib/i18n";
 import type { Duo } from "@/lib/teams";
+import { BetaPill } from "@/components/beta/BetaUi";
 import {
   BOTTLES, CORNERS, MAMAS, ZONES,
   dropCap, finishThrow, mamaTeam, newMatState, nextRound, placeA1, spotOf, teamOfSlot, toGameLog, turnInfo, zoneTeam,
@@ -366,7 +367,10 @@ export function MatLogger({
           <div role="dialog" aria-modal="true" className="relative w-full max-w-[440px] max-h-[calc(100dvh-24px)] overflow-y-auto rounded-[20px] bg-surface-raised border border-line p-4.5 flex flex-col gap-3.5">
             {dialog === "help" && (
               <>
-                <h2 className="font-display font-extrabold text-[28px] leading-none uppercase">{M.helpTitle}</h2>
+                <div className="flex items-center gap-2.5">
+                  <h2 className="font-display font-extrabold text-[28px] leading-none uppercase">{M.helpTitle}</h2>
+                  <BetaPill>{t.beta.pill}</BetaPill>
+                </div>
                 {[["1", M.help1], ["2", M.help2], ["3", M.help3], ["+1", M.help4], ["🍺", M.help5]].map(([ic, txt]) => (
                   <div key={ic} className="flex gap-3 items-start font-body text-sm leading-[1.45]">
                     <span className="shrink-0 w-9.5 h-7 rounded-pill bg-surface-panel border border-line text-gold flex items-center justify-center font-display font-extrabold text-[13px]">{ic}</span>
