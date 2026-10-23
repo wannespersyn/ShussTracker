@@ -9,7 +9,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { tournamentMatches } from "@/lib/db/schema";
 import { requireUserId, requireGroupMember } from "@/lib/db/authz";
-import { createGameRecord, type FieldHit } from "@/lib/db/games";
+import { createGameRecord, type ShotInput } from "@/lib/db/games";
 import { recordMatchResult } from "@/lib/db/tournaments";
 
 export type PlayTournamentMatchInput = {
@@ -17,7 +17,7 @@ export type PlayTournamentMatchInput = {
   teamA: { entrantId: string; playerIds: [string, string] };
   teamB: { entrantId: string; playerIds: [string, string] };
   winnerEntrantId: string;
-  shotsByPlayer: { playerId: string; fieldHit: FieldHit }[];
+  shotsByPlayer: ShotInput[];
 };
 
 export async function playTournamentMatch(input: PlayTournamentMatchInput) {

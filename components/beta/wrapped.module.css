@@ -1,0 +1,49 @@
+/* Shussapp Wrapped player, keyframes copied 1:1 from the Wrapped prototype
+ * design. Delays are set inline per element. */
+
+.fu { animation: fu 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes fu { from { opacity: 0; transform: translateY(28px); } to { opacity: 1; transform: none; } }
+.pop { animation: pop 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+@keyframes pop { from { opacity: 0; transform: scale(0.4); } to { opacity: 1; transform: scale(1); } }
+.big { animation: big 1s cubic-bezier(0.2, 0.9, 0.2, 1) both; }
+@keyframes big { from { opacity: 0; transform: translateY(70px) scale(1.2); } to { opacity: 1; transform: none; } }
+.slam { animation: slam 0.55s cubic-bezier(0.2, 0.9, 0.3, 1.2) both; }
+@keyframes slam { 0% { opacity: 0; transform: scale(2.6); } 70% { opacity: 1; transform: scale(0.94); } 100% { opacity: 1; transform: scale(1); } }
+.tossIn { animation: tossIn 0.8s cubic-bezier(0.2, 0.9, 0.3, 1.1) both; }
+@keyframes tossIn { 0% { opacity: 0; transform: translateY(-120px) scale(2.6) rotate(-160deg); } 70% { opacity: 1; transform: translateY(0) scale(0.92) rotate(0); } 100% { opacity: 1; transform: scale(1); } }
+.vanish { animation: vanish 0.3s ease-in both; }
+@keyframes vanish { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(1.8); } }
+.ringX { animation: ringX 0.9s ease-out both; }
+@keyframes ringX { 0% { opacity: 0; transform: scale(0.3); } 2% { opacity: 1; transform: scale(0.3); } 100% { opacity: 0; transform: scale(4.5); } }
+.flashO { animation: flashO 0.7s both; }
+@keyframes flashO { 0% { opacity: 0; } 12% { opacity: 0.75; } 100% { opacity: 0; } }
+.tossC { animation: tossC 1.5s both; transform-style: preserve-3d; -webkit-transform-style: preserve-3d; }
+@keyframes tossC { 0% { transform: translateY(260px) rotateX(0) scale(0.5); animation-timing-function: cubic-bezier(0.2, 0.7, 0.4, 1); } 42% { transform: translateY(-70px) rotateX(1080deg) scale(1.05); animation-timing-function: cubic-bezier(0.6, 0, 0.85, 0.45); } 85% { transform: translateY(0) rotateX(2160deg) scale(1); } 92% { transform: translateY(-20px) rotateX(2160deg); } 100% { transform: translateY(0) rotateX(2160deg) scale(1); } }
+.tossL { animation: tossL 2.4s both; transform-style: preserve-3d; -webkit-transform-style: preserve-3d; }
+@keyframes tossL { 0% { transform: translateY(0) rotateX(0) scale(0.6); animation-timing-function: cubic-bezier(0.2, 0.7, 0.4, 1); } 45% { transform: translateY(-200px) rotateX(1800deg) scale(1.1); animation-timing-function: cubic-bezier(0.6, 0, 0.85, 0.45); } 88% { transform: translateY(0) rotateX(3600deg) scale(1); } 94% { transform: translateY(-22px) rotateX(3600deg); } 100% { transform: translateY(0) rotateX(3600deg) scale(1); } }
+.face { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+.faceB { transform: rotateX(180deg); }
+.emL { animation: emL 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+@keyframes emL { from { opacity: 0; transform: translateX(56px) scale(0.2); } to { opacity: 1; transform: none; } }
+.emR { animation: emR 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+@keyframes emR { from { opacity: 0; transform: translateX(-56px) scale(0.2); } to { opacity: 1; transform: none; } }
+.drop { animation: drop 1s cubic-bezier(0.34, 1.3, 0.64, 1) both; }
+@keyframes drop { from { opacity: 0; transform: translateY(-560px) rotate(calc(var(--r) * -4)); } to { opacity: 1; transform: rotate(var(--r)); } }
+.flip { animation: flip 1.1s cubic-bezier(0.2, 0.9, 0.2, 1) both; }
+@keyframes flip { from { opacity: 0; transform: perspective(900px) rotateX(75deg) translateY(120px); } to { opacity: 1; transform: none; } }
+.shardB { animation: shardB 1.4s cubic-bezier(0.2, 0.7, 0.3, 1) both; }
+@keyframes shardB { 0% { opacity: 0; transform: translateY(0) rotate(0) scale(0.3); } 10% { opacity: 1; } 100% { opacity: 0; transform: translateY(-300px) rotate(420deg) scale(1); } }
+.spin { animation: spin 16s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.pulse { animation: pulse 1.1s ease-in-out infinite; }
+@keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.25); } }
+.glow { animation: pop 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) both, glow 2.4s ease-in-out infinite; }
+@keyframes glow { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 138, 61, 0); } 50% { box-shadow: 0 0 0 8px rgba(255, 138, 61, 0.25); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .fu, .pop, .big, .slam, .tossIn, .vanish, .ringX, .flashO, .tossC, .tossL, .emL, .emR, .drop, .flip, .shardB, .spin, .pulse, .glow {
+    animation-duration: 0.01s !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+  }
+}

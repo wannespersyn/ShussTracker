@@ -7,6 +7,8 @@ import { getAllFeedback } from "@/lib/db/feedback";
 import { feedbackStatusEnum } from "@/lib/db/schema";
 import { cn } from "@/lib/cn";
 import { setFeedbackStatusAction } from "./actions";
+import { getBetaAdminStats } from "@/lib/db/beta";
+import { BetaAdmin } from "./BetaAdmin";
 
 export const metadata = { title: "Admin · Shussapp" };
 
@@ -67,6 +69,8 @@ export default async function AdminPage({ searchParams }: Readonly<{ searchParam
   };
   const open = items.filter((f) => f.status !== "done" && f.status !== "declined");
   const showFeedback = view === "feedback";
+  const showBeta = view === "beta";
+  const betaStats = showBeta ? await getBetaAdminStats() : null;
   const shown = statusFilter ? items.filter((f) => f.status === statusFilter) : items;
 
   return (
@@ -80,11 +84,14 @@ export default async function AdminPage({ searchParams }: Readonly<{ searchParam
           <span className="font-heading font-extrabold text-xl tracking-[0.06em]">SHUSSAPP ADMIN</span>
         </div>
         <nav aria-label="Admin" className="flex flex-col gap-1">
-          <SideLink href={q({ view: undefined, status: undefined })} active={!showFeedback}>
+          <SideLink href={q({ view: undefined, status: undefined })} active={!showFeedback && !showBeta}>
             Overview
           </SideLink>
           <SideLink href={q({ view: "feedback" })} active={showFeedback}>
             Feedback & roadmap {open.length > 0 && <span className="ml-auto font-heading font-bold text-gold">{open.length}</span>}
+          </SideLink>
+          <SideLink href={q({ view: "beta", status: undefined })} active={showBeta}>
+            Beta
           </SideLink>
           <SideLink href="/home">Back to the app</SideLink>
         </nav>
@@ -92,8 +99,8 @@ export default async function AdminPage({ searchParams }: Readonly<{ searchParam
 
       <main className="flex-[999_1_640px] min-w-0 flex flex-col gap-5">
         <div className="flex flex-wrap justify-between items-end gap-3">
-          <h1 className="font-display font-extrabold text-5xl leading-none uppercase">{showFeedback ? "Feedback" : "Overview"}</h1>
-          {!showFeedback && (
+          <h1 className="font-display font-extrabold text-5xl leading-none uppercase">{showBeta ? "Beta" : showFeedback ? "Feedback" : "Overview"}</h1>
+          {!showFeedback && !showBeta && (
             <div role="group" aria-label="Period" className="flex gap-1 p-1 rounded-md bg-surface-deep border border-line">
               {(
                 [
@@ -114,7 +121,9 @@ export default async function AdminPage({ searchParams }: Readonly<{ searchParam
           )}
         </div>
 
-        {showFeedback ? (
+        {betaStats ? (
+          <BetaAdmin stats={betaStats} fmt={fmt} />
+        ) : showFeedback ? (
           <section className="flex flex-col gap-3">
             <nav className="flex flex-wrap gap-1.5" aria-label="Filter by status">
               {[undefined, ...feedbackStatusEnum.enumValues].map((s) => (
@@ -134,7 +143,7 @@ export default async function AdminPage({ searchParams }: Readonly<{ searchParam
               {shown.length === 0 && <p className="px-5 py-4 text-sm text-muted">Nothing here.</p>}
               {shown.map((f) => (
                 <div key={f.id} className="px-5 py-3.5 border-b border-cream/6 last:border-b-0 flex flex-wrap gap-3 items-start">
-                  <TypeTag type={f.type} />
+                  <TypeTag type={f.feature ? "beta" : f.type} />
                   <span className="flex-[1_1_320px] min-w-0 flex flex-col gap-0.5">
                     <span className="font-semibold text-[15px] whitespace-pre-wrap">{f.text}</span>
                     <span className="text-[13px] text-muted">
@@ -236,7 +245,7 @@ export default async function AdminPage({ searchParams }: Readonly<{ searchParam
                 {open.length === 0 && <p className="px-5 py-4 text-sm text-muted">Inbox zero.</p>}
                 {open.slice(0, 6).map((f) => (
                   <div key={f.id} className="px-5 py-3.5 border-b border-cream/6 last:border-b-0 flex gap-3 items-start">
-                    <TypeTag type={f.type} />
+                    <TypeTag type={f.feature ? "beta" : f.type} />
                     <span className="flex-1 min-w-0 flex flex-col gap-0.5">
                       <span className="font-semibold text-[15px] line-clamp-2">{f.text}</span>
                       <span className="text-[13px] text-muted">

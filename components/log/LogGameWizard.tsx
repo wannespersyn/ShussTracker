@@ -1,16 +1,21 @@
 "use client";
 
-import Link from "next/link";
-import { useMemo, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { shortNamesFor } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/client";
 import { format } from "@/lib/i18n";
 import { DuoPairingBoard } from "@/components/teams/DuoPairingBoard";
-import { pairIntoDuos, pairIntoSolos, shuffleIntoDuos, toTeamPlayers, type Duo, type RosterPlayer, type TeamPlayer } from "@/lib/teams";
+import { balanceIntoDuos, pairIntoDuos, pairIntoSolos, shuffleIntoDuos, toTeamPlayers, type Duo, type RosterPlayer, type TeamPlayer } from "@/lib/teams";
 import { logGame } from "@/app/(app)/log/actions";
 import { Avatar } from "@/components/v2";
+import { ShotHelp } from "@/components/log/ShotHelp";
+import { TurnLogger } from "@/components/log/TurnLogger";
+import { WhoStarts } from "@/components/beta/WhoStarts";
+import { TeamFingers } from "@/components/beta/TeamFingers";
+import { MamaShot } from "@/components/beta/MamaShot";
+import { TeamDraw } from "@/components/beta/TeamDraw";
 
 type FieldHit = "1" | "2" | "3" | "mama" | "miss";
 type Mat = "2" | "4" | "8";
@@ -18,23 +23,25 @@ type Mat = "2" | "4" | "8";
 type WizardResult = {
   matType: Mat;
   teams: { label: string; playerIds: string[]; finalRank: number }[];
-  shotsByPlayer: { playerId: string; fieldHit: FieldHit }[];
+  shotsByPlayer: { playerId: string; fieldHit: FieldHit; defense?: boolean; ownGoal?: boolean }[];
 };
 
-const ZONES: { hit: FieldHit; label: string }[] = [
-  { hit: "1", label: "1" },
-  { hit: "2", label: "2" },
-  { hit: "3", label: "3" },
-  { hit: "mama", label: "M" },
-  { hit: "miss", label: "✕" },
-];
+/** Tally keys: plain "<hit>" = a player's own cap; "d:<hit>" = another cap
+ * their throw moved into a zone scoring for their team ("d:miss" = knocked
+ * away); "o:<hit>" = moved into a zone scoring for the other team. */
+const isDefKey = (k: string) => k.startsWith("d:") || k.startsWith("o:");
 const needFor = (m: Mat) => (m === "8" ? 8 : m === "2" ? 2 : 4);
 
-/** v2 log flow — two screens instead of five:
- *  1. setup: mat + who's playing + teams (tap two names to swap, shuffle, or Chwazi)
- *  2. result: tap teams in finishing order, count mama hits (or every shot when
- *     shot tracking is on), save.
- * Locked teams (tournament match, rematch) and Chwazi presets start on 2. */
+/** Log flow, one decision per screen:
+ *  1. players: mat + who's playing
+ *  2. teams: tap two names to swap, shuffle, balance by Elo or Chwazi (beta)
+ *  3. start: shot tracking on/off; beta users also pick who starts (cap
+ *     toss, Chwazi) and the 3-2-1
+ *  4. play: turn-by-turn shot logger (only when shot tracking is on)
+ *  5. result: tap teams in finishing order (+ mama counts without tracking), save.
+ * 1v1 skips the teams step. Locked teams (tournament match, rematch) and
+ * presets start on 3. */
+type Step = "players" | "teams" | "start" | "play" | "result";
 export function LogGameWizard({
   groupId,
   roster,
@@ -46,6 +53,7 @@ export function LogGameWizard({
   ratings = {},
   duoRecords = {},
   crewName,
+  beta,
 }: Readonly<{
   groupId?: string;
   roster: RosterPlayer[];
@@ -60,6 +68,8 @@ export function LogGameWizard({
   /** "W–L" per duo, keyed by the two sorted user ids joined with "|". */
   duoRecords?: Record<string, string>;
   crewName?: string;
+  /** Beta features switched on for the logging user (Settings › Beta). */
+  beta?: { start?: boolean; celebrations?: boolean };
 }>) {
   const router = useRouter();
   const { t } = useT();
@@ -78,14 +88,18 @@ export function LogGameWizard({
   const initialTeams = lockedTeams ?? presetTeams;
   const initialCount = initialTeams?.reduce((n, x) => n + x.players.length, 0) ?? 0;
 
-  const [step, setStep] = useState<"setup" | "result">(initialTeams ? "result" : "setup");
+  const [step, setStep] = useState<Step>(initialTeams ? "start" : "players");
+  const [startedWith, setStartedWith] = useState<string | null>(null);
   const [mat, setMat] = useState<Mat>(initialCount === 2 ? "2" : initialCount === 8 ? "8" : "4");
   const [picked, setPicked] = useState<string[]>(initialTeams ? initialTeams.flatMap((x) => x.players.map((p) => p.id)) : []);
   const [teams, setTeams] = useState<Duo[] | null>(initialTeams);
   const [order, setOrder] = useState<string[]>([]);
   const [zones, setZones] = useState(trackShotZones);
-  const [shots, setShots] = useState<Record<string, Partial<Record<FieldHit, number>>>>({});
-  const [history, setHistory] = useState<{ playerId: string; hit: FieldHit }[]>([]);
+  const [shots, setShots] = useState<Record<string, Partial<Record<string, number>>>>({});
+  const [fingers, setFingers] = useState(false);
+  const [draw, setDraw] = useState<{ teams: Duo[]; mode: "random" | "balanced"; k: number } | null>(null);
+  const [mama, setMama] = useState<{ name: string; team: number; k: number } | null>(null);
+  const closeMama = useCallback(() => setMama(null), []);
 
   const need = needFor(mat);
   const tooFew = players.length < need;
@@ -112,12 +126,49 @@ export function LogGameWizard({
   );
   const shownTeams = teams ?? autoTeams;
 
-  function goToResult() {
-    if (!shownTeams) return;
-    setTeams(shownTeams);
-    setOrder([]);
-    setStep("result");
+  /** Shuffle or Elo-balance the picked players; beta users with two teams
+   * get the full-screen draw animation. */
+  function drawTeams(mode: "random" | "balanced") {
+    const next = mode === "balanced" ? balanceIntoDuos(pickedPlayers, ratings) : shuffleIntoDuos(pickedPlayers);
+    setTeams(next);
+    if (beta?.start && next.length === 2) setDraw({ teams: next, mode, k: Date.now() });
   }
+
+  const flow: Step[] = [
+    ...(lockedTeams ? [] : (["players"] as Step[])),
+    ...(lockedTeams || mat === "2" ? [] : (["teams"] as Step[])),
+    "start",
+    ...(zones ? (["play"] as Step[]) : []),
+    "result",
+  ];
+  const stepLabel: Record<Step, string> = {
+    players: t.log.stepPlayers,
+    teams: t.log.stepTeams,
+    start: t.log.stepStart,
+    play: t.log.stepPlay,
+    result: t.log.stepResult,
+  };
+
+  function next() {
+    const to = flow[flow.indexOf(step) + 1];
+    if (!to) return;
+    if (step === "players" || step === "teams") {
+      if (!shownTeams) return;
+      setTeams(shownTeams);
+      setOrder([]);
+    }
+    setStep(to);
+    window.scrollTo({ top: 0 });
+  }
+
+  const onStarted = useCallback(
+    (summary: string) => {
+      setStartedWith(summary);
+      setStep(zones ? "play" : "result");
+      window.scrollTo({ top: 0 });
+    },
+    [zones],
+  );
 
   function tapTeam(id: string) {
     if (!teams) return;
@@ -128,8 +179,14 @@ export function LogGameWizard({
     setOrder((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }
 
-  function bump(playerId: string, hit: FieldHit, delta: number) {
-    if (delta > 0) setHistory((h) => [...h, { playerId, hit }]);
+  /** Beta: the mat's mama animation when someone logs a mama. */
+  function celebrateMama(playerId: string) {
+    if (!beta?.celebrations || !teams) return;
+    const name = shortNames[playerId] ?? players.find((p) => p.id === playerId)?.name ?? "";
+    setMama({ name, team: Math.max(0, teams.findIndex((x) => x.players.some((p) => p.id === playerId))), k: Date.now() });
+  }
+
+  function bump(playerId: string, hit: string, delta: number) {
     setShots((prev) => {
       const cur = prev[playerId] ?? {};
       return { ...prev, [playerId]: { ...cur, [hit]: Math.max(0, (cur[hit] ?? 0) + delta) } };
@@ -148,7 +205,12 @@ export function LogGameWizard({
       finalRank: finalOrder.indexOf(x.id) + 1,
     }));
     const shotsByPlayer = Object.entries(shots).flatMap(([playerId, byHit]) =>
-      Object.entries(byHit).flatMap(([hit, n]) => Array.from({ length: n ?? 0 }, () => ({ playerId, fieldHit: hit as FieldHit }))),
+      Object.entries(byHit).flatMap(([key, n]) => {
+        const defense = isDefKey(key);
+        const ownGoal = key.startsWith("o:");
+        const fieldHit = (defense ? key.slice(2) : key) as FieldHit;
+        return Array.from({ length: n ?? 0 }, () => (defense ? { playerId, fieldHit, defense, ownGoal } : { playerId, fieldHit }));
+      }),
     );
     startTransition(() => {
       if (onComplete) {
@@ -160,14 +222,14 @@ export function LogGameWizard({
   }
 
   function back() {
-    if (step === "result" && !lockedTeams) {
-      setStep("setup");
+    const i = flow.indexOf(step);
+    if (i > 0) {
+      setStep(flow[i - 1]);
       return;
     }
     router.push(backHref);
   }
 
-  const chwaziHref = groupId ? `/chwazi?crewId=${groupId}&count=${need}` : null;
   const winnerTeam = teams?.find((x) => x.id === finalOrder[0]);
 
   return (
@@ -180,26 +242,26 @@ export function LogGameWizard({
           className="w-11 h-11 rounded-pill bg-surface-panel border border-line text-cream flex items-center justify-center"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
-            <path d={step === "result" && !lockedTeams ? "M15 6l-6 6 6 6" : "M6 6l12 12M18 6L6 18"} />
+            <path d={flow.indexOf(step) > 0 ? "M15 6l-6 6 6 6" : "M6 6l12 12M18 6L6 18"} />
           </svg>
         </button>
         <span className="font-heading font-extrabold text-[22px] tracking-[0.08em] uppercase">{t.log.title}</span>
-        {chwaziHref && step === "setup" ? (
-          <Link
-            href={chwaziHref}
-            className="h-11 px-3 rounded-pill bg-surface-panel border border-line text-cream font-body font-semibold text-[13px] flex items-center gap-1.5"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-              <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5" />
-            </svg>
-            Chwazi
-          </Link>
-        ) : (
-          <span className="w-11" />
-        )}
+        <span className="w-11" />
       </header>
 
-      {step === "setup" && (
+      <ol className="flex gap-1.5" aria-label={t.log.title}>
+        {flow.map((f, i) => {
+          const at = flow.indexOf(step);
+          return (
+            <li key={f} aria-current={f === step ? "step" : undefined} className="flex-1 flex flex-col gap-1">
+              <span className={cn("h-1 rounded-pill", i <= at ? "bg-amber" : "bg-chip")} />
+              <span className={cn("font-heading font-bold text-[11px] tracking-[0.08em] uppercase", f === step ? "text-cream" : "text-muted")}>{stepLabel[f]}</span>
+            </li>
+          );
+        })}
+      </ol>
+
+      {step === "players" && (
         <>
           <div role="group" aria-label={t.log.mat} className="grid grid-cols-3 gap-1 p-1 rounded-lg bg-surface-panel border border-line">
             {(["4", "8", "2"] as Mat[]).map((m) => (
@@ -251,58 +313,156 @@ export function LogGameWizard({
             </>
           )}
 
-          {shownTeams && mat !== "2" && (
-            <div className="flex flex-col gap-2">
-              <span className="font-heading font-semibold text-[12px] tracking-[0.14em] uppercase text-muted">{t.log.teams}</span>
-              <DuoPairingBoard players={pickedPlayers} teams={shownTeams} onChange={setTeams} />
+          <button
+            type="button"
+            disabled={!shownTeams}
+            onClick={next}
+            className="mt-auto h-14.5 rounded-lg bg-amber text-ink font-heading font-extrabold text-xl tracking-[0.05em] uppercase disabled:bg-surface-raised disabled:text-muted"
+          >
+            {shownTeams ? (mat === "2" ? t.log.nextStart : t.log.nextTeams) : format(t.log.pickMore, { n: need - picked.length })}
+          </button>
+        </>
+      )}
+
+      {step === "teams" && shownTeams && (
+        <>
+          <div className="flex flex-col gap-2">
+            <span className="font-heading font-semibold text-[12px] tracking-[0.14em] uppercase text-muted">{t.log.teams}</span>
+            <DuoPairingBoard players={pickedPlayers} teams={shownTeams} onChange={setTeams} hideShuffle />
+            <div className={cn("grid gap-2", beta?.start ? "grid-cols-3" : "grid-cols-2")}>
+              <button type="button" onClick={() => drawTeams("random")} className="h-11 rounded-md border border-dashed border-cream/25 font-heading font-bold text-sm tracking-[0.08em] uppercase text-soft">
+                ↻ {t.log.teamShuffle}
+              </button>
+              <button type="button" onClick={() => drawTeams("balanced")} className="h-11 rounded-md border border-dashed border-cream/25 font-heading font-bold text-sm tracking-[0.08em] uppercase text-soft">
+                ⚖ {t.log.teamBalance}
+              </button>
+              {beta?.start && (
+                <button type="button" onClick={() => setFingers(true)} className="h-11 rounded-md flex items-center justify-center gap-1.5 font-heading font-bold text-sm tracking-[0.08em] uppercase" style={{ backgroundColor: "#ffb627", color: "#111" }}>
+                  ✋ Chwazi
+                </button>
+              )}
             </div>
+          </div>
+          {draw && draw.teams.length === 2 && (
+            <TeamDraw
+              key={draw.k}
+              teamA={draw.teams[0].players.map((p) => shortNames[p.id] ?? p.name)}
+              teamB={draw.teams[1].players.map((p) => shortNames[p.id] ?? p.name)}
+              sub={draw.mode === "balanced" ? t.chwazi.balanced : t.chwazi.luck}
+              onAgain={() => drawTeams(draw.mode)}
+              onClose={() => setDraw(null)}
+              doneLabel={t.beta.start.useTeams}
+              onDone={() => setDraw(null)}
+            />
+          )}
+          {fingers && (
+            <TeamFingers
+              players={pickedPlayers.map((p) => ({ id: p.id, name: shortNames[p.id] ?? p.name }))}
+              onClose={() => setFingers(false)}
+              doneLabel={t.beta.start.useTeams}
+              onDone={(ids) => {
+                setTeams(pairIntoDuos(ids.map((id) => pickedPlayers.find((p) => p.id === id)!)));
+                setFingers(false);
+              }}
+            />
           )}
 
           <button
             type="button"
-            disabled={!shownTeams}
-            onClick={goToResult}
-            className="mt-auto h-14.5 rounded-lg bg-amber text-ink font-heading font-extrabold text-xl tracking-[0.05em] uppercase disabled:bg-surface-raised disabled:text-muted"
+            onClick={next}
+            className="mt-auto h-14.5 rounded-lg bg-amber text-ink font-heading font-extrabold text-xl tracking-[0.05em] uppercase"
           >
-            {shownTeams ? t.log.next : format(t.log.pickMore, { n: need - picked.length })}
+            {t.log.nextStart}
+          </button>
+        </>
+      )}
+
+      {mama && <MamaShot key={mama.k} name={mama.name} team={mama.team} onDone={closeMama} />}
+
+      {step === "start" && teams && (
+        <>
+          <div className="flex items-center gap-2.5 rounded-[16px] bg-surface-deep border border-line px-3.5 py-3">
+            {teams.map((team, i) => (
+              <span key={team.id} className="contents">
+                {i > 0 && <span className="font-display font-extrabold text-lg text-muted">VS</span>}
+                <span className={cn("flex-1 min-w-0 font-heading font-bold text-[17px] leading-tight", i > 0 && "text-right")}>
+                  {team.players.map((p) => shortNames[p.id] ?? p.name).join(" & ")}
+                </span>
+              </span>
+            ))}
+          </div>
+          {beta?.start ? (
+            <WhoStarts teams={teams} nameOf={(id, name) => shortNames[id] ?? name} onStarted={onStarted}>
+              <button
+                type="button"
+                onClick={() => setZones((z) => !z)}
+                aria-pressed={zones}
+                className="flex items-center gap-3 min-h-12 px-3.5 py-1 rounded-[14px] bg-surface-deep border border-line text-left text-cream"
+              >
+                <span className="flex-1 flex flex-col">
+                  <span className="font-body font-semibold text-sm">{t.log.trackShots}</span>
+                  <span className="font-body text-xs text-muted">{zones ? t.log.trackOn : t.log.trackOff}</span>
+                </span>
+                <span className={cn("w-12 h-7 rounded-pill p-0.75 flex", zones ? "bg-amber justify-end" : "bg-chip justify-start")}>
+                  <span className={cn("w-5.5 h-5.5 rounded-pill", zones ? "bg-ink" : "bg-muted")} />
+                </span>
+              </button>
+            </WhoStarts>
+          ) : (
+            <>
+            <button
+              type="button"
+              onClick={() => setZones((z) => !z)}
+              aria-pressed={zones}
+              className="flex items-center gap-3 min-h-12 px-3.5 py-1 rounded-[14px] bg-surface-deep border border-line text-left text-cream"
+            >
+              <span className="flex-1 flex flex-col">
+                <span className="font-body font-semibold text-sm">{t.log.trackShots}</span>
+                <span className="font-body text-xs text-muted">{zones ? t.log.trackOn : t.log.trackOff}</span>
+              </span>
+              <span className={cn("w-12 h-7 rounded-pill p-0.75 flex", zones ? "bg-amber justify-end" : "bg-chip justify-start")}>
+                <span className={cn("w-5.5 h-5.5 rounded-pill", zones ? "bg-ink" : "bg-muted")} />
+              </span>
+            </button>
+              <button
+                type="button"
+                onClick={() => onStarted("")}
+                className="mt-auto h-14.5 rounded-lg bg-amber text-ink font-heading font-extrabold text-xl tracking-[0.05em] uppercase"
+              >
+                {zones ? t.beta.start.startGame : t.log.nextResult}
+              </button>
+            </>
+          )}
+        </>
+      )}
+
+      {step === "play" && teams && (
+        <>
+          {startedWith && <div className="font-body text-sm font-semibold text-gold">{startedWith}</div>}
+          <TurnLogger teams={teams} names={Object.fromEntries(teams.flatMap((x) => x.players).map((p) => [p.id, shortNames[p.id] ?? p.name]))} onLog={(id, key) => {
+              bump(id, key, 1);
+              if (key === "mama") celebrateMama(id);
+            }} onUnlog={(id, key) => bump(id, key, -1)} />
+          <ShotHelp />
+          <button
+            type="button"
+            onClick={() => {
+              setStep("result");
+              window.scrollTo({ top: 0 });
+            }}
+            className="mt-auto h-14.5 rounded-lg bg-amber text-ink font-heading font-extrabold text-xl tracking-[0.05em] uppercase"
+          >
+            {t.log.gameDone}
           </button>
         </>
       )}
 
       {step === "result" && teams && (
         <>
-          <button
-            type="button"
-            onClick={() => setZones((z) => !z)}
-            aria-pressed={zones}
-            className="flex items-center gap-3 min-h-12 px-3.5 py-1 rounded-[14px] bg-surface-deep border border-line text-left text-cream"
-          >
-            <span className="flex-1 flex flex-col">
-              <span className="font-body font-semibold text-sm">{t.log.trackShots}</span>
-              <span className="font-body text-xs text-muted">{zones ? t.log.trackOn : t.log.trackOff}</span>
-            </span>
-            <span className={cn("w-12 h-7 rounded-pill p-0.75 flex", zones ? "bg-amber justify-end" : "bg-chip justify-start")}>
-              <span className={cn("w-5.5 h-5.5 rounded-pill", zones ? "bg-ink" : "bg-muted")} />
-            </span>
-          </button>
-
           <div className="flex items-center justify-between gap-2">
             <span className="font-heading font-semibold text-[12px] tracking-[0.14em] uppercase text-muted">
               {teams.length > 2 ? t.log.tapOrder : zones ? t.log.tapWinnerShots : t.log.tapWinnerMama}
             </span>
-            {zones && history.length > 0 && (
-              <button
-                type="button"
-                onClick={() => {
-                  const last = history[history.length - 1];
-                  setHistory((h) => h.slice(0, -1));
-                  setShots((prev) => ({ ...prev, [last.playerId]: { ...prev[last.playerId], [last.hit]: Math.max(0, (prev[last.playerId]?.[last.hit] ?? 1) - 1) } }));
-                }}
-                className="h-8 px-3 rounded-pill bg-surface-panel border border-line font-body font-semibold text-xs text-cream"
-              >
-                ↺ {t.log.undo}
-              </button>
-            )}
           </div>
 
           {teams.map((team) => {
@@ -333,7 +493,8 @@ export function LogGameWizard({
                 </button>
                 {team.players.map((p) => {
                   const s = shots[p.id] ?? {};
-                  const total = ZONES.reduce((n, z) => n + (s[z.hit] ?? 0), 0);
+                  const total = Object.values(s).reduce<number>((n, v) => n + (v ?? 0), 0);
+                  const defs = Object.entries(s).reduce((n, [k, v]) => n + (isDefKey(k) ? (v ?? 0) : 0), 0);
                   return (
                     <div key={p.id} className="flex flex-col gap-1.5 py-2 border-t border-cream/6">
                       <div className="flex items-center gap-2.5">
@@ -342,6 +503,7 @@ export function LogGameWizard({
                         {zones ? (
                           <span className="font-body text-xs text-muted">
                             {total} {t.log.shots}
+                            {defs > 0 && ` · ${format(t.log.defenses, { n: defs })}`}
                           </span>
                         ) : (
                           <span className="flex items-center gap-1.5">
@@ -358,7 +520,10 @@ export function LogGameWizard({
                             </span>
                             <button
                               type="button"
-                              onClick={() => bump(p.id, "mama", 1)}
+                              onClick={() => {
+                                bump(p.id, "mama", 1);
+                                celebrateMama(p.id);
+                              }}
                               aria-label={t.log.mamaMore}
                               className="w-11 h-9 rounded-[10px] border border-red/40 bg-red/13 text-red-pale text-lg font-bold"
                             >
@@ -367,34 +532,6 @@ export function LogGameWizard({
                           </span>
                         )}
                       </div>
-                      {zones && (
-                        <div className="grid grid-cols-5 gap-1">
-                          {ZONES.map((z) => {
-                            const n = s[z.hit] ?? 0;
-                            return (
-                              <button
-                                key={z.hit}
-                                type="button"
-                                onClick={() => bump(p.id, z.hit, 1)}
-                                aria-label={`${z.label} — ${shortNames[p.id] ?? p.name}`}
-                                className={cn(
-                                  "h-11 rounded-sm flex flex-col items-center justify-center leading-none",
-                                  n > 0
-                                    ? z.hit === "mama"
-                                      ? "bg-red text-ink"
-                                      : z.hit === "miss"
-                                        ? "bg-cream/40 text-ink"
-                                        : "bg-cream text-surface"
-                                    : cn("bg-surface-raised border border-line", z.hit === "mama" ? "text-red" : "text-soft"),
-                                )}
-                              >
-                                <span className="font-display font-extrabold text-[15px]">{z.label}</span>
-                                <span className="font-body font-bold text-[11px]">{n}</span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
                     </div>
                   );
                 })}

@@ -10,7 +10,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { BackButton, LinkButton, PrimaryButton } from "@/components/ui";
+import { BackButton, PrimaryButton } from "@/components/ui";
 import { DuoPairingBoard } from "@/components/teams/DuoPairingBoard";
 import { pairIntoDuos, shuffleIntoDuos, toTeamPlayers, type Duo, type RosterPlayer, type TeamPlayer } from "@/lib/teams";
 import { cn } from "@/lib/cn";
@@ -91,7 +91,6 @@ export function TournamentSetup({
   const [format, setFormat] = useState<TournamentFormat>("single_elim");
 
   const canShuffle = selectedIds.length >= 4 && selectedIds.length % 2 === 0;
-  const chwaziHref = `/chwazi?crewId=${groupId}`;
   const formatOptions = useMemo(() => formatOptionsFor(teams?.length ?? 0, T), [teams, T]);
   const selectedFormatOption = formatOptions.find((f) => f.value === format);
   const canStart = Boolean(teams) && teams!.length >= 2 && !selectedFormatOption?.disabledReason;
@@ -165,9 +164,6 @@ export function TournamentSetup({
             <PrimaryButton className="h-16 w-full" size="lg" disabled={!canShuffle} onClick={shuffle}>
               {T.shuffle}
             </PrimaryButton>
-            <LinkButton href={chwaziHref} variant="outline">
-              {T.orChwazi}
-            </LinkButton>
           </div>
         </>
       ) : (

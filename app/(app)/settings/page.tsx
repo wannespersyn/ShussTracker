@@ -14,13 +14,17 @@ import { deleteAccountAction } from "./account-actions";
 import { PushToggle } from "@/components/pwa/PushToggle";
 import { pushPublicKey } from "@/lib/push";
 import { setFlairAction, setLocaleAction, setThemeAction } from "./preferences-actions";
+import { getBetaState } from "@/lib/db/beta";
+import { newBetaCount } from "@/lib/beta";
+import { format } from "@/lib/i18n";
 
 export default async function SettingsPage() {
   const session = await requireSession();
   const userId = session.user.id;
   const name = session.user.name ?? "";
   const email = session.user.email ?? "";
-  const [t, theme, locale, flair, crews] = await Promise.all([getT(), getTheme(), getLocale(), getFlair(), getUserCrews(userId)]);
+  const [t, theme, locale, flair, crews, beta] = await Promise.all([getT(), getTheme(), getLocale(), getFlair(), getUserCrews(userId), getBetaState(userId)]);
+  const betaNew = newBetaCount(beta);
   const crew = crews[0];
   const crewInfo = crew ? await getCrew(crew.id) : null;
   const owns = crew && crew.createdBy === userId;
@@ -40,6 +44,28 @@ export default async function SettingsPage() {
         </Link>
         <h1 className="font-display font-extrabold text-[26px] tracking-[0.04em] uppercase">{t.settings.title}</h1>
       </header>
+
+      <Link href="/settings/beta" className="flex items-center gap-4 px-4 py-4.5 rounded-[18px] bg-amber" style={{ color: "#111" }}>
+        <span className="w-12 h-12 shrink-0 rounded-[14px] bg-ink flex items-center justify-center">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--color-gold)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M9 3h6M10 3v6L4.5 18.5A1.6 1.6 0 0 0 5.9 21h12.2a1.6 1.6 0 0 0 1.4-2.5L14 9V3M7.5 14h9" />
+          </svg>
+        </span>
+        <span className="flex-1 min-w-0 flex flex-col gap-1">
+          <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+            <span className="font-body font-bold text-[17px] leading-tight">{t.beta.title}</span>
+            {betaNew > 0 && (
+              <span className="inline-flex items-center h-5.5 px-2.5 rounded-pill font-heading font-bold text-[11px] leading-none tracking-[0.1em] whitespace-nowrap" style={{ backgroundColor: "#111", color: "#ffb627" }}>
+                {format(t.beta.newCount, { n: betaNew })}
+              </span>
+            )}
+          </span>
+          <span className="font-body text-[13px] leading-snug">{beta.optIn ? t.beta.joinOn : t.beta.settingsRowSub}</span>
+        </span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="shrink-0">
+          <path d="M9 6l6 6-6 6" />
+        </svg>
+      </Link>
 
       <section className="flex flex-col gap-2">
         <Kicker>{t.settings.appearance}</Kicker>

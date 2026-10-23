@@ -19,6 +19,9 @@ import { firstName } from "@/lib/insights";
 import { cn } from "@/lib/cn";
 import { ChartIcon, ChevronRightIcon, SettingsIcon } from "@/components/ui/icons";
 import { Avatar, IconButton, Kicker, Panel, Screen, SectionHead, Sparkline, StatGrid } from "@/components/v2";
+import { hasBeta } from "@/lib/db/beta";
+import { seasonFor } from "@/lib/wrapped";
+import { WrappedBanner } from "@/components/beta/WrappedBanner";
 
 export default async function PlayerProfilePage({ params }: Readonly<{ params: Promise<{ userId: string }> }>) {
   const { userId: viewedId } = await params;
@@ -66,6 +69,8 @@ export default async function PlayerProfilePage({ params }: Readonly<{ params: P
       ).replace("Sept", "Sep")
     : "";
 
+  const showWrapped = isSelf && (await hasBeta(viewerId, "wrapped"));
+
   return (
     <Screen>
       <header className="flex items-center gap-3.5 pt-1">
@@ -97,6 +102,7 @@ export default async function PlayerProfilePage({ params }: Readonly<{ params: P
               { label: t.common.mama, value: me.mama, tone: "red" },
             ]}
           />
+          {showWrapped && <WrappedBanner variant="profile" season={seasonLabel(t)} />}
           {me.bestWinStreak > 0 && (
             <Panel className={cn("flex items-center gap-3.5 px-4 py-3.5 rounded-[18px]", holdsRecord && "border-[#ff7a2f]/60")}>
               <svg viewBox="0 0 24 24" className="w-9 h-9 shrink-0 text-[#ff7a2f]" fill="currentColor" aria-hidden="true">
@@ -223,4 +229,9 @@ export default async function PlayerProfilePage({ params }: Readonly<{ params: P
       )}
     </Screen>
   );
+}
+
+function seasonLabel(t: Awaited<ReturnType<typeof getT>>) {
+  const sz = seasonFor(new Date());
+  return format(sz.half === "autumn" ? t.beta.wrapped.seasonAutumn : t.beta.wrapped.seasonSpring, { year: sz.year });
 }

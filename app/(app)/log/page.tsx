@@ -13,6 +13,7 @@ import { TEAM_COLORS, type Duo } from "@/lib/teams";
 import { initialsFor } from "@/lib/format";
 import { getT } from "@/lib/i18n/server";
 import { format } from "@/lib/i18n";
+import { hasBeta } from "@/lib/db/beta";
 
 export default async function LogGamePage({
   searchParams,
@@ -22,6 +23,8 @@ export default async function LogGamePage({
   const session = await requireSession();
   const t = await getT();
   const { crewId, teams, casual, rematch } = await searchParams;
+  const [start, celebrations] = await Promise.all([hasBeta(session.user.id, "start"), hasBeta(session.user.id, "celebrations")]);
+  const beta = { start, celebrations };
 
   // Rematch — same crew, same teams, fresh game. Self-contained: it skips
   // the crew/night picking below entirely since the original game already
@@ -56,6 +59,7 @@ export default async function LogGamePage({
         backHref={`/game/${rematch}`}
         trackShotZones={rematchGroup?.trackShotZones ?? false}
         crewName={rematchGroup?.name}
+        beta={beta}
       />
     );
   }
@@ -150,6 +154,7 @@ export default async function LogGamePage({
       ratings={ratings}
       duoRecords={duoRecords}
       crewName={group?.name}
+      beta={beta}
     />
   );
 }

@@ -6,13 +6,13 @@ import { invalidateCrew } from "@/lib/cache-tags";
 
 import { redirect } from "next/navigation";
 import { requireUserId, requireGroupMember } from "@/lib/db/authz";
-import { createGameRecord, type FieldHit } from "@/lib/db/games";
+import { createGameRecord, type ShotInput } from "@/lib/db/games";
 
 export type LogGameInput = {
   groupId: string;
   matType: "2" | "4" | "8";
   teams: { label: string; playerIds: string[]; finalRank: number }[];
-  shotsByPlayer: { playerId: string; fieldHit: FieldHit }[];
+  shotsByPlayer: ShotInput[];
 };
 
 export async function logGame(input: LogGameInput) {

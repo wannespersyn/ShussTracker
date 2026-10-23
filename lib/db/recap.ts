@@ -43,7 +43,8 @@ export async function getCrewRecap(groupId: string): Promise<RecapData> {
       const ranked = [...g.teams].sort((a, b) => (a.finalRank ?? 99) - (b.finalRank ?? 99));
       const winner = ranked[0];
       const loser = ranked.at(-1)!;
-      const margin = scoreForPlayers(winner.players) - scoreForPlayers(loser.players);
+      const others = (team: typeof winner) => g.teams.filter((t) => t.id !== team.id).flatMap((t) => t.players);
+      const margin = scoreForPlayers(winner.players, others(winner)) - scoreForPlayers(loser.players, others(loser));
       if (!biggestWin || margin > biggestWin.margin) {
         biggestWin = {
           winnerNames: winner.players.map((p) => p.user.name?.split(" ")[0] ?? "Player").join(" & "),
