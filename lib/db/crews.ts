@@ -63,10 +63,6 @@ export async function renameCrew(groupId: string, name: string) {
   await db.update(groups).set({ name }).where(eq(groups.id, groupId));
 }
 
-export async function setTrackShotZones(groupId: string, trackShotZones: boolean) {
-  await db.update(groups).set({ trackShotZones }).where(eq(groups.id, groupId));
-}
-
 export async function regenerateInviteCode(groupId: string): Promise<string> {
   let inviteCode = generateInviteCode();
   for (let attempt = 0; attempt < 5; attempt++) {

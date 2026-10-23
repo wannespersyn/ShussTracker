@@ -10,8 +10,8 @@ import { DuoPairingBoard } from "@/components/teams/DuoPairingBoard";
 import { balanceIntoDuos, pairIntoDuos, pairIntoSolos, shuffleIntoDuos, toTeamPlayers, type Duo, type RosterPlayer, type TeamPlayer } from "@/lib/teams";
 import { logGame } from "@/app/(app)/log/actions";
 import { Avatar } from "@/components/v2";
-import { ShotHelp } from "@/components/log/ShotHelp";
-import { TurnLogger } from "@/components/log/TurnLogger";
+import { MatLogger } from "@/components/log/MatLogger";
+import { ZONES, type MatGameLog } from "@/lib/mat";
 import { WhoStarts } from "@/components/beta/WhoStarts";
 import { TeamFingers } from "@/components/beta/TeamFingers";
 import { MamaShot } from "@/components/beta/MamaShot";
@@ -23,22 +23,33 @@ type Mat = "2" | "4" | "8";
 type WizardResult = {
   matType: Mat;
   teams: { label: string; playerIds: string[]; finalRank: number }[];
-  shotsByPlayer: { playerId: string; fieldHit: FieldHit; defense?: boolean; ownGoal?: boolean }[];
+  shotsByPlayer: { playerId: string; fieldHit: FieldHit }[];
+  mat?: MatGameLog;
 };
 
-/** Tally keys: plain "<hit>" = a player's own cap; "d:<hit>" = another cap
- * their throw moved into a zone scoring for their team ("d:miss" = knocked
- * away); "o:<hit>" = moved into a zone scoring for the other team. */
-const isDefKey = (k: string) => k.startsWith("d:") || k.startsWith("o:");
+/** Classic `shot` rows from a mat log: one per real throw, at the spot the
+ * thrown cap first landed — so Elo, recaps and zone stats keep working. */
+function shotsFromMat(log: MatGameLog): { playerId: string; fieldHit: FieldHit }[] {
+  return log.rounds.flatMap((r) =>
+    r.throws
+      .filter((t) => t.kind !== "skipped")
+      .map((t) => {
+        const spot = t.moves.find((m) => m.isThrownCap)?.toSpot ?? "miss";
+        const z = ZONES.find((x) => x.id === spot);
+        const fieldHit: FieldHit = z ? (String(z.v) as FieldHit) : spot === "ML" || spot === "MR" ? "mama" : "miss";
+        return { playerId: t.playerId, fieldHit };
+      }),
+  );
+}
 const needFor = (m: Mat) => (m === "8" ? 8 : m === "2" ? 2 : 4);
 
 /** Log flow, one decision per screen:
  *  1. players: mat + who's playing
  *  2. teams: tap two names to swap, shuffle, balance by Elo or Chwazi (beta)
- *  3. start: shot tracking on/off; beta users also pick who starts (cap
- *     toss, Chwazi) and the 3-2-1
- *  4. play: turn-by-turn shot logger (only when shot tracking is on)
- *  5. result: tap teams in finishing order (+ mama counts without tracking), save.
+ *  3. start: beta users pick who starts (cap toss, Chwazi) and the 3-2-1,
+ *     and can switch on the mat logger (beta, 1v1 / 2v2)
+ *  4. play: the full-screen mat logger, which ends the game itself
+ *  5. result: tap teams in finishing order + mama counts, save.
  * 1v1 skips the teams step. Locked teams (tournament match, rematch) and
  * presets start on 3. */
 type Step = "players" | "teams" | "start" | "play" | "result";
@@ -49,7 +60,6 @@ export function LogGameWizard({
   lockedTeams,
   onComplete,
   backHref = "/home",
-  trackShotZones = false,
   ratings = {},
   duoRecords = {},
   crewName,
@@ -61,15 +71,13 @@ export function LogGameWizard({
   lockedTeams?: Duo[];
   onComplete?: (result: WizardResult) => void | Promise<void>;
   backHref?: string;
-  /** Crew default for the "track every shot" toggle. */
-  trackShotZones?: boolean;
   /** Crew Elo by userId, shown on the player chips. */
   ratings?: Record<string, number>;
   /** "W–L" per duo, keyed by the two sorted user ids joined with "|". */
   duoRecords?: Record<string, string>;
   crewName?: string;
   /** Beta features switched on for the logging user (Settings › Beta). */
-  beta?: { start?: boolean; celebrations?: boolean };
+  beta?: { start?: boolean; celebrations?: boolean; mat?: boolean };
 }>) {
   const router = useRouter();
   const { t } = useT();
@@ -89,12 +97,12 @@ export function LogGameWizard({
   const initialCount = initialTeams?.reduce((n, x) => n + x.players.length, 0) ?? 0;
 
   const [step, setStep] = useState<Step>(initialTeams ? "start" : "players");
-  const [startedWith, setStartedWith] = useState<string | null>(null);
+  const [, setStartedWith] = useState<string | null>(null);
   const [mat, setMat] = useState<Mat>(initialCount === 2 ? "2" : initialCount === 8 ? "8" : "4");
   const [picked, setPicked] = useState<string[]>(initialTeams ? initialTeams.flatMap((x) => x.players.map((p) => p.id)) : []);
   const [teams, setTeams] = useState<Duo[] | null>(initialTeams);
   const [order, setOrder] = useState<string[]>([]);
-  const [zones, setZones] = useState(trackShotZones);
+  const [useMat, setUseMat] = useState(Boolean(beta?.mat));
   const [shots, setShots] = useState<Record<string, Partial<Record<string, number>>>>({});
   const [fingers, setFingers] = useState(false);
   const [draw, setDraw] = useState<{ teams: Duo[]; mode: "random" | "balanced"; k: number } | null>(null);
@@ -134,12 +142,14 @@ export function LogGameWizard({
     if (beta?.start && next.length === 2) setDraw({ teams: next, mode, k: Date.now() });
   }
 
+  // The mat logger handles two teams of one or two (no 8-mat yet).
+  const matOk = Boolean(beta?.mat) && mat !== "8";
+  const playMat = matOk && useMat;
   const flow: Step[] = [
     ...(lockedTeams ? [] : (["players"] as Step[])),
     ...(lockedTeams || mat === "2" ? [] : (["teams"] as Step[])),
     "start",
-    ...(zones ? (["play"] as Step[]) : []),
-    "result",
+    ...(playMat ? (["play"] as Step[]) : (["result"] as Step[])),
   ];
   const stepLabel: Record<Step, string> = {
     players: t.log.stepPlayers,
@@ -164,10 +174,10 @@ export function LogGameWizard({
   const onStarted = useCallback(
     (summary: string) => {
       setStartedWith(summary);
-      setStep(zones ? "play" : "result");
+      setStep(playMat ? "play" : "result");
       window.scrollTo({ top: 0 });
     },
-    [zones],
+    [playMat],
   );
 
   function tapTeam(id: string) {
@@ -205,12 +215,7 @@ export function LogGameWizard({
       finalRank: finalOrder.indexOf(x.id) + 1,
     }));
     const shotsByPlayer = Object.entries(shots).flatMap(([playerId, byHit]) =>
-      Object.entries(byHit).flatMap(([key, n]) => {
-        const defense = isDefKey(key);
-        const ownGoal = key.startsWith("o:");
-        const fieldHit = (defense ? key.slice(2) : key) as FieldHit;
-        return Array.from({ length: n ?? 0 }, () => (defense ? { playerId, fieldHit, defense, ownGoal } : { playerId, fieldHit }));
-      }),
+      Array.from({ length: byHit.mama ?? 0 }, () => ({ playerId, fieldHit: "mama" as FieldHit })),
     );
     startTransition(() => {
       if (onComplete) {
@@ -218,6 +223,20 @@ export function LogGameWizard({
         return;
       }
       logGame({ groupId: groupId!, matType: mat, teams: finalTeams, shotsByPlayer });
+    });
+  }
+
+  /** Mat logger finished (a team emptied its pints): that team wins. */
+  function saveMat(log: MatGameLog) {
+    if (!teams) return;
+    const finalTeams = teams.map((x, i) => ({ label: x.label, playerIds: x.players.map((p) => p.id), finalRank: i === log.winnerTeam ? 1 : 2 }));
+    const result = { matType: mat, teams: finalTeams, shotsByPlayer: shotsFromMat(log), mat: log };
+    startTransition(() => {
+      if (onComplete) {
+        onComplete(result);
+        return;
+      }
+      logGame({ groupId: groupId!, ...result });
     });
   }
 
@@ -231,6 +250,23 @@ export function LogGameWizard({
   }
 
   const winnerTeam = teams?.find((x) => x.id === finalOrder[0]);
+
+  const matToggle = matOk ? (
+    <button
+      type="button"
+      onClick={() => setUseMat((v) => !v)}
+      aria-pressed={useMat}
+      className="flex items-center gap-3 min-h-12 px-3.5 py-1 rounded-[14px] bg-surface-deep border border-line text-left text-cream"
+    >
+      <span className="flex-1 flex flex-col">
+        <span className="font-body font-semibold text-sm">{t.mat.useMat}</span>
+        <span className="font-body text-xs text-muted">{t.mat.useMatSub}</span>
+      </span>
+      <span className={cn("w-12 h-7 rounded-pill p-0.75 flex", useMat ? "bg-amber justify-end" : "bg-chip justify-start")}>
+        <span className={cn("w-5.5 h-5.5 rounded-pill", useMat ? "bg-ink" : "bg-muted")} />
+      </span>
+    </button>
+  ) : null;
 
   return (
     <div className="min-h-screen bg-surface flex flex-col gap-3.5 px-5 pt-4.5 pb-6 w-full max-w-xl mx-auto">
@@ -393,43 +429,17 @@ export function LogGameWizard({
           </div>
           {beta?.start ? (
             <WhoStarts teams={teams} nameOf={(id, name) => shortNames[id] ?? name} onStarted={onStarted}>
-              <button
-                type="button"
-                onClick={() => setZones((z) => !z)}
-                aria-pressed={zones}
-                className="flex items-center gap-3 min-h-12 px-3.5 py-1 rounded-[14px] bg-surface-deep border border-line text-left text-cream"
-              >
-                <span className="flex-1 flex flex-col">
-                  <span className="font-body font-semibold text-sm">{t.log.trackShots}</span>
-                  <span className="font-body text-xs text-muted">{zones ? t.log.trackOn : t.log.trackOff}</span>
-                </span>
-                <span className={cn("w-12 h-7 rounded-pill p-0.75 flex", zones ? "bg-amber justify-end" : "bg-chip justify-start")}>
-                  <span className={cn("w-5.5 h-5.5 rounded-pill", zones ? "bg-ink" : "bg-muted")} />
-                </span>
-              </button>
+              {matToggle}
             </WhoStarts>
           ) : (
             <>
-            <button
-              type="button"
-              onClick={() => setZones((z) => !z)}
-              aria-pressed={zones}
-              className="flex items-center gap-3 min-h-12 px-3.5 py-1 rounded-[14px] bg-surface-deep border border-line text-left text-cream"
-            >
-              <span className="flex-1 flex flex-col">
-                <span className="font-body font-semibold text-sm">{t.log.trackShots}</span>
-                <span className="font-body text-xs text-muted">{zones ? t.log.trackOn : t.log.trackOff}</span>
-              </span>
-              <span className={cn("w-12 h-7 rounded-pill p-0.75 flex", zones ? "bg-amber justify-end" : "bg-chip justify-start")}>
-                <span className={cn("w-5.5 h-5.5 rounded-pill", zones ? "bg-ink" : "bg-muted")} />
-              </span>
-            </button>
+            {matToggle}
               <button
                 type="button"
                 onClick={() => onStarted("")}
                 className="mt-auto h-14.5 rounded-lg bg-amber text-ink font-heading font-extrabold text-xl tracking-[0.05em] uppercase"
               >
-                {zones ? t.beta.start.startGame : t.log.nextResult}
+                {playMat ? t.beta.start.startGame : t.log.nextResult}
               </button>
             </>
           )}
@@ -437,31 +447,20 @@ export function LogGameWizard({
       )}
 
       {step === "play" && teams && (
-        <>
-          {startedWith && <div className="font-body text-sm font-semibold text-gold">{startedWith}</div>}
-          <TurnLogger teams={teams} names={Object.fromEntries(teams.flatMap((x) => x.players).map((p) => [p.id, shortNames[p.id] ?? p.name]))} onLog={(id, key) => {
-              bump(id, key, 1);
-              if (key === "mama") celebrateMama(id);
-            }} onUnlog={(id, key) => bump(id, key, -1)} />
-          <ShotHelp />
-          <button
-            type="button"
-            onClick={() => {
-              setStep("result");
-              window.scrollTo({ top: 0 });
-            }}
-            className="mt-auto h-14.5 rounded-lg bg-amber text-ink font-heading font-extrabold text-xl tracking-[0.05em] uppercase"
-          >
-            {t.log.gameDone}
-          </button>
-        </>
+        <MatLogger
+          teams={teams}
+          names={Object.fromEntries(teams.flatMap((x) => x.players).map((p) => [p.id, shortNames[p.id] ?? p.name]))}
+          saving={isPending}
+          onSave={saveMat}
+          onClose={() => setStep("start")}
+        />
       )}
 
       {step === "result" && teams && (
         <>
           <div className="flex items-center justify-between gap-2">
             <span className="font-heading font-semibold text-[12px] tracking-[0.14em] uppercase text-muted">
-              {teams.length > 2 ? t.log.tapOrder : zones ? t.log.tapWinnerShots : t.log.tapWinnerMama}
+              {teams.length > 2 ? t.log.tapOrder : t.log.tapWinnerMama}
             </span>
           </div>
 
@@ -493,19 +492,11 @@ export function LogGameWizard({
                 </button>
                 {team.players.map((p) => {
                   const s = shots[p.id] ?? {};
-                  const total = Object.values(s).reduce<number>((n, v) => n + (v ?? 0), 0);
-                  const defs = Object.entries(s).reduce((n, [k, v]) => n + (isDefKey(k) ? (v ?? 0) : 0), 0);
                   return (
                     <div key={p.id} className="flex flex-col gap-1.5 py-2 border-t border-cream/6">
                       <div className="flex items-center gap-2.5">
                         <Avatar name={p.name} size={28} fontSize={11} />
                         <span className="flex-1 font-body font-medium text-[15px]">{shortNames[p.id] ?? p.name}</span>
-                        {zones ? (
-                          <span className="font-body text-xs text-muted">
-                            {total} {t.log.shots}
-                            {defs > 0 && ` · ${format(t.log.defenses, { n: defs })}`}
-                          </span>
-                        ) : (
                           <span className="flex items-center gap-1.5">
                             <button
                               type="button"
@@ -530,7 +521,6 @@ export function LogGameWizard({
                               +
                             </button>
                           </span>
-                        )}
                       </div>
                     </div>
                   );

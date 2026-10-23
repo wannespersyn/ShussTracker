@@ -628,3 +628,13 @@
     --color-nav-active: #a467ff;
   }
 }
+
+/* Mat logger (beta): a cap lying in a mama flickers red/white with a pulsing ring. */
+@keyframes matFlick {
+  0% { fill: #ff2a36; stroke: #ffffff; }
+  50% { fill: #ffffff; stroke: #ff2a36; }
+}
+@keyframes matRing {
+  0% { opacity: 0.9; transform: scale(0.8); }
+  100% { opacity: 0; transform: scale(1.6); }
+}
