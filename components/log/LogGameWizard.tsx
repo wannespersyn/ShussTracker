@@ -455,6 +455,7 @@ export function LogGameWizard({
           teams={teams}
           names={Object.fromEntries(teams.flatMap((x) => x.players).map((p) => [p.id, shortNames[p.id] ?? p.name]))}
           saving={isPending}
+          celebrate={beta?.celebrations}
           onSave={saveMat}
           onClose={() => setStep("start")}
         />

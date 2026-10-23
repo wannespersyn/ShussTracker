@@ -13,6 +13,7 @@ import { useT } from "@/lib/i18n/client";
 import { format } from "@/lib/i18n";
 import type { Duo } from "@/lib/teams";
 import { BetaPill } from "@/components/beta/BetaUi";
+import { MamaShot } from "@/components/beta/MamaShot";
 import {
   BOTTLES, CORNERS, MAMAS, ZONES,
   dropCap, finishThrow, mamaTeam, newMatState, nextRound, placeA1, spotOf, teamOfSlot, toGameLog, turnInfo, zoneTeam,
@@ -28,12 +29,15 @@ export function MatLogger({
   teams,
   names,
   saving,
+  celebrate,
   onSave,
   onClose,
 }: Readonly<{
   teams: Duo[];
   names: Record<string, string>;
   saving?: boolean;
+  /** Beta celebrations on: play the mama animation when a throw puts a cap in a mama. */
+  celebrate?: boolean;
   onSave: (log: MatGameLog) => void;
   onClose: () => void;
 }>) {
@@ -51,6 +55,7 @@ export function MatLogger({
   });
   const [winner, setWinner] = useState<number | null>(null);
   const [logOpen, setLogOpen] = useState(false);
+  const [mama, setMama] = useState<{ name: string; team: number; k: number } | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const gRef = useRef<SVGGElement>(null);
   const drag = useRef<{ no: number; dx: number; dy: number } | null>(null);
@@ -64,6 +69,17 @@ export function MatLogger({
     if (fn(draft) === false) return;
     if (remember) setHistory((h) => [...h, st]);
     setSt(draft);
+  }
+  /** Commit the throw; if it sent a cap into a mama, play the mama animation (beta celebrations). */
+  function throwDone(miss: boolean) {
+    apply((d) => {
+      const ok = finishThrow(d, miss);
+      const last = d.throws.filter((x) => x.kind !== "skipped").at(-1);
+      if (ok && celebrate && last?.moves.some((m) => m.to.spot === "ML" || m.to.spot === "MR")) {
+        setMama({ name: nameOf(last.slot), team: teamOfSlot(last.slot), k: Date.now() });
+      }
+      return ok;
+    });
   }
   const undo = () => {
     const prev = history.at(-1);
@@ -309,13 +325,13 @@ export function MatLogger({
                 {inf.count[active] >= 1 ? M.bonusHint : placed ? M.movedHint : M.dropHint}
               </span>
               <div className="grid grid-cols-[1fr_2fr] gap-2">
-                <button type="button" onClick={() => apply((d) => finishThrow(d, true))} className="h-12.5 rounded-[14px] bg-surface-raised border border-line-strong font-display font-bold text-[17px] tracking-[0.04em] uppercase">
+                <button type="button" onClick={() => throwDone(true)} className="h-12.5 rounded-[14px] bg-surface-raised border border-line-strong font-display font-bold text-[17px] tracking-[0.04em] uppercase">
                   {M.miss}
                 </button>
                 <button
                   type="button"
                   aria-disabled={!placed}
-                  onClick={() => placed && apply((d) => finishThrow(d, false))}
+                  onClick={() => placed && throwDone(false)}
                   className={cn("h-12.5 rounded-[14px] bg-amber text-ink font-display font-extrabold text-[19px] tracking-[0.06em] uppercase", !placed && "opacity-40")}
                 >
                   {M.done}
@@ -360,6 +376,8 @@ export function MatLogger({
             })}
         </div>
       </div>
+
+      {mama && <MamaShot key={mama.k} name={mama.name} team={mama.team} onDone={() => setMama(null)} />}
 
       {/* sheets */}
       {dialog && (
