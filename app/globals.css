@@ -492,7 +492,7 @@
 
 /* "On fire" flair (mockup "Home — on a streak"): while the home screen
  * shows a 3+ win streak, the whole dark theme heats up to orange — nav
- * included — with a 3px orange frame around the viewport. */
+ * included. (No viewport frame: dropped after feedback, too loud.) */
 :root[data-theme="dark"]:has(.on-fire) {
   --color-gold: #ff7a2f;
   --color-gold-hover: #ffa16b;
@@ -508,14 +508,6 @@
   --color-line: rgba(255, 122, 47, 0.27);
   --color-line-strong: rgba(255, 122, 47, 0.4);
   --color-nav-active: #ff7a2f;
-}
-:root[data-theme="dark"] body:has(.on-fire)::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  box-shadow: inset 0 0 0 3px #ff7a2f;
-  pointer-events: none;
-  z-index: 60;
 }
 @media (prefers-color-scheme: dark) {
   :root[data-theme="system"]:has(.on-fire) {
@@ -533,13 +525,5 @@
     --color-line: rgba(255, 122, 47, 0.27);
     --color-line-strong: rgba(255, 122, 47, 0.4);
     --color-nav-active: #ff7a2f;
-  }
-  :root[data-theme="system"] body:has(.on-fire)::after {
-    content: "";
-    position: fixed;
-    inset: 0;
-    box-shadow: inset 0 0 0 3px #ff7a2f;
-    pointer-events: none;
-    z-index: 60;
   }
 }

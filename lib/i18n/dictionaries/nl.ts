@@ -80,6 +80,12 @@ export const nl: Dictionary = {
     claimMessage: "Hey {name}! Je Shussapp-games in {crew} wachten op je. Log in en claim ze hier: {url} (code {code})",
     noDuos: "Nog geen duo's — die verschijnen vanzelf zodra twee mensen samen spelen.",
     minGames: "Duo's met {n}+ games",
+    guestAdded: "{name} zit in de crew",
+    guestAddedSub: "Stuur de link door, dan kan die z'n games claimen na het aanmelden.",
+    addAnother: "Nog iemand",
+    done: "Klaar",
+    copyLink: "Kopieer",
+    adding: "Toevoegen…",
   },
   duo: {
     title: "Duo's",

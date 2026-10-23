@@ -18,7 +18,8 @@ import { cn } from "@/lib/cn";
 import { wilsonLowerBound } from "@/lib/ranking";
 import { isPro } from "@/lib/plan";
 import { ConfirmForm } from "@/components/ui";
-import { ChevronRightIcon, PlusIcon, SettingsIcon, TrophyIcon } from "@/components/ui/icons";
+import { AddGuestDialog } from "@/components/crews/AddGuestDialog";
+import { ChevronRightIcon, SettingsIcon, TrophyIcon } from "@/components/ui/icons";
 import { Chip, FormDots, IconButton, Kicker, MoveChip, Screen, SegmentLinks, TextTabs } from "@/components/v2";
 
 const GRID = "grid grid-cols-[28px_minmax(0,1fr)_56px_46px_54px] gap-1.5 items-center";
@@ -94,13 +95,7 @@ export default async function CrewPage({
             {format(t.crew.meta, { p: ranked.length, g: insights.totalGames })}
             {since && ` · ${format(t.crew.since, { d: since })}`}
           </span>
-          <a
-            href="#guests"
-            className="shrink-0 h-9 px-3 rounded-pill border border-dashed border-cream/25 text-cream font-body font-semibold text-[13px] flex items-center gap-1.5"
-          >
-            <PlusIcon className="w-3.5 h-3.5" />
-            {t.crew.addGuest}
-          </a>
+          <AddGuestDialog crewId={crewId} crewName={group.name} />
         </div>
       </header>
 
@@ -156,7 +151,7 @@ export default async function CrewPage({
       </Link>
 
       <section id="guests" className="flex flex-col gap-2 scroll-mt-4" aria-label={t.common.guest}>
-        <Kicker>{t.crew.addGuest}</Kicker>
+        <Kicker>{t.common.guest}</Kicker>
         {guests.map((g) => (
           <div key={g.id} className="flex items-center gap-3 rounded-md bg-surface-deep border border-line px-3.5 py-2.5">
             <div className="flex-1 min-w-0">
@@ -186,19 +181,6 @@ export default async function CrewPage({
             )}
           </div>
         ))}
-        <form action={addGuestAction.bind(null, crewId)} className="flex gap-2">
-          <input
-            type="text"
-            name="name"
-            required
-            placeholder={t.more.guestName}
-            aria-label={t.more.guestName}
-            className="flex-1 h-11 rounded-md bg-surface-panel border border-line px-3.5 font-body text-sm text-cream placeholder:text-muted outline-none focus:border-gold/60"
-          />
-          <button type="submit" className="h-11 px-4 rounded-md bg-amber font-heading font-bold text-sm uppercase text-ink">
-            {t.crew.addGuest}
-          </button>
-        </form>
       </section>
 
       <div className="flex items-center justify-center gap-5 pt-1">

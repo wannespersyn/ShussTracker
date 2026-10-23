@@ -81,6 +81,12 @@ export const en = {
     claimMessage: "Hey {name}! Your Shussapp games in {crew} are waiting. Sign in and claim them here: {url} (code {code})",
     noDuos: "No duos yet — duos appear automatically once two people win or lose together.",
     minGames: "Duos with {n}+ games",
+    guestAdded: "{name} is in the crew",
+    guestAddedSub: "Send them the link so they can claim their games once they sign up.",
+    addAnother: "Add another",
+    done: "Done",
+    copyLink: "Copy",
+    adding: "Adding…",
   },
   duo: {
     title: "Duos",

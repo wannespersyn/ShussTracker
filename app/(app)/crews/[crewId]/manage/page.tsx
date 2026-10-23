@@ -15,6 +15,7 @@ import { cn } from "@/lib/cn";
 import { AutoSubmitToggle, ConfirmForm } from "@/components/ui";
 import { Avatar, Kicker, Screen } from "@/components/v2";
 import { ShareButton } from "@/components/game/ShareButton";
+import { AddGuestDialog } from "@/components/crews/AddGuestDialog";
 import { renameCrewAction, regenerateInviteCodeAction, removeCrewMemberAction, deleteCrewAction, setTrackShotZonesAction } from "./actions";
 
 export default async function ManageCrewPage({ params }: Readonly<{ params: Promise<{ crewId: string }> }>) {
@@ -137,12 +138,7 @@ export default async function ManageCrewPage({ params }: Readonly<{ params: Prom
       <section aria-label={t.manage.members} className="flex flex-col gap-1.5">
         <div className="flex justify-between items-center">
           <Kicker>{format(guestCount ? t.manage.membersGuests : t.manage.membersN, { n: members.length - guestCount, g: guestCount })}</Kicker>
-          <Link
-            href={`/crews/${crewId}#guests`}
-            className="h-9 px-3 rounded-pill border border-dashed border-cream/25 text-cream font-body font-semibold text-[13px] flex items-center"
-          >
-            + {t.crew.addGuest}
-          </Link>
+          <AddGuestDialog crewId={crewId} crewName={group.name} />
         </div>
         {sorted.map((m) => {
           const isOwner = m.userId === group.createdBy;
