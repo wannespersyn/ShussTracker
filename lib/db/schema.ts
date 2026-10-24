@@ -223,6 +223,8 @@ export const gameRounds = pgTable("game_round", {
   // A team played its (one per game) joker on this round: nobody drinks, mama included.
   // The per-team sips/mama rows keep what *would* have been drunk.
   jokerTeamId: uuid("joker_team_id").references(() => gameTeams.id, { onDelete: "set null" }),
+  // Third round in a row with nothing to drink: everyone ad fundum.
+  allDrink: boolean("all_drink").notNull().default(false),
 });
 
 /** Drinking result of a round per team: sips from caps lying in that team's

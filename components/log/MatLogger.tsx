@@ -115,7 +115,12 @@ export function MatLogger({
   /* ---------- totals ---------- */
   const totals = useMemo(() => {
     const tot = [{ sips: 0, af: 0 }, { sips: 0, af: 0 }];
-    for (const raw of st.results) { const r = drunk(raw); r.sips.forEach((n, ti) => (tot[ti].sips += n)); for (const ti of r.mamaTeams) tot[ti].af++; }
+    for (const raw of st.results) {
+      const r = drunk(raw);
+      r.sips.forEach((n, ti) => (tot[ti].sips += n));
+      for (const ti of r.mamaTeams) tot[ti].af++;
+      if (r.allDrink) { tot[0].af++; tot[1].af++; }
+    }
     return tot;
   }, [st.results]);
 
@@ -339,6 +344,11 @@ export function MatLogger({
                   {lastResult.mamaTeams.map((ti) => <span key={ti} className="font-body font-bold text-base text-red-pale">{format(M.mamaLine, { team: teamName(ti) })}</span>)}
                   <span className="font-body text-xs text-muted">{M.mamaNoSips}</span>
                 </>
+              ) : lastResult.allDrink ? (
+                <>
+                  <span className="font-body font-bold text-base text-red-pale">{format(M.allDrink, { n: lastResult.emptyStreak })}</span>
+                  <span className="font-body text-xs text-muted">{M.allDrinkSub}</span>
+                </>
               ) : (
                 [0, 1].map((ti) => (
                   <div key={ti} className="flex items-center gap-2 font-body text-base">
@@ -349,6 +359,9 @@ export function MatLogger({
                 ))
               )}
               </div>
+              {!lastResult.allDrink && lastResult.emptyStreak > 0 && lastResult.jokerTeam === null && (
+                <span className="font-body text-xs text-gold">{format(M.emptyStreak, { n: lastResult.emptyStreak, left: 3 - lastResult.emptyStreak })}</span>
+              )}
               {lastResult.jokerTeam !== null ? (
                 <span className="font-body font-bold text-base text-gold">{format(M.jokerUsed, { team: teamName(lastResult.jokerTeam) })}</span>
               ) : (

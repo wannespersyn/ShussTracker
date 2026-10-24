@@ -55,8 +55,11 @@ export type Spot =
 
 export type MoveRec = { capNo: number; owner: Slot; isThrownCap: boolean; from: { x: number; y: number; spot: string }; to: { x: number; y: number; spot: string; countsFor: number | null } };
 export type ThrowRec = { round: number; slot: Slot; kind: "normal" | "bonus" | "skipped"; skipReason: "cap_knocked" | "box_empty" | null; capNo: number | null; box: Slot | null; firstSpot: string | null; missed: boolean; moves: MoveRec[] };
-/** `jokerTeam`: a team played its joker on this round, so nobody drinks (mama included). */
-export type RoundResult = { round: number; sips: number[]; mamaTeams: number[]; jokerTeam: number | null };
+/** `jokerTeam`: a team played its joker on this round, so nobody drinks (mama included).
+ * `allDrink`: third round in a row with nothing to drink, so everyone drinks ad fundum.
+ * `emptyStreak`: how many nothing-rounds in a row up to and including this one. */
+export type RoundResult = { round: number; sips: number[]; mamaTeams: number[]; jokerTeam: number | null; allDrink: boolean; emptyStreak: number };
+export const EMPTY_ROUNDS_FOR_ALL = 3;
 
 export type MatState = {
   solo: boolean;
@@ -182,11 +185,16 @@ export function settle(st: MatState): RoundResult {
     if (s.kind === "mama") mamas.add(mamaTeam(st, s.id));
     if (s.kind === "zone") sips[zoneTeam(st, s.id)] += s.v;
   }
-  return mamas.size ? { round: st.round, sips: [0, 0], mamaTeams: [...mamas].sort(), jokerTeam: null } : { round: st.round, sips, mamaTeams: [], jokerTeam: null };
+  if (mamas.size) return { round: st.round, sips: [0, 0], mamaTeams: [...mamas].sort(), jokerTeam: null, allDrink: false, emptyStreak: 0 };
+  // Nothing to drink this round: count the streak (a joker round or an all-drink round breaks it).
+  const empty = sips[0] === 0 && sips[1] === 0;
+  const prev = st.results.filter((r) => r.round < st.round).at(-1);
+  const emptyStreak = empty ? (prev && prev.jokerTeam === null && !prev.allDrink ? prev.emptyStreak : 0) + 1 : 0;
+  return { round: st.round, sips, mamaTeams: [], jokerTeam: null, allDrink: emptyStreak >= EMPTY_ROUNDS_FOR_ALL, emptyStreak };
 }
 
 /** What actually gets drunk: nothing when a joker was played. */
-export const drunk = (r: RoundResult): RoundResult => (r.jokerTeam === null ? r : { ...r, sips: [0, 0], mamaTeams: [] });
+export const drunk = (r: RoundResult): RoundResult => (r.jokerTeam === null ? r : { ...r, sips: [0, 0], mamaTeams: [], allDrink: false });
 
 /** Play a team's joker on the round that just finished. False if not allowed. */
 export function playJoker(st: MatState, ti: number): boolean {
@@ -272,7 +280,7 @@ export function dropCap(st: MatState, no: number) {
 
 export type MatMoveLog = { capNo: number; ownerId: string; isThrownCap: boolean; fromX: number; fromY: number; fromSpot: string; toX: number; toY: number; toSpot: string; toCountsForTeam: number | null };
 export type MatThrowLog = { seq: number; playerId: string; slot: Slot; kind: ThrowRec["kind"]; skipReason: ThrowRec["skipReason"]; capNo: number | null; moves: MatMoveLog[] };
-export type MatRoundLog = { number: number; complete: boolean; jokerTeam: number | null; teams: { sips: number; mama: boolean }[]; throws: MatThrowLog[] };
+export type MatRoundLog = { number: number; complete: boolean; jokerTeam: number | null; allDrink: boolean; teams: { sips: number; mama: boolean }[]; throws: MatThrowLog[] };
 export type MatGameLog = { a1Corner: Corner; endedBy: "pints_empty"; winnerTeam: number; rounds: MatRoundLog[] };
 
 /** Field hit for the classic `shot` row of a throw (first landing of the thrown cap). */
@@ -295,6 +303,7 @@ export function toGameLog(st: MatState, players: Record<Slot, string | undefined
       number: r,
       complete: Boolean(st.results.find((x) => x.round === r)),
       jokerTeam: res?.jokerTeam ?? null,
+      allDrink: res?.allDrink ?? false,
       teams: [0, 1].map((ti) => ({ sips: res?.sips[ti] ?? 0, mama: res?.mamaTeams.includes(ti) ?? false })),
       throws: throws.map((t, i) => ({
         seq: i + 1,

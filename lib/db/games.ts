@@ -123,7 +123,7 @@ function matRows(log: MatGameLog, teamIds: string[], gtp: Map<string, string>, g
   const moves: (typeof capMoves.$inferInsert)[] = [];
   for (const r of log.rounds) {
     const roundId = randomUUID();
-    rounds.push({ id: roundId, gameId, number: r.number, complete: r.complete, jokerTeamId: team(r.jokerTeam) });
+    rounds.push({ id: roundId, gameId, number: r.number, complete: r.complete, jokerTeamId: team(r.jokerTeam), allDrink: r.allDrink });
     r.teams.forEach((x, i) => teamIds[i] && roundTeams.push({ roundId, gameTeamId: teamIds[i], sips: x.sips, mama: x.mama }));
     for (const t of r.throws) {
       const throwId = randomUUID();
