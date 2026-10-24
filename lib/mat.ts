@@ -55,7 +55,8 @@ export type Spot =
 
 export type MoveRec = { capNo: number; owner: Slot; isThrownCap: boolean; from: { x: number; y: number; spot: string }; to: { x: number; y: number; spot: string; countsFor: number | null } };
 export type ThrowRec = { round: number; slot: Slot; kind: "normal" | "bonus" | "skipped"; skipReason: "cap_knocked" | "box_empty" | null; capNo: number | null; box: Slot | null; firstSpot: string | null; missed: boolean; moves: MoveRec[] };
-export type RoundResult = { round: number; sips: number[]; mamaTeams: number[] };
+/** `jokerTeam`: a team played its joker on this round, so nobody drinks (mama included). */
+export type RoundResult = { round: number; sips: number[]; mamaTeams: number[]; jokerTeam: number | null };
 
 export type MatState = {
   solo: boolean;
@@ -70,6 +71,8 @@ export type MatState = {
   activeCap: number | null;
   turnStart: { no: number; x: number; y: number; waiting: boolean }[];
   nextCap: number;
+  /** Teams that already played their joker (one per team per game). */
+  jokersUsed: number[];
 };
 
 export const teamOfSlot = (s: Slot) => (s[0] === "a" ? 0 : 1);
@@ -115,6 +118,7 @@ export function newMatState(solo: boolean, a1: Corner = "TR"): MatState {
     activeCap: null,
     turnStart: [],
     nextCap: 1,
+    jokersUsed: [],
   };
   spawnRound(st);
   startTurn(st);
@@ -178,7 +182,32 @@ export function settle(st: MatState): RoundResult {
     if (s.kind === "mama") mamas.add(mamaTeam(st, s.id));
     if (s.kind === "zone") sips[zoneTeam(st, s.id)] += s.v;
   }
-  return mamas.size ? { round: st.round, sips: [0, 0], mamaTeams: [...mamas].sort() } : { round: st.round, sips, mamaTeams: [] };
+  return mamas.size ? { round: st.round, sips: [0, 0], mamaTeams: [...mamas].sort(), jokerTeam: null } : { round: st.round, sips, mamaTeams: [], jokerTeam: null };
+}
+
+/** What actually gets drunk: nothing when a joker was played. */
+export const drunk = (r: RoundResult): RoundResult => (r.jokerTeam === null ? r : { ...r, sips: [0, 0], mamaTeams: [] });
+
+/** Play a team's joker on the round that just finished. False if not allowed. */
+export function playJoker(st: MatState, ti: number): boolean {
+  const r = st.results.at(-1);
+  if (st.phase !== "done" || !r || r.round !== st.round || r.jokerTeam !== null || st.jokersUsed.includes(ti)) return false;
+  r.jokerTeam = ti;
+  st.jokersUsed.push(ti);
+  return true;
+}
+
+/** Throws whose cap first landed in a mama but was shot out of it later that round: those
+ * don't count as a mama in the stats ("mama weggeschoten"). Returns their indexes. */
+export function knockedMamas(throws: { round: number; capNo: number | null; firstSpot: string | null; moves: { capNo: number; isThrownCap: boolean; from: { spot: string }; to: { spot: string } }[] }[]): Set<number> {
+  const isMama = (s: string | null) => s === "ML" || s === "MR";
+  const out = new Set<number>();
+  throws.forEach((t, i) => {
+    if (!isMama(t.firstSpot) || t.capNo === null) return;
+    const later = throws.slice(i + 1).filter((x) => x.round === t.round);
+    if (later.some((x) => x.moves.some((m) => m.capNo === t.capNo && !m.isThrownCap && isMama(m.from.spot) && !isMama(m.to.spot)))) out.add(i);
+  });
+  return out;
 }
 
 /** Commit the current throw. Returns false when the thrown cap wasn't placed yet. */
@@ -243,11 +272,11 @@ export function dropCap(st: MatState, no: number) {
 
 export type MatMoveLog = { capNo: number; ownerId: string; isThrownCap: boolean; fromX: number; fromY: number; fromSpot: string; toX: number; toY: number; toSpot: string; toCountsForTeam: number | null };
 export type MatThrowLog = { seq: number; playerId: string; slot: Slot; kind: ThrowRec["kind"]; skipReason: ThrowRec["skipReason"]; capNo: number | null; moves: MatMoveLog[] };
-export type MatRoundLog = { number: number; complete: boolean; teams: { sips: number; mama: boolean }[]; throws: MatThrowLog[] };
+export type MatRoundLog = { number: number; complete: boolean; jokerTeam: number | null; teams: { sips: number; mama: boolean }[]; throws: MatThrowLog[] };
 export type MatGameLog = { a1Corner: Corner; endedBy: "pints_empty"; winnerTeam: number; rounds: MatRoundLog[] };
 
 /** Field hit for the classic `shot` row of a throw (first landing of the thrown cap). */
-export function fieldHitOf(t: ThrowRec): "1" | "2" | "3" | "mama" | "miss" | null {
+export function fieldHitOf(t: ThrowRec): "1" | "2" | "3" | "mama" | "mama_out" | "miss" | null {
   if (t.kind === "skipped" || !t.firstSpot) return null;
   const z = ZONES.find((x) => x.id === t.firstSpot);
   if (z) return String(z.v) as "1" | "2" | "3";
@@ -265,6 +294,7 @@ export function toGameLog(st: MatState, players: Record<Slot, string | undefined
     rounds.push({
       number: r,
       complete: Boolean(st.results.find((x) => x.round === r)),
+      jokerTeam: res?.jokerTeam ?? null,
       teams: [0, 1].map((ti) => ({ sips: res?.sips[ti] ?? 0, mama: res?.mamaTeams.includes(ti) ?? false })),
       throws: throws.map((t, i) => ({
         seq: i + 1,

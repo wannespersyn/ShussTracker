@@ -12,13 +12,13 @@ import { logGame } from "@/app/(app)/log/actions";
 import { Avatar } from "@/components/v2";
 import { MatLogger } from "@/components/log/MatLogger";
 import { BetaPill } from "@/components/beta/BetaUi";
-import { ZONES, type MatGameLog } from "@/lib/mat";
+import { ZONES, knockedMamas, type MatGameLog } from "@/lib/mat";
 import { WhoStarts } from "@/components/beta/WhoStarts";
 import { TeamFingers } from "@/components/beta/TeamFingers";
 import { MamaShot } from "@/components/beta/MamaShot";
 import { TeamDraw } from "@/components/beta/TeamDraw";
 
-type FieldHit = "1" | "2" | "3" | "mama" | "miss";
+type FieldHit = "1" | "2" | "3" | "mama" | "mama_out" | "miss";
 type Mat = "2" | "4" | "8";
 
 type WizardResult = {
@@ -29,18 +29,27 @@ type WizardResult = {
 };
 
 /** Classic `shot` rows from a mat log: one per real throw, at the spot the
- * thrown cap first landed — so Elo, recaps and zone stats keep working. */
+ * thrown cap first landed — so Elo, recaps and zone stats keep working. A mama
+ * that got shot out of the mama later that round is stored as "mama_out". */
 function shotsFromMat(log: MatGameLog): { playerId: string; fieldHit: FieldHit }[] {
-  return log.rounds.flatMap((r) =>
-    r.throws
-      .filter((t) => t.kind !== "skipped")
-      .map((t) => {
-        const spot = t.moves.find((m) => m.isThrownCap)?.toSpot ?? "miss";
-        const z = ZONES.find((x) => x.id === spot);
-        const fieldHit: FieldHit = z ? (String(z.v) as FieldHit) : spot === "ML" || spot === "MR" ? "mama" : "miss";
-        return { playerId: t.playerId, fieldHit };
-      }),
+  const all = log.rounds.flatMap((r) =>
+    r.throws.map((t) => ({
+      round: r.number,
+      capNo: t.capNo,
+      playerId: t.playerId,
+      skipped: t.kind === "skipped",
+      firstSpot: t.moves.find((m) => m.isThrownCap)?.toSpot ?? null,
+      moves: t.moves.map((m) => ({ capNo: m.capNo, isThrownCap: m.isThrownCap, from: { spot: m.fromSpot }, to: { spot: m.toSpot } })),
+    })),
   );
+  const knocked = knockedMamas(all);
+  return all.flatMap((t, i) => {
+    if (t.skipped) return [];
+    const spot = t.firstSpot ?? "miss";
+    const z = ZONES.find((x) => x.id === spot);
+    const fieldHit: FieldHit = z ? (String(z.v) as FieldHit) : spot === "ML" || spot === "MR" ? (knocked.has(i) ? "mama_out" : "mama") : "miss";
+    return [{ playerId: t.playerId, fieldHit }];
+  });
 }
 const needFor = (m: Mat) => (m === "8" ? 8 : m === "2" ? 2 : 4);
 

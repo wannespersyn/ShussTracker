@@ -102,6 +102,8 @@ export const fieldHitEnum = pgEnum("field_hit", [
   "3",
   "mama",
   "miss",
+  // Landed in a mama but shot out of it later that round: not counted as a mama.
+  "mama_out",
 ]);
 
 export const crewPlanEnum = pgEnum("crew_plan", ["free", "founding", "pro"]);
@@ -218,6 +220,9 @@ export const gameRounds = pgTable("game_round", {
   number: integer("number").notNull(),
   // False for the round that was still going when a team emptied its pints.
   complete: boolean("complete").notNull().default(true),
+  // A team played its (one per game) joker on this round: nobody drinks, mama included.
+  // The per-team sips/mama rows keep what *would* have been drunk.
+  jokerTeamId: uuid("joker_team_id").references(() => gameTeams.id, { onDelete: "set null" }),
 });
 
 /** Drinking result of a round per team: sips from caps lying in that team's

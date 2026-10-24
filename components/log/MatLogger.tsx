@@ -16,7 +16,7 @@ import { BetaPill } from "@/components/beta/BetaUi";
 import { MamaShot } from "@/components/beta/MamaShot";
 import {
   BOTTLES, CORNERS, MAMAS, ZONES,
-  dropCap, finishThrow, mamaTeam, newMatState, nextRound, placeA1, spotOf, teamOfSlot, toGameLog, turnInfo, zoneTeam,
+  dropCap, drunk, finishThrow, knockedMamas, mamaTeam, playJoker, newMatState, nextRound, placeA1, spotOf, teamOfSlot, toGameLog, turnInfo, zoneTeam,
   type Corner, type MatGameLog, type MatState, type Slot, type Spot,
 } from "@/lib/mat";
 
@@ -58,7 +58,10 @@ export function MatLogger({
   const [mama, setMama] = useState<{ name: string; team: number; k: number } | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const gRef = useRef<SVGGElement>(null);
-  const drag = useRef<{ no: number; dx: number; dy: number } | null>(null);
+  // Pointer press on the mat: a cap (tap = select it, drag = move it) or the mat itself (tap = place).
+  const press = useRef<{ no: number | null; sx: number; sy: number; dx: number; dy: number; moved: boolean } | null>(null);
+  /** Cap a tap on the mat will move; null = the thrower's own cap. */
+  const [selected, setSelected] = useState<number | null>(null);
 
   const nameOf = (s: Slot) => names[slots[s] ?? ""] ?? s.toUpperCase();
   const teamName = (ti: number) => (ti === 0 ? ["a1", "a2"] : ["b1", "b2"]).filter((s) => slots[s as Slot]).map((s) => nameOf(s as Slot)).join(" & ");
@@ -112,36 +115,64 @@ export function MatLogger({
   /* ---------- totals ---------- */
   const totals = useMemo(() => {
     const tot = [{ sips: 0, af: 0 }, { sips: 0, af: 0 }];
-    for (const r of st.results) { r.sips.forEach((n, ti) => (tot[ti].sips += n)); for (const ti of r.mamaTeams) tot[ti].af++; }
+    for (const raw of st.results) { const r = drunk(raw); r.sips.forEach((n, ti) => (tot[ti].sips += n)); for (const ti of r.mamaTeams) tot[ti].af++; }
     return tot;
   }, [st.results]);
 
-  /* ---------- dragging ---------- */
+  /* ---------- tap or drag ---------- */
   function toLocal(e: React.PointerEvent) {
     const pt = svgRef.current!.createSVGPoint();
     pt.x = e.clientX; pt.y = e.clientY;
     return pt.matrixTransform(gRef.current!.getScreenCTM()!.inverse());
   }
-  function onCapDown(e: React.PointerEvent, no: number) {
+  function onDown(e: React.PointerEvent) {
     if (st.phase !== "throw") return;
-    const c = st.caps.find((x) => x.no === no)!;
+    const capEl = (e.target as Element).closest<SVGGElement>("[data-cap]");
     const p = toLocal(e);
-    drag.current = { no, dx: c.x - p.x, dy: c.y - p.y };
+    const c = capEl ? st.caps.find((x) => x.no === Number(capEl.dataset.cap)) : undefined;
+    press.current = { no: c?.no ?? null, sx: e.clientX, sy: e.clientY, dx: c ? c.x - p.x : 0, dy: c ? c.y - p.y : 0, moved: false };
     svgRef.current!.setPointerCapture(e.pointerId);
-    setHistory((h) => [...h, st]);
     e.preventDefault();
   }
   function onMove(e: React.PointerEvent) {
-    const d = drag.current;
-    if (!d) return;
+    const d = press.current;
+    if (!d || d.no === null) return;
+    if (!d.moved) {
+      if (Math.hypot(e.clientX - d.sx, e.clientY - d.sy) < 6) return;
+      d.moved = true;
+      setHistory((h) => [...h, st]);
+    }
     const p = toLocal(e);
     setSt((cur) => ({ ...cur, caps: cur.caps.map((c) => (c.no === d.no ? { ...c, x: Math.round(p.x + d.dx), y: Math.round(p.y + d.dy), waiting: false } : c)) }));
   }
-  function onUp() {
-    const d = drag.current;
+  function onUp(e: React.PointerEvent) {
+    const d = press.current;
     if (!d) return;
-    drag.current = null;
-    setSt((cur) => { const draft = structuredClone(cur); dropCap(draft, d.no); return draft; });
+    press.current = null;
+    if (d.no !== null && d.moved) {
+      // Dragged: settle it (snaps home near its start, off a bottle).
+      const no = d.no;
+      setSt((cur) => { const draft = structuredClone(cur); dropCap(draft, no); return draft; });
+      setSelected(null);
+      return;
+    }
+    if (d.no !== null) {
+      // Tapped a cap: pick it as the one to move next (tap it again, or the thrower's cap, to go back).
+      const no = d.no;
+      setSelected((cur) => (no === st.activeCap || cur === no ? null : no));
+      return;
+    }
+    // Tapped the mat: the selected cap (or the thrower's) goes there.
+    const target = selected ?? st.activeCap;
+    if (target === null) return;
+    const p = toLocal(e);
+    apply((dr) => {
+      const c = dr.caps.find((x) => x.no === target);
+      if (!c) return false;
+      Object.assign(c, { x: Math.round(p.x), y: Math.round(p.y), waiting: false });
+      dropCap(dr, target);
+    });
+    setSelected(null);
   }
 
   /* ---------- end of game ---------- */
@@ -163,25 +194,30 @@ export function MatLogger({
     </text>
   );
 
+  /** Throws whose mama got shot out later that round (don't count as a mama). */
+  const knocked = useMemo(() => knockedMamas(st.throws), [st.throws]);
+
   const awards = useMemo(() => {
-    const per = {} as Record<Slot, { three: number; mama: number; knocks: number; miss: number }>;
-    for (const s of st.order) per[s] = { three: 0, mama: 0, knocks: 0, miss: 0 };
-    for (const th of st.throws) {
-      if (th.kind === "skipped") continue;
+    const per = {} as Record<Slot, { three: number; mama: number; knocks: number; miss: number; mamaOut: number }>;
+    for (const s of st.order) per[s] = { three: 0, mama: 0, knocks: 0, miss: 0, mamaOut: 0 };
+    st.throws.forEach((th, i) => {
+      if (th.kind === "skipped") return;
       const x = per[th.slot];
       if (th.firstSpot && ZONES.find((z) => z.id === th.firstSpot)?.v === 3) x.three++;
-      if (th.firstSpot === "ML" || th.firstSpot === "MR") x.mama++;
+      if ((th.firstSpot === "ML" || th.firstSpot === "MR") && !knocked.has(i)) x.mama++;
+      // Defending a mama: shooting a cap out of a mama.
+      x.mamaOut += th.moves.filter((m) => !m.isThrownCap && (m.from.spot === "ML" || m.from.spot === "MR") && m.to.spot !== "ML" && m.to.spot !== "MR").length;
       if (th.missed || th.firstSpot === "off") x.miss++;
       x.knocks += th.moves.filter((m) => !m.isThrownCap && teamOfSlot(m.owner) !== teamOfSlot(th.slot)).length;
-    }
-    return ([["three", M.awThree, "🎯"], ["knocks", M.awKnocks, "💥"], ["mama", M.awMama, "🔴"], ["miss", M.awMiss, "🙈"]] as const)
+    });
+    return ([["three", M.awThree, "🎯"], ["knocks", M.awKnocks, "💥"], ["mamaOut", M.awMamaOut, "🛡"], ["mama", M.awMama, "🔴"], ["miss", M.awMiss, "🙈"]] as const)
       .map(([k, txt, icon]) => {
         const best = st.order.slice().sort((a, b) => per[b][k] - per[a][k])[0];
         return per[best][k] > 0 ? { icon, txt, name: nameOf(best), n: per[best][k] } : null;
       })
       .filter(Boolean) as { icon: string; txt: string; name: string; n: number }[];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [st.throws, slots]);
+  }, [st.throws, slots, knocked]);
 
   return (
     <div className="fixed inset-0 z-[60] bg-surface overflow-y-auto overscroll-contain">
@@ -198,6 +234,7 @@ export function MatLogger({
                 <span className={cn("w-2.5 h-2.5 rounded-full", TEAM_DOT[ti])} />
                 {totals[ti].sips}
                 {totals[ti].af > 0 && <small className="font-body font-semibold text-[11px] text-red-pale">{totals[ti].af}×M</small>}
+                {!st.jokersUsed.includes(ti) && <small className="text-[12px]" aria-label={M.jokerLeft}>🃏</small>}
               </span>
             ))}
           </span>
@@ -233,9 +270,10 @@ export function MatLogger({
             ref={svgRef}
             viewBox="0 -22 265 868"
             className="h-full w-auto max-w-full touch-none select-none overflow-visible"
+            onPointerDown={onDown}
             onPointerMove={onMove}
             onPointerUp={onUp}
-            onPointerCancel={onUp}
+            onPointerCancel={() => { press.current = null; }}
             role="img"
             aria-label={M.matAlt}
           >
@@ -268,9 +306,10 @@ export function MatLogger({
                 const ti = sp.kind === "zone" ? zoneTeam(st, sp.id) : sp.kind === "mama" ? mamaTeam(st, sp.id) : teamOfSlot(c.owner);
                 const isActive = st.phase === "throw" && c.no === st.activeCap;
                 return (
-                  <g key={c.no} transform={`translate(${c.x} ${c.y})`} onPointerDown={(e) => onCapDown(e, c.no)} className="cursor-grab">
+                  <g key={c.no} data-cap={c.no} transform={`translate(${c.x} ${c.y})`} className="cursor-pointer">
                     <circle r={30} fill="transparent" />
-                    {isActive && <circle r={25} fill="none" stroke="#E0A43A" strokeWidth={3.5} strokeDasharray="5 5" />}
+                    {isActive && <circle r={25} fill="none" stroke="#E0A43A" strokeWidth={3.5} strokeDasharray="5 5" opacity={selected !== null ? 0.4 : 1} />}
+                    {selected === c.no && <circle r={26} fill="none" stroke="#E0A43A" strokeWidth={5} />}
                     {sp.kind === "mama" ? (
                       <>
                         <circle r={22} fill="none" stroke={TEAM_FILL[ti]} strokeWidth={3} className="motion-safe:animate-[matRing_1s_ease-out_infinite] [transform-box:fill-box] origin-center" />
@@ -294,6 +333,7 @@ export function MatLogger({
           {st.phase === "done" && lastResult ? (
             <>
               <span className="font-display font-extrabold text-xl uppercase tracking-[0.04em] text-gold">{format(M.drinkTitle, { n: lastResult.round })}</span>
+              <div className={cn("flex flex-col gap-2.5", lastResult.jokerTeam !== null && "opacity-40 line-through")}>
               {lastResult.mamaTeams.length ? (
                 <>
                   {lastResult.mamaTeams.map((ti) => <span key={ti} className="font-body font-bold text-base text-red-pale">{format(M.mamaLine, { team: teamName(ti) })}</span>)}
@@ -307,6 +347,24 @@ export function MatLogger({
                     <b className="font-display font-extrabold text-2xl text-gold whitespace-nowrap">{sips(lastResult.sips[ti])}</b>
                   </div>
                 ))
+              )}
+              </div>
+              {lastResult.jokerTeam !== null ? (
+                <span className="font-body font-bold text-base text-gold">{format(M.jokerUsed, { team: teamName(lastResult.jokerTeam) })}</span>
+              ) : (
+                [0, 1].some((ti) => !st.jokersUsed.includes(ti)) && (
+                  <div className="grid grid-cols-2 gap-2">
+                    {[0, 1].map((ti) =>
+                      st.jokersUsed.includes(ti) ? (
+                        <span key={ti} className="h-10 rounded-[12px] border border-dashed border-line flex items-center justify-center font-body text-xs text-muted">{M.jokerGone}</span>
+                      ) : (
+                        <button key={ti} type="button" onClick={() => apply((d) => playJoker(d, ti))} className="h-10 rounded-[12px] bg-surface-raised border border-gold/50 font-body font-semibold text-[13px] flex items-center justify-center gap-1.5 min-w-0 px-2">
+                          🃏 <span className="truncate">{format(M.jokerBtn, { team: teamName(ti) })}</span>
+                        </button>
+                      ),
+                    )}
+                  </div>
+                )
               )}
               <button type="button" onClick={() => apply((d) => nextRound(d))} className="h-12.5 rounded-[14px] bg-amber text-ink font-display font-extrabold text-[19px] tracking-[0.06em] uppercase">
                 {M.nextRound}
@@ -322,7 +380,13 @@ export function MatLogger({
                 </span>
               </div>
               <span className={cn("font-body text-xs -mt-1.5", inf.count[active] >= 1 ? "text-gold" : "text-muted")}>
-                {inf.count[active] >= 1 ? M.bonusHint : placed ? M.movedHint : M.dropHint}
+                {selected !== null
+                  ? format(M.selHint, { name: nameOf(st.caps.find((c) => c.no === selected)?.owner ?? active) })
+                  : inf.count[active] >= 1 && !placed
+                    ? M.bonusHint
+                    : placed
+                      ? M.movedHint
+                      : M.dropHint}
               </span>
               <div className="grid grid-cols-[1fr_2fr] gap-2">
                 <button type="button" onClick={() => throwDone(true)} className="h-12.5 rounded-[14px] bg-surface-raised border border-line-strong font-display font-bold text-[17px] tracking-[0.04em] uppercase">
@@ -367,7 +431,7 @@ export function MatLogger({
                         ))}
                       </span>
                       <span className="font-display font-extrabold whitespace-nowrap">
-                        {x.kind === "skipped" ? (x.skipReason === "cap_knocked" ? M.skipKnocked : M.skipBox) : codeLabel(x.firstSpot ?? "none")}
+                        {x.kind === "skipped" ? (x.skipReason === "cap_knocked" ? M.skipKnocked : M.skipBox) : knocked.has(st.throws.indexOf(x)) ? M.mamaOut : codeLabel(x.firstSpot ?? "none")}
                       </span>
                     </div>
                   ))}
