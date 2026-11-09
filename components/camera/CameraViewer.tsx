@@ -1,7 +1,10 @@
 /**
  * CameraViewer
  *
- * Follow a crew member's live camera from your own phone: the newest throw
+ * Follow a crew member's live camera from your own phone (or laptop). While
+ * the camera is calibrating, set its corners here on its empty-mat snapshot
+ * (so nobody has to touch the camera) or ask it for a new snapshot. Then:
+ * the newest throw
  * with its top-down picture and "Cap in zone X?", a tap on "Wrong" to point
  * at the real spot (or say there was no cap), and the list of throws (tap
  * one to fix it later). Polls the session every 2 s; pictures are fetched
@@ -11,10 +14,18 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { spotAt } from "@/lib/camera";
+import { spotAt, type Pt } from "@/lib/camera";
+import { CornerEditor } from "@/components/camera/CameraLab";
 import type { CameraState } from "@/lib/db/camera";
 import { MatPick } from "@/components/camera/MatPick";
-import { correctCameraThrowAction, getCameraStateAction, getCameraThrowImageAction } from "@/app/(app)/camera/actions";
+import {
+  correctCameraThrowAction,
+  getCameraSnapshotAction,
+  getCameraStateAction,
+  getCameraThrowImageAction,
+  requestCameraSnapshotAction,
+  setCameraCornersAction,
+} from "@/app/(app)/camera/actions";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/client";
 import { format } from "@/lib/i18n";
@@ -31,6 +42,10 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
   const [fixing, setFixing] = useState(false);
   const [okd, setOkd] = useState<Set<string>>(new Set());
   const [images, setImages] = useState<Record<string, string | null>>({});
+  // Calibration: the snapshot (per version) and the corners being set.
+  const [snap, setSnap] = useState<{ version: number; url: string } | null>(null);
+  const [corners, setCorners] = useState<Pt[] | null>(null);
+  const [sent, setSent] = useState<"none" | "corners" | "photo">("none");
 
   // Follow the session; jump to a new throw when it comes in.
   useEffect(() => {
@@ -58,6 +73,20 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
       .then((img) => setImages((m) => ({ ...m, [open]: img })))
       .catch(() => {});
   }, [open, images]);
+
+  // Load the snapshot when a new one comes in, starting from the camera's guess.
+  const version = state.phase === "calibrating" ? (state.snap?.version ?? 0) : 0;
+  useEffect(() => {
+    if (!version || snap?.version === version) return;
+    getCameraSnapshotAction(initial.id)
+      .then((url) => {
+        if (!url) return;
+        setSnap({ version, url });
+        setCorners(state.corners);
+        setSent("none");
+      })
+      .catch(() => {});
+  }, [version, snap?.version, initial.id, state.corners]);
 
   const th = state.throws.find((x) => x.id === open);
   const spotText = (s: Spot) => {
@@ -93,9 +122,46 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
         </span>
       </header>
 
-      {!th && <p className="font-body text-[15px] text-soft">{state.live ? L.viewWaiting : L.viewEnded}</p>}
+      {state.live && state.phase === "calibrating" && (
+        <section className="flex flex-col gap-3">
+          <span className={kicker}>{L.calRemoteKicker}</span>
+          {!snap || !corners || !state.snap ? (
+            <p className="font-body text-[15px] text-soft">{L.calRemoteWaiting}</p>
+          ) : (
+            <>
+              <p className="font-body text-[15px] leading-normal text-soft">{C.step2Auto}</p>
+              <CornerEditor photo={{ url: snap.url, frame: { w: state.snap.w, h: state.snap.h, data: new Uint8ClampedArray(0) } }} corners={corners} onChange={setCorners} labels={C} />
+              <button
+                type="button"
+                disabled={sent !== "none"}
+                onClick={() => {
+                  setSent("corners");
+                  setCameraCornersAction(initial.id, snap.version, corners).catch(() => setSent("none"));
+                }}
+                className="h-14 rounded-[16px] bg-amber text-ink font-heading font-extrabold text-lg tracking-[0.06em] disabled:opacity-40"
+              >
+                {sent === "corners" ? L.calRemoteSent : L.go}
+              </button>
+            </>
+          )}
+          <button
+            type="button"
+            disabled={sent === "photo"}
+            onClick={() => {
+              setSent("photo");
+              requestCameraSnapshotAction(initial.id).catch(() => setSent("none"));
+            }}
+            className={cn(secondary, "disabled:opacity-40")}
+          >
+            {L.again}
+          </button>
+        </section>
+      )}
 
-      {th && (
+      {state.phase === "watching" && !th && <p className="font-body text-[15px] text-soft">{state.live ? L.viewWaiting : L.viewEnded}</p>}
+      {!state.live && state.phase === "calibrating" && <p className="font-body text-[15px] text-soft">{L.viewEnded}</p>}
+
+      {th && state.phase === "watching" && (
         <section className="flex flex-col gap-3" aria-live="polite">
           <span className={kicker}>{format(L.throwN, { n: th.n })}</span>
           <MatPick

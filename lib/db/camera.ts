@@ -33,6 +33,11 @@ export type CameraState = {
   cameraUserId: string;
   cameraName: string;
   live: boolean;
+  /** "calibrating" until someone confirmed the corners, then "watching". */
+  phase: "calibrating" | "watching";
+  snap: { version: number; w: number; h: number } | null;
+  snapRequest: number;
+  corners: { x: number; y: number }[] | null;
   throws: CameraThrow[];
 };
 
@@ -109,6 +114,10 @@ export async function getCameraState(userId: string, sessionId: string): Promise
     cameraUserId: s.userId,
     cameraName: cam?.name ?? "?",
     live: s.live && Date.now() - s.updatedAt.getTime() < STALE_MS,
+    phase: s.phase === "watching" ? "watching" : "calibrating",
+    snap: s.snapVersion > 0 && s.snapW && s.snapH ? { version: s.snapVersion, w: s.snapW, h: s.snapH } : null,
+    snapRequest: s.snapRequest,
+    corners: s.corners ?? null,
     throws: rows.map((r) => ({
       id: r.id,
       n: r.n,
@@ -120,6 +129,43 @@ export async function getCameraState(userId: string, sessionId: string): Promise
   };
 }
 
+const cornersOk = (c: unknown, w: number, h: number): c is { x: number; y: number }[] =>
+  Array.isArray(c) && c.length === 4 && c.every((p) => p && Number.isFinite(p.x) && Number.isFinite(p.y) && p.x >= -w && p.x <= 2 * w && p.y >= -h && p.y <= 2 * h);
+
+/** The camera uploads a new empty-mat snapshot with its own guess of the
+ * corners; the session goes (back) to calibrating. Returns the version. */
+export async function setCameraSnapshot(userId: string, sessionId: string, snap: { image: string; w: number; h: number; corners: { x: number; y: number }[] }) {
+  const s = await db.query.cameraSessions.findFirst({ where: and(eq(cameraSessions.id, sessionId), eq(cameraSessions.userId, userId)) });
+  if (!s) throw new Error("Not your camera");
+  if (!snap.image.startsWith("data:image/jpeg;base64,") || snap.image.length > 900_000 || !cornersOk(snap.corners, snap.w, snap.h)) throw new Error("Bad snapshot");
+  const version = s.snapVersion + 1;
+  await db
+    .update(cameraSessions)
+    .set({ snapshot: snap.image, snapW: snap.w, snapH: snap.h, snapVersion: version, corners: snap.corners, phase: "calibrating", updatedAt: new Date() })
+    .where(eq(cameraSessions.id, sessionId));
+  return version;
+}
+
+/** Anyone in the crew asks the camera for a fresh snapshot. */
+export async function requestCameraSnapshot(userId: string, sessionId: string) {
+  const s = await sessionFor(userId, sessionId);
+  await db.update(cameraSessions).set({ snapRequest: s.snapRequest + 1 }).where(eq(cameraSessions.id, sessionId));
+}
+
+/** Anyone in the crew (or the camera) confirms the corners for a snapshot
+ * version → the camera starts watching. */
+export async function setCameraCorners(userId: string, sessionId: string, version: number, corners: { x: number; y: number }[]) {
+  const s = await sessionFor(userId, sessionId);
+  if (s.snapVersion !== version || !s.snapW || !s.snapH || !cornersOk(corners, s.snapW, s.snapH)) throw new Error("Outdated snapshot");
+  await db.update(cameraSessions).set({ corners, phase: "watching" }).where(eq(cameraSessions.id, sessionId));
+}
+
+/** The current empty-mat snapshot. */
+export async function getCameraSnapshot(userId: string, sessionId: string): Promise<string | null> {
+  const s = await sessionFor(userId, sessionId);
+  return s.snapshot;
+}
+
 /** One throw's picture (fetched only when someone looks at it). */
 export async function getCameraThrowImage(userId: string, throwId: string): Promise<string | null> {
   const t = await db.query.cameraThrows.findFirst({ where: eq(cameraThrows.id, throwId), columns: { sessionId: true, image: true } });
@@ -129,12 +175,12 @@ export async function getCameraThrowImage(userId: string, throwId: string): Prom
 }
 
 /** Cameras live in a crew right now (for the crew page). */
-export async function getLiveCameras(groupId: string): Promise<{ id: string; name: string }[]> {
+export async function getLiveCameras(groupId: string): Promise<{ id: string; name: string; calibrating: boolean }[]> {
   const rows = await db
-    .select({ id: cameraSessions.id, name: users.name })
+    .select({ id: cameraSessions.id, name: users.name, phase: cameraSessions.phase })
     .from(cameraSessions)
     .innerJoin(users, eq(users.id, cameraSessions.userId))
     .where(and(eq(cameraSessions.groupId, groupId), eq(cameraSessions.live, true), gt(cameraSessions.updatedAt, new Date(Date.now() - STALE_MS))))
     .orderBy(desc(cameraSessions.createdAt));
-  return rows.map((r) => ({ id: r.id, name: r.name ?? "?" }));
+  return rows.map((r) => ({ id: r.id, name: r.name ?? "?", calibrating: r.phase !== "watching" }));
 }

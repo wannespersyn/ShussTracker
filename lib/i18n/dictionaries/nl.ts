@@ -788,6 +788,11 @@ export const nl: Dictionary = {
     change: "AANPASSEN",
     rightShort: "KLOPT",
     crewCard: "{name} filmt live — kijk mee",
+    remoteCal: "Of zet de hoeken vanop een andere gsm of laptop: crewpagina → de rode camerakaart. Dan moet je deze gsm niet aanraken.",
+    calRemoteKicker: "CAMERA KALIBREREN",
+    calRemoteWaiting: "De camera neemt een foto van de lege mat…",
+    calRemoteSent: "VERSTUURD — DE CAMERA BEGINT",
+    crewCardCal: "{name} zet een camera klaar — kalibreer mee",
   },
   sb: {
     title: "STATS",

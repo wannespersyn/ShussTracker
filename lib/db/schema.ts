@@ -714,6 +714,18 @@ export const cameraSessions = pgTable("camera_session", {
     .references(() => users.id, { onDelete: "cascade" }),
   // Live until stopped; "live" also needs a recent heartbeat (updatedAt).
   live: boolean("live").notNull().default(true),
+  // "calibrating" (waiting for corners on the empty-mat snapshot) → "watching".
+  phase: text("phase").notNull().default("calibrating"),
+  // Empty-mat snapshot (JPEG data URL) so anyone in the crew can set the
+  // corners from their own phone or laptop; the version bumps per snapshot.
+  snapshot: text("snapshot"),
+  snapW: integer("snap_w"),
+  snapH: integer("snap_h"),
+  snapVersion: integer("snap_version").notNull().default(0),
+  // Someone asked the camera for a new snapshot (counter).
+  snapRequest: integer("snap_request").notNull().default(0),
+  // Field corners on the snapshot (photo pixels, mat order).
+  corners: jsonb("corners").$type<{ x: number; y: number }[]>(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

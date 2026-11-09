@@ -12,6 +12,10 @@ import {
   addCameraThrow,
   correctCameraThrow,
   correctCameraThrowByN,
+  getCameraSnapshot,
+  requestCameraSnapshot,
+  setCameraCorners,
+  setCameraSnapshot,
   endCameraSession,
   getCameraState,
   getCameraThrowImage,
@@ -52,4 +56,20 @@ export async function getCameraThrowImageAction(throwId: string) {
 export async function correctCameraThrowByNAction(sessionId: string, n: number, spot: { x: number; y: number } | null) {
   if (!spotOk(spot) || !Number.isInteger(n)) throw new Error("Bad spot");
   await correctCameraThrowByN(await requireUserId(), sessionId, n, spot);
+}
+
+export async function setCameraSnapshotAction(sessionId: string, snap: { image: string; w: number; h: number; corners: { x: number; y: number }[] }) {
+  return setCameraSnapshot(await requireUserId(), sessionId, snap);
+}
+
+export async function requestCameraSnapshotAction(sessionId: string) {
+  await requestCameraSnapshot(await requireUserId(), sessionId);
+}
+
+export async function setCameraCornersAction(sessionId: string, version: number, corners: { x: number; y: number }[]) {
+  await setCameraCorners(await requireUserId(), sessionId, version, corners);
+}
+
+export async function getCameraSnapshotAction(sessionId: string) {
+  return getCameraSnapshot(await requireUserId(), sessionId);
 }

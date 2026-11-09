@@ -789,6 +789,11 @@ export const en = {
     change: "CHANGE",
     rightShort: "RIGHT",
     crewCard: "{name} is filming live — follow along",
+    remoteCal: "Or set the corners from another phone or a laptop: crew page → the red camera card. Then you don't have to touch this phone.",
+    calRemoteKicker: "CALIBRATE THE CAMERA",
+    calRemoteWaiting: "The camera is taking a picture of the empty mat…",
+    calRemoteSent: "SENT — THE CAMERA STARTS",
+    crewCardCal: "{name} is setting up a camera — help calibrate",
   },
   sb: {
     title: "STATS",

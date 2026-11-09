@@ -2,12 +2,14 @@
  * CameraLive
  *
  * Beta: live shot tracking with the phone fixed above the mat (a stand or a
- * clamp). One calibration on the empty mat, then the camera keeps watching:
- *  - every ~0.3 s a frame is warped top-down and compared with the last one;
- *    big changes = someone is throwing or leaning in ("movement");
- *  - once the picture has been still for ~1 s after movement, that still
- *    frame is compared with the empty mat and the previous still frame
- *    (lib/camera detect) → the cap that landed, if any;
+ * clamp). One calibration on the empty mat — on this phone, or from any
+ * phone/laptop in the crew so the camera never has to be touched — then the
+ * camera keeps watching:
+ *  - every ~0.3 s a frame is warped top-down and cut into small cells;
+ *    cells changing between frames = movement (a hand, a cap in flight);
+ *  - when the picture is still but differs from the last judged picture
+ *    (a cap landed, one got shot away) for ~1 s, the throw is judged against
+ *    the empty mat and the previous picture (lib/camera detect);
  *  - the player sees "Cap in zone 2?" and does nothing when it's right; a
  *    tap on "Wrong" lets them point at the real spot on the mat (or say
  *    there was no cap). Corrections are kept with the throw, so they can
@@ -24,7 +26,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { WH, WW, align, detect, findField, spotAt, warp, type Frame, type Pt } from "@/lib/camera";
 import { CornerEditor, Overlay, defaultCorners, type Photo } from "@/components/camera/CameraLab";
 import { MatPick, warpedToJpeg } from "@/components/camera/MatPick";
-import { addCameraThrowAction, correctCameraThrowByNAction, endCameraSessionAction, getCameraStateAction, startCameraSessionAction } from "@/app/(app)/camera/actions";
+import {
+  addCameraThrowAction,
+  correctCameraThrowByNAction,
+  endCameraSessionAction,
+  getCameraStateAction,
+  setCameraCornersAction,
+  setCameraSnapshotAction,
+  startCameraSessionAction,
+} from "@/app/(app)/camera/actions";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/client";
 import { format } from "@/lib/i18n";
@@ -33,9 +43,16 @@ import { format } from "@/lib/i18n";
 const MAX_SIDE = 1280;
 /** How often the camera is looked at (ms). */
 const TICK = 300;
-/** Mean change per pixel (0–255) that counts as movement / as still. */
-const MOVING = 7;
-const STILL = 3.5;
+/** Cells (4 × 4 warped pixels ≈ 8 mat units) and how much one has to
+ * change (0–255) to count: between two frames = movement, against the last
+ * judged picture = something on the mat changed. A cap covers ~4 × 4 cells. */
+const CELL = 4;
+const MOTION_CELL = 24;
+const CHANGE_CELL = 14;
+const MIN_CELLS = 2;
+/** More than this share of cells changed at once while still = the light
+ * changed (lamp, curtain), not a throw: start over from this picture. */
+const LIGHT_SHARE = 0.3;
 /** Still ticks in a row before a throw is judged (~1 s). */
 const SETTLE = 3;
 /** Seconds a "cap in zone X?" question stays before it counts as right. */
@@ -48,9 +65,9 @@ type Throw = { n: number; spot: Spot; corrected: boolean; img: string | null };
 /** How often the session is synced with the crew (ms). */
 const SYNC = 2500;
 
-/** Small grey copy of a warped frame for the movement check. */
+/** Small grey copy of a warped frame (one value per cell). */
 function tiny(w: Float32Array): Float32Array {
-  const S = 4;
+  const S = CELL;
   const tw = Math.floor(WW / S);
   const th = Math.floor(WH / S);
   const out = new Float32Array(tw * th);
@@ -67,11 +84,18 @@ function tiny(w: Float32Array): Float32Array {
   return out;
 }
 
-function change(a: Float32Array, b: Float32Array): number {
-  let s = 0;
-  for (let i = 0; i < a.length; i++) s += Math.abs(a[i] - b[i]);
-  return s / a.length;
+/** Cells that changed by more than `t`, ignoring the bottle ends and the
+ * outer rows (those flicker with every tiny shake). */
+function changed(a: Float32Array, b: Float32Array, t: number): number {
+  const tw = Math.floor(WW / CELL);
+  const th = Math.floor(WH / CELL);
+  const end = Math.round(tw * 0.06);
+  let n = 0;
+  for (let y = 1; y < th - 1; y++)
+    for (let x = end; x < tw - end; x++) if (Math.abs(a[y * tw + x] - b[y * tw + x]) > t) n++;
+  return n;
 }
+const CELLS = (Math.floor(WH / CELL) - 2) * (Math.floor(WW / CELL) - 2 * Math.round(Math.floor(WW / CELL) * 0.06));
 
 export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: string; name: string }[]; initialCrewId?: string }>) {
   const { t } = useT();
@@ -91,6 +115,13 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
   const [crewId, setCrewId] = useState(initialCrewId ?? crews[0]?.id ?? "");
   const [sessionId, setSessionId] = useState<string | null>(null);
   const session = useRef<string | null>(null);
+  // Snapshot version on the server, and the last "new snapshot" request seen.
+  const snapVersion = useRef(0);
+  const handledRequest = useRef(0);
+  const phaseRef = useRef<Phase>("start");
+  useEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
 
   // Live state the camera loop reads without re-rendering.
   const live = useRef({
@@ -98,7 +129,7 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
     empty: null as Float32Array | null,
     still: null as Float32Array | null,
     prevTiny: null as Float32Array | null,
-    moved: false,
+    base: null as Float32Array | null,
     calm: 0,
     busy: false,
     n: 0,
@@ -114,7 +145,7 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
 
   // Keep the screen on while watching.
   useEffect(() => {
-    if (phase !== "live" || !("wakeLock" in navigator)) return;
+    if (phase === "start" || !("wakeLock" in navigator)) return;
     let lock: WakeLockSentinel | null = null;
     navigator.wakeLock.request("screen").then((l) => (lock = l)).catch(() => {});
     return () => {
@@ -155,7 +186,19 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
       setPhase("calibrate");
     } catch {
       setError(L.noCamera);
+      return;
     }
+    if (crewId) {
+      try {
+        const id = await startCameraSessionAction(crewId);
+        session.current = id;
+        setSessionId(id);
+      } catch {
+        setError(L.shareError);
+      }
+    }
+    // Give the camera a moment to settle its exposure, then snap the empty mat.
+    window.setTimeout(() => void freeze(), 1500);
   }
 
   async function freeze() {
@@ -164,27 +207,36 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
     const c = canvas.current!;
     const url = await new Promise<string>((res) => c.toBlob((b) => res(b ? URL.createObjectURL(b) : c.toDataURL("image/jpeg")), "image/jpeg", 0.85));
     const frame = { ...f, data: new Uint8ClampedArray(f.data) };
+    const guess = findField(frame) ?? defaultCorners(frame);
     setSnap({ url, frame });
-    setCorners(findField(frame) ?? defaultCorners(frame));
+    setCorners(guess);
+    snapRef.current = frame;
+    setPhase("calibrate");
+    // Share it, so the corners can be set from another phone or a laptop.
+    if (session.current) {
+      const image = c.toDataURL("image/jpeg", 0.8);
+      setCameraSnapshotAction(session.current, { image, w: frame.w, h: frame.h, corners: guess })
+        .then((v) => (snapVersion.current = v))
+        .catch(() => {});
+    }
   }
+  const snapRef = useRef<Frame | null>(null);
 
-  function go() {
-    if (!snap) return;
-    const empty = warp(snap.frame, corners);
-    Object.assign(live.current, { corners, empty, still: empty, prevTiny: null, moved: false, calm: 0, busy: false, n: 0 });
-    setThrows([]);
+  /** Start watching with these corners on the current snapshot. */
+  function watch(c: Pt[]) {
+    const frame = snapRef.current;
+    if (!frame) return;
+    const empty = warp(frame, c);
+    Object.assign(live.current, { corners: c, empty, still: empty, prevTiny: null, base: null, calm: 0, busy: false });
+    setCorners(c);
     setAsk(null);
     setFixing(null);
     setPhase("live");
-    if (crewId) {
-      if (session.current) endCameraSessionAction(session.current).catch(() => {});
-      startCameraSessionAction(crewId)
-        .then((id) => {
-          session.current = id;
-          setSessionId(id);
-        })
-        .catch(() => setError(L.shareError));
-    }
+  }
+
+  function go() {
+    watch(corners);
+    if (session.current && snapVersion.current) setCameraCornersAction(session.current, snapVersion.current, corners).catch(() => {});
   }
 
   // The camera loop.
@@ -196,18 +248,32 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
       const f = grab();
       if (!f) return;
       const small = tiny(warp(f, S.corners, true));
-      const d = S.prevTiny ? change(small, S.prevTiny) : 0;
+      const prev = S.prevTiny;
       S.prevTiny = small;
-      if (d > MOVING) {
-        S.moved = true;
+      if (!S.base) {
+        S.base = small;
+        return;
+      }
+      if (prev && changed(small, prev, MOTION_CELL) >= MIN_CELLS) {
         S.calm = 0;
         setStatus("moving");
         return;
       }
-      if (d > STILL || !S.moved) return;
+      const diff = changed(small, S.base, CHANGE_CELL);
+      if (diff < MIN_CELLS) {
+        // Still, and nothing on the mat changed (a hand passed by).
+        S.calm = 0;
+        setStatus("waiting");
+        return;
+      }
+      if (diff > LIGHT_SHARE * CELLS) {
+        S.base = small;
+        S.calm = 0;
+        return;
+      }
       if (++S.calm < SETTLE) return;
-      // Still again after movement: judge the throw.
-      S.moved = false;
+      // Still, and the mat changed: judge the throw.
+      S.base = small;
       S.calm = 0;
       S.busy = true;
       setStatus("looking");
@@ -248,13 +314,22 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
     if (session.current) correctCameraThrowByNAction(session.current, n, spot).catch(() => {});
   }
 
-  // Corrections made by crew members on their own phone come back here
-  // (and the poll keeps the session marked live).
+  // Sync with the crew: corners set on another phone or laptop, requests
+  // for a new snapshot, and corrections; the poll is also the heartbeat.
   useEffect(() => {
-    if (phase !== "live" || !sessionId) return;
+    if (!sessionId) return;
     const id = window.setInterval(() => {
       getCameraStateAction(sessionId)
         .then((st) => {
+          if (st.snapRequest > handledRequest.current) {
+            handledRequest.current = st.snapRequest;
+            void freeze();
+            return;
+          }
+          if (phaseRef.current === "calibrate" && st.phase === "watching" && st.corners && st.snap?.version === snapVersion.current) {
+            watch(st.corners);
+            return;
+          }
           const remote = new Map(st.throws.filter((th) => th.corrected).map((th) => [th.n, th.spot]));
           if (!remote.size) return;
           setThrows((ts) => ts.map((th) => (remote.has(th.n) && !th.corrected ? { ...th, spot: remote.get(th.n) ?? null, corrected: true } : th)));
@@ -263,7 +338,9 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
         .catch(() => {});
     }, SYNC);
     return () => window.clearInterval(id);
-  }, [phase, sessionId]);
+    // freeze/watch only touch refs and setters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]);
 
   const spotText = (s: Spot) => {
     if (!s) return L.noCap;
@@ -292,7 +369,7 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
           <h1 className="font-display font-extrabold text-[28px] leading-none uppercase">{L.title}</h1>
         </span>
         {phase === "live" && (
-          <button type="button" onClick={() => setPhase("calibrate")} className="font-heading font-bold text-[13px] tracking-[0.08em] text-gold py-2">
+          <button type="button" onClick={() => void freeze()} className="font-heading font-bold text-[13px] tracking-[0.08em] text-gold py-2">
             {L.recalibrate}
           </button>
         )}
@@ -360,7 +437,7 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
         <section className="flex flex-col gap-3">
           <span className={kicker}>{L.calKicker}</span>
           <p className="font-body text-[15px] leading-normal text-soft">{L.calSub}</p>
-          <button type="button" onClick={freeze} className={primary}>
+          <button type="button" onClick={() => void freeze()} className={primary}>
             {L.freeze}
           </button>
         </section>
@@ -370,11 +447,12 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
         <section className="flex flex-col gap-3">
           <span className={kicker}>{C.step2}</span>
           <p className="font-body text-[15px] leading-normal text-soft">{C.step2Auto}</p>
+          {sessionId && <p className="font-body text-[13px] leading-normal text-gold">{L.remoteCal}</p>}
           <CornerEditor photo={snap} corners={corners} onChange={setCorners} labels={C} />
           <button type="button" onClick={go} className={primary}>
             {L.go}
           </button>
-          <button type="button" onClick={() => setSnap(null)} className={secondary}>
+          <button type="button" onClick={() => void freeze()} className={secondary}>
             {L.again}
           </button>
         </section>

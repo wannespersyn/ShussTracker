@@ -113,7 +113,7 @@ export default async function CrewPage({
       {cameras.map((c) => (
         <Link key={c.id} href={`/camera/view/${c.id}`} className="flex items-center gap-3 px-4 py-3 rounded-[16px] bg-surface-deep border border-red/50">
           <span className="w-2.5 h-2.5 rounded-full bg-red animate-pulse" aria-hidden="true" />
-          <span className="flex-1 font-heading font-extrabold text-sm tracking-[0.06em]">{format(t.camLive.crewCard, { name: c.name })}</span>
+          <span className="flex-1 font-heading font-extrabold text-sm tracking-[0.06em]">{format(c.calibrating ? t.camLive.crewCardCal : t.camLive.crewCard, { name: c.name })}</span>
           <span aria-hidden="true" className="text-gold text-lg">→</span>
         </Link>
       ))}
