@@ -82,6 +82,8 @@ export type RotationView = {
   standings: RotationStanding[];
   /** Highest round that has games planned. */
   plannedRounds: number;
+  /** Current crew Elo per player (for the duo averages on the mat cards). */
+  crewElo: Record<string, number>;
 };
 
 export async function getRotation(rotationId: string): Promise<RotationView | null> {
@@ -104,7 +106,7 @@ export async function getRotation(rotationId: string): Promise<RotationView | nu
           with: { teams: { columns: { finalRank: true, kruip: true }, with: { players: { columns: { userId: true }, with: { shots: { columns: { fieldHit: true } } } } } } },
         })
       : Promise.resolve([]),
-    gameIds.length ? getCrewInsights(rotation.groupId) : Promise.resolve(null),
+    getCrewInsights(rotation.groupId),
   ]);
   const byId = new Map(played.map((g) => [g.id, g]));
 
@@ -127,7 +129,7 @@ export async function getRotation(rotationId: string): Promise<RotationView | nu
       kruipA: tA?.kruip ?? false,
       kruipB: tB?.kruip ?? false,
       mama,
-      elo: g && insights ? (insights.gameElo[g.id] ?? {}) : {},
+      elo: g ? (insights.gameElo[g.id] ?? {}) : {},
     };
   });
 
@@ -153,6 +155,7 @@ export async function getRotation(rotationId: string): Promise<RotationView | nu
     byes,
     standings: rotationStandings(playerIds, list, Object.values(byes)),
     plannedRounds,
+    crewElo: Object.fromEntries(insights.players.map((p) => [p.userId, p.elo])),
   };
 }
 
