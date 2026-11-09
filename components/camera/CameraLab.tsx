@@ -1,10 +1,12 @@
 /**
  * CameraLab
  *
- * Beta test of shot tracking with the camera: photo of the empty mat, tap
- * its four corners, then a photo after every throw. Shows where caps landed
- * and which got shot away, on a drawn mat and as a top-down view of what the
- * app sees. Photos never leave the phone unless downloaded.
+ * Beta test of shot tracking with the camera: photo of the empty mat (the
+ * app finds the mat itself; tap the corners only if it can't), then a photo
+ * after every throw — handheld is fine, every photo is lined up again.
+ * Shows where caps landed and which got shot away, on a drawn mat and as a
+ * top-down view of what the app sees. Photos stay on the phone unless
+ * downloaded.
  *
  * Data: all on-device (lib/camera.ts); live camera via getUserMedia or a
  * picked photo.
@@ -14,14 +16,14 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { BOTTLES, MAMAS, ZONES } from "@/lib/mat";
-import { MAT_CORNERS, MAT_H, MAT_W, WH, WW, detect, homography, spotAt, warp, type Blob, type Detection, type Frame, type H, type Pt } from "@/lib/camera";
+import { MAT_H, MAT_W, WH, WW, align, detect, findField, spotAt, warp, type Blob, type Detection, type Frame, type Pt } from "@/lib/camera";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/client";
 import { format } from "@/lib/i18n";
 
 const MAX_SIDE = 1600;
 
-type Shot = { url: string; warped: Uint8ClampedArray; result: Detection | null };
+type Shot = { url: string; warped: Float32Array; result: Detection | null };
 
 /** Loads an image (file or camera still) into pixels, downscaled. */
 async function toFrame(src: HTMLVideoElement | File): Promise<{ frame: Frame; url: string }> {
@@ -58,10 +60,10 @@ export function CameraLab() {
   const [camError, setCamError] = useState(false);
   const [empty, setEmpty] = useState<{ url: string; frame: Frame } | null>(null);
   const [corners, setCorners] = useState<Pt[]>([]);
-  const [toPhoto, setToPhoto] = useState<H | null>(null);
-  const [emptyWarp, setEmptyWarp] = useState<Uint8ClampedArray | null>(null);
+  const [auto, setAuto] = useState(false);
+  const [emptyWarp, setEmptyWarp] = useState<Float32Array | null>(null);
   const [shots, setShots] = useState<Shot[]>([]);
-  const [minDiff, setMinDiff] = useState(60);
+  const [minDiff, setMinDiff] = useState(45);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -91,16 +93,28 @@ export function CameraLab() {
       const shot = await toFrame(src);
       if (!empty) {
         setEmpty(shot);
-        setCorners([]);
+        // Find the black playing field; fall back to tapping the corners.
+        const found = findField(shot.frame);
+        if (found) applyCorners(shot.frame, found, true);
+        else setCorners([]);
         return;
       }
-      if (!toPhoto || !emptyWarp) return;
-      const warped = warp(shot.frame, toPhoto);
+      if (!emptyWarp) return;
       const prev = shots.at(-1)?.warped ?? emptyWarp;
+      // Line every photo up again: handheld photos never match exactly.
+      const guess = findField(shot.frame) ?? scaleCorners(corners, empty.frame, shot.frame);
+      const warped = warp(shot.frame, align(shot.frame, guess, prev));
       setShots((s) => [...s, { url: shot.url, warped, result: detect(emptyWarp, prev, warped, minDiff) }]);
     } finally {
       setBusy(false);
     }
+  }
+
+  function applyCorners(frame: Frame, c: Pt[], found: boolean) {
+    setCorners(c);
+    setAuto(found);
+    setEmptyWarp(warp(frame, c));
+    setShots([]);
   }
 
   function tapCorner(e: React.MouseEvent<HTMLImageElement>) {
@@ -108,12 +122,15 @@ export function CameraLab() {
     const r = e.currentTarget.getBoundingClientRect();
     const p = { x: ((e.clientX - r.left) / r.width) * empty.frame.w, y: ((e.clientY - r.top) / r.height) * empty.frame.h };
     const next = [...corners, p];
-    setCorners(next);
-    if (next.length === 4) {
-      const h = homography(MAT_CORNERS, next);
-      setToPhoto(h);
-      setEmptyWarp(warp(empty.frame, h));
-    }
+    if (next.length === 4) applyCorners(empty.frame, next, false);
+    else setCorners(next);
+  }
+
+  function retap() {
+    setCorners([]);
+    setAuto(false);
+    setEmptyWarp(null);
+    setShots([]);
   }
 
   // Re-run detection when the sensitivity changes.
@@ -126,7 +143,7 @@ export function CameraLab() {
   function reset() {
     setEmpty(null);
     setCorners([]);
-    setToPhoto(null);
+    setAuto(false);
     setEmptyWarp(null);
     setShots([]);
   }
@@ -205,7 +222,7 @@ export function CameraLab() {
       {empty && (
         <section className="flex flex-col gap-2">
           <span className={cn(kicker, step === 2 && "text-gold")}>{C.step2}</span>
-          {step === 2 && <p className="font-body text-sm text-soft">{C.step2Sub} · <strong className="text-gold">{format(C.cornerN, { n: corners.length + 1 })}</strong></p>}
+          {step === 2 && <p className="font-body text-sm text-soft">{C.step2Sub2} {C.step2Sub} · <strong className="text-gold">{format(C.cornerN, { n: corners.length + 1 })}</strong></p>}
           <div className="relative">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={empty.url} alt={C.step1} onClick={tapCorner} className={cn("w-full rounded-[16px] select-none", step === 2 && "cursor-crosshair")} />
@@ -226,6 +243,14 @@ export function CameraLab() {
               {C.undoCorner}
             </button>
           )}
+          {step === 3 && (
+            <div className="flex items-center justify-between gap-3">
+              <span className="font-body text-xs text-muted">{auto ? C.foundAuto : C.foundManual}</span>
+              <button type="button" onClick={retap} className="shrink-0 font-heading font-bold text-[13px] tracking-[0.08em] text-gold py-2">
+                {C.fixCorners}
+              </button>
+            </div>
+          )}
         </section>
       )}
 
@@ -237,7 +262,7 @@ export function CameraLab() {
             {captureButtons}
             <label className="flex items-center gap-3 font-body text-sm text-soft">
               {C.sensitivity}
-              <input type="range" min={20} max={140} step={5} value={160 - minDiff} onChange={(e) => redetect(160 - Number(e.target.value))} className="flex-1 accent-[var(--color-gold)]" />
+              <input type="range" min={10} max={90} step={5} value={100 - minDiff} onChange={(e) => redetect(100 - Number(e.target.value))} className="flex-1 accent-[var(--color-gold)]" />
             </label>
           </section>
 
@@ -277,8 +302,13 @@ export function CameraLab() {
   );
 }
 
+/** Corners from one photo, scaled to another photo's size (same framing). */
+function scaleCorners(c: Pt[], from: Frame, to: Frame): Pt[] {
+  return c.map((p) => ({ x: (p.x / from.w) * to.w, y: (p.y / from.h) * to.h }));
+}
+
 /** The warped top-down image, so you can see what the detection works on. */
-function TopDown({ warped, label }: Readonly<{ warped: Uint8ClampedArray; label: string }>) {
+function TopDown({ warped, label }: Readonly<{ warped: Float32Array; label: string }>) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const c = ref.current;
