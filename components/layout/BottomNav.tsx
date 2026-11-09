@@ -58,6 +58,7 @@ export function BottomNav({ currentUserId }: Readonly<{ currentUserId: string }>
     pathname === "/feedback" ||
     pathname.endsWith("/manage") ||
     pathname.startsWith("/chwazi") ||
+    pathname === "/camera" ||
     pathname === "/stats" ||
     pathname === "/crews/join" ||
     pathname.includes("/vs/") ||

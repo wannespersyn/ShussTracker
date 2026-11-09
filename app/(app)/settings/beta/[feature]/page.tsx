@@ -14,6 +14,9 @@ import { Screen } from "@/components/v2";
 import { BackLink, BetaPill, BetaTile } from "@/components/beta/BetaUi";
 import { quickRateAction } from "../actions";
 
+/** Beta features with their own screen get a "try it" button. */
+const TRY: Partial<Record<string, string>> = { camera: "/camera" };
+
 export default async function BetaFeaturePage({
   params,
   searchParams,
@@ -57,6 +60,12 @@ export default async function BetaFeaturePage({
           ))}
         </ul>
       </section>
+
+      {TRY[feature] && (
+        <Link href={TRY[feature]!} className="h-13 rounded-[16px] bg-amber text-ink flex items-center justify-center font-heading font-extrabold text-lg tracking-[0.06em] uppercase">
+          {B.tryIt}
+        </Link>
+      )}
 
       <section className="mt-auto rounded-[18px] bg-surface-deep border border-line p-3.5">
         <div className="font-body font-bold text-[15px] text-cream">{format(B.rateQuestion, { feature: copy.title })}</div>
