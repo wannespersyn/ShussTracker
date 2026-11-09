@@ -9,6 +9,7 @@ import { requireGroupMember, requireSession } from "@/lib/db/authz";
 import { getCrew, getCrewInsights } from "@/lib/db/crew-insights";
 import { getCrewGuests } from "@/lib/db/guests";
 import { getGroupTournaments } from "@/lib/db/tournaments";
+import { getGroupRotations } from "@/lib/db/rotations";
 import { addGuestAction, removeGuestAction } from "./guests/actions";
 import { leaveCrew } from "@/app/(app)/crews/actions";
 import { getLocale, getT } from "@/lib/i18n/server";
@@ -41,10 +42,11 @@ export default async function CrewPage({
   const group = await getCrew(crewId);
   if (!group) notFound();
 
-  const [insights, guests, tournamentList, t, locale] = await Promise.all([
+  const [insights, guests, tournamentList, rotationList, t, locale] = await Promise.all([
     getCrewInsights(crewId),
     getCrewGuests(crewId),
     getGroupTournaments(crewId),
+    getGroupRotations(crewId),
     getT(),
     getLocale(),
   ]);
@@ -55,6 +57,7 @@ export default async function CrewPage({
   const ranked = insights.players.filter((p) => p.games > 0);
   const unplayed = insights.players.filter((p) => p.games === 0);
   const activeTournaments = tournamentList.filter((x) => x.status !== "completed");
+  const activeRotation = rotationList.find((x) => x.status !== "completed");
   const since = insights.firstGameAt
     ? new Intl.DateTimeFormat(locale === "nl" ? "nl-BE" : "en-GB", { day: "numeric", month: "short" }).format(insights.firstGameAt).replace("Sept", "Sep")
     : null;
@@ -146,6 +149,22 @@ export default async function CrewPage({
         <span className="flex-1 min-w-0 flex flex-col">
           <span className="font-body font-semibold text-[15px] truncate">{activeTournaments[0]?.name ?? t.crew.tournament}</span>
           <span className="font-body text-xs text-muted">{t.crew.tournamentSub}</span>
+        </span>
+        <ChevronRightIcon className="w-4 h-4 text-muted" />
+      </Link>
+
+      <Link
+        href={activeRotation ? `/americano/${activeRotation.id}` : `/americano/new?crewId=${crewId}`}
+        className="flex items-center gap-3 px-3.5 py-3 rounded-[16px] bg-surface-deep border border-line text-cream -mt-1.5"
+      >
+        <span className="w-10 h-10 rounded-md bg-surface-raised text-gold flex items-center justify-center">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <path d="M4 7h11l-3-3M20 17H9l3 3" />
+          </svg>
+        </span>
+        <span className="flex-1 min-w-0 flex flex-col">
+          <span className="font-body font-semibold text-[15px] truncate">{activeRotation?.name ?? t.rot.cardTitle}</span>
+          <span className="font-body text-xs text-muted">{t.rot.cardSub}</span>
         </span>
         <ChevronRightIcon className="w-4 h-4 text-muted" />
       </Link>

@@ -410,6 +410,66 @@ export const tournamentMatches = pgTable(
 );
 
 /* -----------------------------------------------------------------------
+ * Rotation tournaments (Americano / Mexicano) — "everybody plays with
+ * everybody": individual players, not fixed duos. Each round splits the
+ * active players into 2v2 games (the rest sit out); a played game is a
+ * normal `game` row linked back here, so it counts for every stat.
+ * --------------------------------------------------------------------- */
+
+export const rotationModeEnum = pgEnum("rotation_mode", ["americano", "mexicano"]);
+
+export const rotations = pgTable("rotation", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  groupId: uuid("group_id")
+    .notNull()
+    .references(() => groups.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  mode: rotationModeEnum("mode").notNull(),
+  // Games that can run at the same time tonight (one per mat).
+  mats: integer("mats").notNull().default(1),
+  // Planned rounds (Americano: all generated up front; Mexicano: the cap).
+  rounds: integer("rounds").notNull(),
+  status: tournamentStatusEnum("status").notNull().default("active"),
+  createdBy: uuid("created_by")
+    .notNull()
+    .references(() => users.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const rotationPlayers = pgTable(
+  "rotation_player",
+  {
+    rotationId: uuid("rotation_id")
+      .notNull()
+      .references(() => rotations.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.rotationId, t.userId] })],
+);
+
+/** One planned 2v2 in a round (`idx` = order within the round). Players who
+ * are in the rotation but not in any game of a round sat that round out. */
+export const rotationGames = pgTable(
+  "rotation_game",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    rotationId: uuid("rotation_id")
+      .notNull()
+      .references(() => rotations.id, { onDelete: "cascade" }),
+    round: integer("round").notNull(),
+    idx: integer("idx").notNull(),
+    a1: uuid("a1").notNull().references(() => users.id),
+    a2: uuid("a2").notNull().references(() => users.id),
+    b1: uuid("b1").notNull().references(() => users.id),
+    b2: uuid("b2").notNull().references(() => users.id),
+    gameId: uuid("game_id").references(() => games.id, { onDelete: "set null" }),
+  },
+  (t) => [unique().on(t.rotationId, t.round, t.idx)],
+);
+
+/* -----------------------------------------------------------------------
  * Feedback & feature requests — the in-app "help build Shussapp" inbox.
  * Ideas are public within the app and can be upvoted; bugs/other are only
  * visible to admins.
