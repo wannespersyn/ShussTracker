@@ -198,7 +198,86 @@ export function findField(frame: Frame): Pt[] | null {
     return { x: (mx + s * u.x + t * n.x) / k, y: (my + s * u.y + t * n.y) / k };
   };
   const rough = [meet(T1, L1), meet(T1, R1), meet(B1, R1), meet(B1, L1)];
-  return refineEnds(frame, refineEnds(frame, rough));
+  return fitToPrint(frame, refineEnds(frame, refineEnds(frame, rough)));
+}
+
+/** The outline of the white diamond at each end (sharp corners; the print
+ * rounds them off, so only the middle of each side is used). */
+const KITE: [number, number][] = [
+  [60, 132.5],
+  [282, 12],
+  [361, 132.5],
+  [282, 253],
+];
+
+/** Pairs of mat points just inside / just outside the diamonds' sides. */
+const PRINT_SAMPLES: [Pt, Pt][] = (() => {
+  const out: [Pt, Pt][] = [];
+  const D = 4;
+  for (const side of [1, -1])
+    for (let e = 0; e < 4; e++) {
+      const [ax, ay] = KITE[e];
+      const [bx, by] = KITE[(e + 1) % 4];
+      const len = Math.hypot(bx - ax, by - ay);
+      // Outward normal (the diamond is drawn clockwise in mat space).
+      const nx = (by - ay) / len;
+      const ny = -(bx - ax) / len;
+      for (let i = 0; i < 24; i++) {
+        const t = 0.12 + (0.76 * i) / 23;
+        const x = ax + (bx - ax) * t;
+        const y = ay + (by - ay) * t;
+        const inside = { x: x - nx * D, y: y - ny * D };
+        const outside = { x: x + nx * D, y: y + ny * D };
+        const m = (p: Pt): Pt => (side === 1 ? p : { x: MAT_W - p.x, y: p.y });
+        out.push([m(inside), m(outside)]);
+      }
+    }
+  return out;
+})();
+
+/** Final touch for the corners: nudge them until the printed diamonds'
+ * sides fall exactly on white-inside / black-outside in the photo. */
+export function fitToPrint(frame: Frame, corners: Pt[]): Pt[] {
+  const lumAt = (p: Pt) => {
+    const x = Math.min(frame.w - 2, Math.max(1, Math.round(p.x)));
+    const y = Math.min(frame.h - 2, Math.max(1, Math.round(p.y)));
+    let s = 0;
+    for (let dy = -1; dy <= 1; dy++)
+      for (let dx = -1; dx <= 1; dx++) {
+        const j = ((y + dy) * frame.w + x + dx) * 4;
+        s += 0.299 * frame.data[j] + 0.587 * frame.data[j + 1] + 0.114 * frame.data[j + 2];
+      }
+    return s / 9;
+  };
+  const score = (c: Pt[]) => {
+    const h = homography(MAT_CORNERS, c);
+    let s = 0;
+    for (const [i, o] of PRINT_SAMPLES) s += Math.min(120, Math.max(-40, lumAt(apply(h, i)) - lumAt(apply(h, o))));
+    return s / PRINT_SAMPLES.length;
+  };
+  let best = corners.map((p) => ({ ...p }));
+  let cur = score(best);
+  const start = cur;
+  const unit = Math.hypot(corners[1].x - corners[0].x, corners[1].y - corners[0].y) / MAT_W;
+  for (const step of [6, 3, 1.5, 0.75]) {
+    const d = step * unit;
+    let improved = true;
+    for (let round = 0; improved && round < 12; round++) {
+      improved = false;
+      for (let k = 0; k < 4; k++)
+        for (const [dx, dy] of [[d, 0], [-d, 0], [0, d], [0, -d]]) {
+          const trial = best.map((p, i) => (i === k ? { x: p.x + dx, y: p.y + dy } : p));
+          const s = score(trial);
+          if (s > cur) {
+            cur = s;
+            best = trial;
+            improved = true;
+          }
+        }
+    }
+  }
+  // Only trust it when the diamonds were clearly found.
+  return cur > 25 && cur >= start ? best : corners;
 }
 
 /** Along the field's centre line, the white tip triangles are the cleanest
