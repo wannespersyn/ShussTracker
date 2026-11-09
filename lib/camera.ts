@@ -16,7 +16,6 @@
  * Notes: tuned on real photos of the Leberschuss mat (black field, white
  * zones, silver caps) in a lit room.
  */
-import { MAMAS, ZONES } from "@/lib/mat";
 
 export const MAT_W = 824;
 export const MAT_H = 265;
@@ -447,6 +446,9 @@ function shiftDiff(a: Float32Array, b: Float32Array): Float32Array {
       }
   for (let y = 0; y < WH; y++)
     for (let x = 0; x < WW; x++) if (x < END || x >= WW - END) out[y * WW + x] = 0;
+  for (const r of IGNORE)
+    for (let y = Math.floor(r.y * SCALE); y < Math.min(WH, Math.ceil((r.y + r.h) * SCALE)); y++)
+      for (let x = Math.floor(r.x * SCALE); x < Math.min(WW, Math.ceil((r.x + r.w) * SCALE)); x++) out[y * WW + x] = 0;
   return out;
 }
 
@@ -543,6 +545,38 @@ export function detect(empty: Float32Array, prev: Float32Array, cur: Float32Arra
   };
 }
 
+/* -----------------------------------------------------------------------
+ * The real mat, measured on photos (black playing field = 824 × 265): each
+ * side has a kite-shaped white diamond split into the 3-point tip, the
+ * 2-point band ("DRINKING SINCE 2005") and the 1-point part with the Mena
+ * logo; the mama is the red holder between the bottles at each end. Kept
+ * here (not in lib/mat.ts, which the mat logger draws) until the two are
+ * reconciled.
+ * --------------------------------------------------------------------- */
+type P2 = [number, number];
+const mirror = (pts: P2[]): P2[] => pts.map(([x, y]) => [MAT_W - x, y]);
+const L3: P2[] = [[80, 132.5], [161, 81], [161, 184]];
+const L2: P2[] = [[161, 81], [247, 26], [247, 239], [161, 184]];
+const L1: P2[] = [[247, 26], [275, 8], [365, 132.5], [275, 257], [247, 239]];
+export const REAL_ZONES: { id: string; v: number; pts: P2[] }[] = [
+  { id: "L3", v: 3, pts: L3 },
+  { id: "L2", v: 2, pts: L2 },
+  { id: "L1", v: 1, pts: L1 },
+  { id: "R1", v: 1, pts: mirror(L1) },
+  { id: "R2", v: 2, pts: mirror(L2) },
+  { id: "R3", v: 3, pts: mirror(L3) },
+];
+export const REAL_MAMAS = [
+  { id: "ML", x: 18, y: 92, w: 58, h: 81 },
+  { id: "MR", x: MAT_W - 76, y: 92, w: 58, h: 81 },
+];
+/** Printed bits that never move but confuse the comparison (the
+ * "LEBERSCHUSS" lines with their referee square): ignored. */
+export const IGNORE: { x: number; y: number; w: number; h: number }[] = [
+  { x: 330, y: 14, w: 165, h: 48 },
+  { x: 330, y: 190, w: 165, h: 50 },
+];
+
 function inPoly(x: number, y: number, pts: [number, number][]) {
   let inside = false;
   for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
@@ -555,8 +589,8 @@ function inPoly(x: number, y: number, pts: [number, number][]) {
 
 /** Where a point lies on the mat: a zone ("L2", value 2), a mama, or nothing. */
 export function spotAt(p: Pt): { id: string; v: number | "mama" | null } {
-  for (const m of MAMAS) if (p.x >= m.x && p.x <= m.x + m.w && p.y >= m.y && p.y <= m.y + m.h) return { id: m.id, v: "mama" };
-  for (const z of ZONES) if (inPoly(p.x, p.y, z.pts)) return { id: z.id, v: z.v };
+  for (const m of REAL_MAMAS) if (p.x >= m.x && p.x <= m.x + m.w && p.y >= m.y && p.y <= m.y + m.h) return { id: m.id, v: "mama" };
+  for (const z of REAL_ZONES) if (inPoly(p.x, p.y, z.pts)) return { id: z.id, v: z.v };
   if (p.x < 0 || p.x > MAT_W || p.y < 0 || p.y > MAT_H) return { id: "off", v: null };
   return { id: "none", v: null };
 }

@@ -15,11 +15,10 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { BOTTLES, MAMAS, ZONES } from "@/lib/mat";
-import { MAT_H, MAT_W, WH, WW, align, detect, findField, spotAt, toPhoto, warp, type Blob, type Detection, type Frame, type Pt } from "@/lib/camera";
+import { IGNORE, MAT_H, MAT_W, REAL_MAMAS, REAL_ZONES, WH, WW, align, detect, findField, spotAt, toPhoto, warp, type Blob, type Detection, type Frame, type Pt } from "@/lib/camera";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/client";
-import { format } from "@/lib/i18n";
+import { format, type Dictionary } from "@/lib/i18n";
 
 const MAX_SIDE = 1600;
 
@@ -195,7 +194,7 @@ export function CameraLab() {
         <section className="flex flex-col gap-3">
           <span className={kicker}>{C.step2}</span>
           <p className="font-body text-[15px] leading-normal text-soft">{auto ? C.step2Auto : C.step2Manual}</p>
-          <CornerEditor photo={empty} corners={corners} onChange={setCorners} />
+          <CornerEditor photo={empty} corners={corners} onChange={setCorners} labels={C} />
           <button type="button" onClick={confirmCorners} className={primary}>
             {C.cornersOk}
           </button>
@@ -277,53 +276,102 @@ export function CameraLab() {
   );
 }
 
-/** The photo with four draggable corner handles and the zones drawn over it. */
-function CornerEditor({ photo, corners, onChange }: Readonly<{ photo: Photo; corners: Pt[]; onChange: (c: Pt[]) => void }>) {
+/** Corner fine-tuning: pick a corner, see it magnified, nudge it with the
+ * arrows (or drag it), tick it off. The zones are drawn over the photo so
+ * you can see when everything lines up. */
+function CornerEditor({ photo, corners, onChange, labels }: Readonly<{ photo: Photo; corners: Pt[]; onChange: (c: Pt[]) => void; labels: Dictionary["cam"] }>) {
   const svg = useRef<SVGSVGElement>(null);
-  const [drag, setDrag] = useState<number | null>(null);
+  const [sel, setSel] = useState(0);
+  const [drag, setDrag] = useState(false);
+  const [fine, setFine] = useState(true);
+  const [done, setDone] = useState<boolean[]>([false, false, false, false]);
   const { w, h } = photo.frame;
-  const r = Math.max(w, h) / 32;
+  const r = Math.max(w, h) / 40;
+  const step = (Math.max(w, h) / (fine ? 600 : 120));
 
+  const move = (dx: number, dy: number) =>
+    onChange(corners.map((p, i) => (i === sel ? { x: Math.min(w, Math.max(0, p.x + dx * step)), y: Math.min(h, Math.max(0, p.y + dy * step)) } : p)));
   function at(e: ReactPointerEvent): Pt {
     const b = svg.current!.getBoundingClientRect();
     return { x: Math.min(w, Math.max(0, ((e.clientX - b.left) / b.width) * w)), y: Math.min(h, Math.max(0, ((e.clientY - b.top) / b.height) * h)) };
   }
+  function tick() {
+    setDone((d) => d.map((v, i) => (i === sel ? true : v)));
+    setSel((i) => (i + 1) % 4);
+  }
+
+  const c = corners[sel];
+  const zoom = Math.max(w, h) / 9;
+  const arrow = "h-14 rounded-[14px] bg-surface-deep border border-line-strong text-cream text-2xl font-bold active:bg-surface-raised";
 
   return (
-    <div className="relative select-none">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={photo.url} alt="" className="w-full h-auto rounded-[16px]" draggable={false} />
-      <svg
-        ref={svg}
-        viewBox={`0 0 ${w} ${h}`}
-        className="absolute inset-0 w-full h-full touch-none"
-        onPointerMove={(e) => {
-          if (drag === null) return;
-          const next = corners.map((p, i) => (i === drag ? at(e) : p));
-          onChange(next);
-        }}
-        onPointerUp={() => setDrag(null)}
-        onPointerCancel={() => setDrag(null)}
-      >
-        <Overlay corners={corners} w={w} />
-        {corners.map((p, i) => (
-          <g
+    <div className="flex flex-col gap-3">
+      <div className="relative select-none">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={photo.url} alt="" className="w-full h-auto rounded-[16px]" draggable={false} />
+        <svg
+          ref={svg}
+          viewBox={`0 0 ${w} ${h}`}
+          className="absolute inset-0 w-full h-full touch-none"
+          onPointerMove={(e) => drag && onChange(corners.map((p, i) => (i === sel ? at(e) : p)))}
+          onPointerUp={() => setDrag(false)}
+          onPointerCancel={() => setDrag(false)}
+        >
+          <Overlay corners={corners} w={w} />
+          {corners.map((p, i) => (
+            <g
+              key={i}
+              onPointerDown={(e) => {
+                svg.current?.setPointerCapture(e.pointerId);
+                setSel(i);
+                setDrag(true);
+              }}
+            >
+              <circle cx={p.x} cy={p.y} r={r * 1.6} fill="transparent" />
+              <circle cx={p.x} cy={p.y} r={r} fill={i === sel ? "rgba(255,182,39,0.45)" : "rgba(255,255,255,0.2)"} stroke={i === sel ? "#ffb627" : "#fff"} strokeWidth={w / 250} />
+              <text x={p.x} y={p.y + r * 0.35} textAnchor="middle" fontSize={r} fontWeight={800} fill={done[i] ? "#7fe0a8" : "#111"}>
+                {done[i] ? "✓" : i + 1}
+              </text>
+            </g>
+          ))}
+        </svg>
+      </div>
+
+      <div className="grid grid-cols-[1fr_auto] gap-3 items-center">
+        <svg viewBox={`${c.x - zoom / 2} ${c.y - zoom / 2} ${zoom} ${zoom}`} className="w-full aspect-square rounded-[14px] border border-line-strong bg-black" aria-label={format(labels.cornerN, { n: sel + 1 })}>
+          <image href={photo.url} x={0} y={0} width={w} height={h} />
+          <Overlay corners={corners} w={zoom * 2} />
+          <line x1={c.x - zoom} x2={c.x + zoom} y1={c.y} y2={c.y} stroke="#ffb627" strokeWidth={zoom / 150} />
+          <line x1={c.x} x2={c.x} y1={c.y - zoom} y2={c.y + zoom} stroke="#ffb627" strokeWidth={zoom / 150} />
+        </svg>
+        <div className="grid grid-cols-3 gap-1.5 w-44">
+          <span />
+          <button type="button" onClick={() => move(0, -1)} aria-label={labels.up} className={arrow}>↑</button>
+          <span />
+          <button type="button" onClick={() => move(-1, 0)} aria-label={labels.left2} className={arrow}>←</button>
+          <button type="button" onClick={tick} aria-label={labels.cornerDone} className="h-14 rounded-[14px] bg-mint text-ink text-2xl font-bold">✓</button>
+          <button type="button" onClick={() => move(1, 0)} aria-label={labels.right2} className={arrow}>→</button>
+          <span />
+          <button type="button" onClick={() => move(0, 1)} aria-label={labels.down} className={arrow}>↓</button>
+          <button type="button" onClick={() => setFine((f) => !f)} aria-pressed={!fine} className="h-14 rounded-[14px] border border-line-strong text-[11px] font-heading font-bold tracking-[0.08em] text-muted">
+            {fine ? labels.fine : labels.coarse}
+          </button>
+        </div>
+      </div>
+
+      <div role="group" aria-label={labels.step2} className="grid grid-cols-4 gap-1.5">
+        {[0, 1, 2, 3].map((i) => (
+          <button
             key={i}
-            onPointerDown={(e) => {
-              (e.currentTarget.ownerSVGElement ?? e.currentTarget).setPointerCapture?.(e.pointerId);
-              setDrag(i);
-            }}
-            className="cursor-grab"
+            type="button"
+            aria-pressed={sel === i}
+            onClick={() => setSel(i)}
+            className={cn("h-11 rounded-[12px] font-heading font-extrabold text-base", sel === i ? "bg-amber text-ink" : done[i] ? "bg-mint/15 text-mint border border-mint/40" : "bg-surface-deep border border-line text-muted")}
           >
-            <circle cx={p.x} cy={p.y} r={r * 1.6} fill="transparent" />
-            <circle cx={p.x} cy={p.y} r={r} fill="rgba(255,182,39,0.35)" stroke="#ffb627" strokeWidth={w / 250} />
-            <circle cx={p.x} cy={p.y} r={w / 220} fill="#ffb627" />
-            <text x={p.x} y={p.y - r * 1.25} textAnchor="middle" fontSize={r * 0.9} fontWeight={800} fill="#ffb627" stroke="#111" strokeWidth={w / 500}>
-              {i + 1}
-            </text>
-          </g>
+            {done[i] ? `✓ ${i + 1}` : format(labels.cornerShort, { n: i + 1 })}
+          </button>
         ))}
-      </svg>
+      </div>
     </div>
   );
 }
@@ -338,10 +386,10 @@ function Overlay({ corners, w }: Readonly<{ corners: Pt[]; w: number }>) {
   return (
     <g pointerEvents="none">
       <polygon points={[P(0, 0), P(MAT_W, 0), P(MAT_W, MAT_H), P(0, MAT_H)].join(" ")} fill="none" stroke="#ffb627" strokeWidth={sw * 1.4} />
-      {ZONES.map((z) => (
+      {REAL_ZONES.map((z) => (
         <polygon key={z.id} points={z.pts.map(([x, y]) => P(x, y)).join(" ")} fill="rgba(79,209,255,0.12)" stroke="#4fd1ff" strokeWidth={sw} />
       ))}
-      {MAMAS.map((m) => (
+      {REAL_MAMAS.map((m) => (
         <polygon key={m.id} points={[P(m.x, m.y), P(m.x + m.w, m.y), P(m.x + m.w, m.y + m.h), P(m.x, m.y + m.h)].join(" ")} fill="rgba(255,107,91,0.2)" stroke="#ff6b5b" strokeWidth={sw} />
       ))}
     </g>
@@ -393,8 +441,8 @@ function TopDown({ warped, label }: Readonly<{ warped: Float32Array; label: stri
       <div className="relative">
         <canvas ref={ref} width={WW} height={WH} className="w-full h-auto rounded-[12px] border border-line" aria-label={label} />
         <svg viewBox={`0 0 ${MAT_W} ${MAT_H}`} className="absolute inset-0 w-full h-full pointer-events-none" aria-hidden="true">
-          {BOTTLES.map(([x, y]) => (
-            <circle key={`${x}-${y}`} cx={x} cy={y} r={19} fill="none" stroke="rgba(255,255,255,0.3)" />
+          {IGNORE.map((r) => (
+            <rect key={`${r.x}-${r.y}`} x={r.x} y={r.y} width={r.w} height={r.h} fill="none" stroke="rgba(255,255,255,0.35)" strokeDasharray="6 5" />
           ))}
         </svg>
       </div>
