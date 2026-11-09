@@ -84,17 +84,24 @@ export function findField(frame: Frame): Pt[] | null {
   const k = Math.min(1, 480 / Math.max(frame.w, frame.h));
   const w = Math.max(1, Math.round(frame.w * k));
   const h = Math.max(1, Math.round(frame.h * k));
-  let dark: Uint8Array = new Uint8Array(w * h);
+  // Dark, grey pixels; the cut-off adapts to the light (Otsu on luma, capped).
+  const lum = new Float32Array(w * h);
+  const grey = new Uint8Array(w * h);
+  const hist = new Float64Array(256);
   for (let y = 0; y < h; y++)
     for (let x = 0; x < w; x++) {
       const i = (Math.min(frame.h - 1, Math.floor(y / k)) * frame.w + Math.min(frame.w - 1, Math.floor(x / k))) * 4;
       const r = frame.data[i];
       const g = frame.data[i + 1];
       const b = frame.data[i + 2];
-      const luma = 0.299 * r + 0.587 * g + 0.114 * b;
-      const sat = Math.max(r, g, b) - Math.min(r, g, b);
-      dark[y * w + x] = luma < 70 && sat < 40 ? 1 : 0;
+      const l = 0.299 * r + 0.587 * g + 0.114 * b;
+      lum[y * w + x] = l;
+      grey[y * w + x] = Math.max(r, g, b) - Math.min(r, g, b) < 45 ? 1 : 0;
+      hist[Math.min(255, Math.round(l))]++;
     }
+  const cut = Math.min(95, Math.max(40, otsu(hist) * 0.8));
+  let dark: Uint8Array = new Uint8Array(w * h);
+  for (let p = 0; p < dark.length; p++) dark[p] = lum[p] < cut && grey[p] ? 1 : 0;
   dark = morph(morph(morph(morph(dark, w, h, false), w, h, false), w, h, true), w, h, true); // opening ×2
   const comp = largest(dark, w, h);
   if (!comp || comp.length < w * h * 0.05) return null;
@@ -190,8 +197,42 @@ export function findField(frame: Frame): Pt[] | null {
   return [meet(T1, L1), meet(T1, R1), meet(B1, R1), meet(B1, L1)];
 }
 
+/** Mat point → photo point for a set of field corners (for overlays). */
+export function toPhoto(corners: Pt[], p: Pt): Pt {
+  return apply(homography(MAT_CORNERS, corners), p);
+}
+
 /** The same corners turned 180° (the other end is "left"). */
 export const turned = (c: Pt[]): Pt[] => [c[2], c[3], c[0], c[1]];
+
+/** Otsu's threshold for a 256-bin histogram. */
+function otsu(hist: Float64Array): number {
+  let total = 0;
+  let sum = 0;
+  for (let i = 0; i < 256; i++) {
+    total += hist[i];
+    sum += i * hist[i];
+  }
+  let wB = 0;
+  let sumB = 0;
+  let best = 0;
+  let at = 70;
+  for (let i = 0; i < 256; i++) {
+    wB += hist[i];
+    if (!wB) continue;
+    const wF = total - wB;
+    if (!wF) break;
+    sumB += i * hist[i];
+    const mB = sumB / wB;
+    const mF = (sum - sumB) / wF;
+    const between = wB * wF * (mB - mF) ** 2;
+    if (between > best) {
+      best = between;
+      at = i;
+    }
+  }
+  return at;
+}
 
 function median(xs: number[]) {
   const s = [...xs].sort((a, b) => a - b);
