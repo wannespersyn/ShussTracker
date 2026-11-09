@@ -4,19 +4,27 @@
  * "Throw done", and the app follows the turn order, extra throws from shooting
  * boxes and the drinking per round. The game ends when a team has emptied its
  * pints; everything (every cap move) is handed to `onSave` as a MatGameLog.
+ *
+ * Camera (beta): link a live camera from the crew (📹). The camera is armed
+ * only while a throw is expected (never while the mat is cleared between
+ * rounds) and starts fresh each round; every throw it sees moves the caps
+ * here (placeFromCamera) and is confirmed after a short countdown, or by
+ * "Throw done" after you fixed it by hand. The confirmed mat goes back to
+ * the camera session as a training label.
  */
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/client";
 import { format } from "@/lib/i18n";
 import type { Duo } from "@/lib/teams";
 import { BetaPill } from "@/components/beta/BetaUi";
 import { MamaShot } from "@/components/beta/MamaShot";
+import { armCameraAction, getCameraStateAction, getLiveCamerasAction, labelCameraThrowAction, linkCameraLoggerAction, unlinkCameraLoggerAction } from "@/app/(app)/camera/actions";
 import {
   BOTTLES, CORNERS, FIELD_OUTLINE, MAMAS, ZONES,
-  dropCap, drunk, finishThrow, knockedMamas, mamaTeam, playJoker, newMatState, nextRound, placeA1, spotOf, teamOfSlot, toGameLog, turnInfo, zoneTeam,
+  dropCap, drunk, finishThrow, fromField, placeFromCamera, toField, knockedMamas, mamaTeam, playJoker, newMatState, nextRound, placeA1, spotOf, teamOfSlot, toGameLog, turnInfo, zoneTeam,
   type Corner, type MatGameLog, type MatState, type Slot, type Spot,
 } from "@/lib/mat";
 
@@ -24,6 +32,9 @@ const HELP_KEY = "shuss.matHelpHidden";
 const TEAM_FILL = ["#EFE7D3", "#5FB7FF"];
 const TEAM_STROKE = ["#C9A55A", "#2f6fa3"];
 const TEAM_DOT = ["bg-[#EFE7D3]", "bg-[#5FB7FF]"];
+/** Seconds before a camera throw counts as right. */
+const CAM_CONFIRM = 6;
+const CAM_POLL = 1500;
 
 export function MatLogger({
   teams,
@@ -32,7 +43,10 @@ export function MatLogger({
   celebrate,
   onSave,
   onClose,
+  groupId,
 }: Readonly<{
+  /** The crew, to find a live camera to link (beta). */
+  groupId?: string;
   teams: Duo[];
   names: Record<string, string>;
   saving?: boolean;
@@ -50,7 +64,7 @@ export function MatLogger({
     a1: teams[0].players[0]?.id, a2: teams[0].players[1]?.id, b1: teams[1].players[0]?.id, b2: teams[1].players[1]?.id,
   });
   // Opens on the explainer unless the player chose "don't show again" (only mounted client-side, mid-flow).
-  const [dialog, setDialog] = useState<null | "help" | "setup" | "pints" | "end">(() => {
+  const [dialog, setDialog] = useState<null | "help" | "setup" | "pints" | "end" | "camera">(() => {
     try { return typeof window !== "undefined" && localStorage.getItem(HELP_KEY) === "1" ? null : "help"; } catch { return "help"; }
   });
   const [winner, setWinner] = useState<number | null>(null);
@@ -63,6 +77,20 @@ export function MatLogger({
   /** Cap a tap on the mat will move; null = the thrower's own cap. */
   const [selected, setSelected] = useState<number | null>(null);
 
+  /* ---------- camera (beta) ---------- */
+  const [cam, setCam] = useState<{ id: string; name: string } | null>(null);
+  const [cams, setCams] = useState<{ id: string; name: string; calibrating: boolean }[] | null>(null);
+  /** A camera throw placed on the mat, waiting to be confirmed. */
+  const [camPending, setCamPending] = useState<{ n: number; left: number; touched: boolean; found: boolean } | null>(null);
+  const camSeen = useRef<number | null>(null);
+  const armedRound = useRef<number | null>(null);
+  const stRef = useRef(st);
+  const camPendingRef = useRef(camPending);
+  useEffect(() => {
+    stRef.current = st;
+    camPendingRef.current = camPending;
+  });
+
   const nameOf = (s: Slot) => names[slots[s] ?? ""] ?? s.toUpperCase();
   const teamName = (ti: number) => (ti === 0 ? ["a1", "a2"] : ["b1", "b2"]).filter((s) => slots[s as Slot]).map((s) => nameOf(s as Slot)).join(" & ");
 
@@ -74,9 +102,15 @@ export function MatLogger({
     setSt(draft);
   }
   /** Commit the throw; if it sent a cap into a mama, play the mama animation (beta celebrations). */
-  function throwDone(miss: boolean) {
+  function throwDone(miss: boolean, how: "auto" | "confirmed" | "corrected" = "confirmed") {
+    const pend = camPending;
+    if (cam && pend) setCamPending(null);
     apply((d) => {
       const ok = finishThrow(d, miss);
+      if (ok && cam && pend) {
+        const label = d.caps.filter((c) => !c.waiting).map((c) => ({ ...toField(c), owner: c.owner, no: c.no }));
+        labelCameraThrowAction(cam.id, pend.n, label, pend.touched && how === "confirmed" ? "corrected" : how).catch(() => {});
+      }
       const last = d.throws.filter((x) => x.kind !== "skipped").at(-1);
       if (ok && celebrate && last?.moves.some((m) => m.to.spot === "ML" || m.to.spot === "MR")) {
         setMama({ name: nameOf(last.slot), team: teamOfSlot(last.slot), k: Date.now() });
@@ -84,12 +118,86 @@ export function MatLogger({
       return ok;
     });
   }
+  const throwDoneRef = useRef(throwDone);
+  useEffect(() => {
+    throwDoneRef.current = throwDone;
+  });
   const undo = () => {
     const prev = history.at(-1);
     if (!prev) return;
+    setCamPending(null);
     setHistory((h) => h.slice(0, -1));
     setSt(prev);
   };
+
+  // Arm the camera only while a throw is expected; fresh start each round.
+  useEffect(() => {
+    if (!cam) return;
+    const fresh = armedRound.current !== st.round;
+    const armed = st.phase === "throw";
+    if (armed) armedRound.current = st.round;
+    armCameraAction(cam.id, armed, armed && fresh).catch(() => {});
+  }, [cam, st.phase, st.round]);
+
+  // Follow the camera: place the next throw it saw.
+  useEffect(() => {
+    if (!cam) return;
+    const id = window.setInterval(() => {
+      getCameraStateAction(cam.id)
+        .then((cs) => {
+          const newest = cs.throws[0]?.n ?? 0;
+          if (camSeen.current === null) {
+            camSeen.current = newest;
+            return;
+          }
+          const cur = stRef.current;
+          if (cur.phase !== "throw") {
+            camSeen.current = newest;
+            return;
+          }
+          const next = cs.throws.filter((x) => x.n > camSeen.current!).sort((a, b) => a.n - b.n)[0];
+          if (!next) return;
+          if (camPendingRef.current) return; // one at a time: confirm or fix the current one first
+          camSeen.current = next.n;
+          const d = structuredClone(cur);
+          const found = placeFromCamera(d, next.spots.map(fromField), next.gone.map(fromField));
+          setHistory((h) => [...h, cur]);
+          setSt(d);
+          setCamPending({ n: next.n, left: CAM_CONFIRM, touched: false, found });
+        })
+        .catch(() => {});
+    }, CAM_POLL);
+    return () => window.clearInterval(id);
+  }, [cam]);
+
+  // Countdown: an untouched camera throw counts as right.
+  useEffect(() => {
+    if (!camPending || camPending.touched || !camPending.found) return;
+    const id = window.setTimeout(() => {
+      if (camPending.left <= 1) throwDoneRef.current(false, "auto");
+      else setCamPending((p) => (p && p.n === camPending.n ? { ...p, left: p.left - 1 } : p));
+    }, 1000);
+    return () => window.clearTimeout(id);
+  }, [camPending]);
+
+  async function openCams() {
+    setDialog("camera");
+    setCams(null);
+    if (groupId) setCams(await getLiveCamerasAction(groupId).catch(() => []));
+  }
+  async function link(c: { id: string; name: string }) {
+    await linkCameraLoggerAction(c.id);
+    camSeen.current = null;
+    armedRound.current = null;
+    setCam(c);
+    setDialog(null);
+  }
+  function unlink() {
+    if (cam) unlinkCameraLoggerAction(cam.id).catch(() => {});
+    setCam(null);
+    setCamPending(null);
+    setDialog(null);
+  }
 
   /* ---------- labels ---------- */
   const spotLabel = (s: Spot, short = false) => {
@@ -132,6 +240,7 @@ export function MatLogger({
   }
   function onDown(e: React.PointerEvent) {
     if (st.phase !== "throw") return;
+    if (camPending) setCamPending({ ...camPending, touched: true });
     const capEl = (e.target as Element).closest<SVGGElement>("[data-cap]");
     const p = toLocal(e);
     const c = capEl ? st.caps.find((x) => x.no === Number(capEl.dataset.cap)) : undefined;
@@ -248,6 +357,11 @@ export function MatLogger({
               <svg viewBox="0 0 24 24" className="w-4.5 h-4.5" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></svg>
             </button>
           )}
+          {groupId && (
+            <button type="button" onClick={openCams} aria-label={M.camBtn} className={cn("w-9 h-9 shrink-0 rounded-pill border flex items-center justify-center text-[16px]", cam ? "bg-red/20 border-red/60" : "bg-surface-raised border-line")}>
+              📹
+            </button>
+          )}
           <button type="button" onClick={() => setDialog("pints")} aria-label={M.pintsBtn} className="w-9 h-9 shrink-0 rounded-pill bg-amber/15 border border-amber/50 flex items-center justify-center text-[17px]">🍺</button>
           <button type="button" onClick={() => setDialog("setup")} aria-label={M.lineup} className="w-9 h-9 shrink-0 rounded-pill bg-surface-raised border border-line text-cream flex items-center justify-center">
             <svg viewBox="0 0 24 24" className="w-4.5 h-4.5" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5" /><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18.5 14.8c1.6.8 2.6 2.6 3 5.2" /></svg>
@@ -334,6 +448,22 @@ export function MatLogger({
 
         {/* dock */}
         <footer className="rounded-[18px] bg-surface-deep border border-line p-3 flex flex-col gap-2.5">
+          {cam && camPending && st.phase === "throw" && (
+            <div role="status" className="flex items-center gap-2 px-3 py-2 rounded-[12px] bg-red/10 border border-red/40 font-body text-[13px]">
+              <span aria-hidden="true">📹</span>
+              <span className="flex-1 min-w-0">
+                {!camPending.found ? M.camNone : camPending.touched ? M.camFixing : format(M.camAuto, { s: camPending.left })}
+              </span>
+              {camPending.found && !camPending.touched && (
+                <button type="button" onClick={() => setCamPending({ ...camPending, touched: true })} className="h-8 px-3 rounded-pill bg-surface-raised border border-line font-heading font-bold text-xs">
+                  {M.camStop}
+                </button>
+              )}
+            </div>
+          )}
+          {cam && !camPending && st.phase === "throw" && (
+            <span className="font-body text-xs text-muted">📹 {format(M.camLinked, { name: cam.name })}</span>
+          )}
           {st.phase === "done" && lastResult ? (
             <>
               <span className="font-display font-extrabold text-xl uppercase tracking-[0.04em] text-gold">{format(M.drinkTitle, { n: lastResult.round })}</span>
@@ -511,6 +641,36 @@ export function MatLogger({
                       </button>
                     ))}
                   </div>
+                )}
+              </>
+            )}
+
+            {dialog === "camera" && (
+              <>
+                <div className="flex items-center justify-between">
+                  <h2 className="font-display font-extrabold text-[28px] leading-none uppercase">{M.camTitle}</h2>
+                  <button type="button" onClick={() => setDialog(null)} aria-label={M.close} className="w-9 h-9 rounded-pill bg-surface-panel border border-line">✕</button>
+                </div>
+                <span className="font-body text-xs text-muted">{M.camSub}</span>
+                {cam ? (
+                  <>
+                    <span className="font-body font-semibold">📹 {format(M.camLinked, { name: cam.name })}</span>
+                    <button type="button" onClick={unlink} className="h-11 rounded-[12px] bg-surface-panel border border-line font-display font-bold uppercase tracking-[0.04em]">
+                      {M.camUnlink}
+                    </button>
+                  </>
+                ) : cams === null ? (
+                  <span className="font-body text-sm text-muted">…</span>
+                ) : cams.length === 0 ? (
+                  <span className="font-body text-sm text-soft">{M.camNoneLive}</span>
+                ) : (
+                  cams.map((c) => (
+                    <button key={c.id} type="button" disabled={c.calibrating} onClick={() => link(c)} className="min-h-14 rounded-[14px] bg-surface-panel border border-line-strong flex items-center gap-3 px-4 text-left disabled:opacity-50">
+                      <span className="w-2.5 h-2.5 rounded-full bg-red shrink-0" aria-hidden="true" />
+                      <span className="flex-1 font-display font-extrabold text-lg uppercase">{c.name}</span>
+                      <span className="font-body text-xs text-muted">{c.calibrating ? M.camCalibrating : M.camLink}</span>
+                    </button>
+                  ))
                 )}
               </>
             )}

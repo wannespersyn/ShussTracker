@@ -59,10 +59,10 @@ const SETTLE = 3;
 const CONFIRM_S = 6;
 
 type Phase = "start" | "calibrate" | "live";
-type Status = "waiting" | "moving" | "looking";
+type Status = "waiting" | "moving" | "looking" | "paused";
 type Throw = { n: number; spots: Spot[]; gone: Spot[]; corrected: boolean; img: string | null };
 /** How often the session is synced with the crew (ms). */
-const SYNC = 2500;
+const SYNC = 1500;
 
 /** Small grey copy of a warped frame (one value per cell). */
 function tiny(w: Float32Array): Float32Array {
@@ -114,6 +114,7 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
   const [crewId, setCrewId] = useState(initialCrewId ?? crews[0]?.id ?? "");
   const [sessionId, setSessionId] = useState<string | null>(null);
   const session = useRef<string | null>(null);
+  const [loggerName, setLoggerName] = useState<string | null>(null);
   // Snapshot version on the server, and the last "new snapshot" request seen.
   const snapVersion = useRef(0);
   const handledRequest = useRef(0);
@@ -129,6 +130,11 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
     still: null as Float32Array | null,
     prevTiny: null as Float32Array | null,
     base: null as Float32Array | null,
+    // Linked to a mat logger: only judge while armed; armVersion bump = rebase.
+    gated: false,
+    armed: false,
+    armVersion: 0,
+    rebase: false,
     calm: 0,
     busy: false,
     n: 0,
@@ -249,8 +255,16 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
       const small = tiny(warp(f, S.corners, true));
       const prev = S.prevTiny;
       S.prevTiny = small;
-      if (!S.base) {
+      if (S.gated && !S.armed) {
+        // No throw expected (round over, mat being cleared): ignore it all.
+        setStatus("paused");
+        return;
+      }
+      if (!S.base || S.rebase) {
         S.base = small;
+        if (S.rebase) S.still = warp(f, S.corners);
+        S.rebase = false;
+        setStatus("waiting");
         return;
       }
       if (prev && changed(small, prev, MOTION_CELL) >= MIN_CELLS) {
@@ -329,6 +343,14 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
             watch(st.corners);
             return;
           }
+          const S = live.current;
+          S.gated = st.logger !== null;
+          S.armed = st.armed;
+          if (st.armVersion > S.armVersion) {
+            S.armVersion = st.armVersion;
+            S.rebase = true;
+          }
+          setLoggerName(st.logger?.name ?? null);
           const remote = new Map(st.throws.filter((th) => th.corrected).map((th) => [th.n, th.spots]));
           if (!remote.size) return;
           setThrows((ts) => ts.map((th) => (remote.has(th.n) && !th.corrected ? { ...th, spots: remote.get(th.n) ?? [], corrected: true } : th)));
@@ -386,7 +408,7 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
               status === "moving" ? "bg-amber text-ink" : status === "looking" ? "bg-cream text-ink" : "bg-black/60 text-cream",
             )}
           >
-            {status === "moving" ? L.moving : status === "looking" ? L.looking : L.waiting}
+            {status === "moving" ? L.moving : status === "looking" ? L.looking : status === "paused" ? L.paused : L.waiting}
           </span>
         )}
       </div>
@@ -484,7 +506,9 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
       )}
 
       {phase === "live" && sessionId && (
-        <p className="font-body text-[13px] text-muted">{format(L.sharing, { crew: crews.find((c) => c.id === crewId)?.name ?? "" })}</p>
+        <p className="font-body text-[13px] text-muted">
+          {loggerName ? format(L.linked, { name: loggerName }) : format(L.sharing, { crew: crews.find((c) => c.id === crewId)?.name ?? "" })}
+        </p>
       )}
 
       {phase === "live" && throws.length > 0 && (

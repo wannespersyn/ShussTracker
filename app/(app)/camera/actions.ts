@@ -6,10 +6,14 @@
  */
 "use server";
 
-import { requireUserId } from "@/lib/db/authz";
+import { requireGroupMember, requireUserId } from "@/lib/db/authz";
 import { hasBeta } from "@/lib/db/beta";
 import {
   addCameraThrow,
+  armCamera,
+  labelCameraThrow,
+  linkCameraLogger,
+  unlinkCameraLogger,
   correctCameraThrow,
   correctCameraThrowByN,
   getCameraSnapshot,
@@ -19,6 +23,7 @@ import {
   endCameraSession,
   getCameraState,
   getCameraThrowImage,
+  getLiveCameras,
   startCameraSession,
 } from "@/lib/db/camera";
 
@@ -75,4 +80,40 @@ export async function setCameraCornersAction(sessionId: string, version: number,
 
 export async function getCameraSnapshotAction(sessionId: string) {
   return getCameraSnapshot(await requireUserId(), sessionId);
+}
+
+export async function linkCameraLoggerAction(sessionId: string) {
+  await linkCameraLogger(await requireUserId(), sessionId);
+}
+
+export async function unlinkCameraLoggerAction(sessionId: string) {
+  await unlinkCameraLogger(await requireUserId(), sessionId);
+}
+
+export async function armCameraAction(sessionId: string, armed: boolean, fresh: boolean) {
+  await armCamera(await requireUserId(), sessionId, armed, fresh);
+}
+
+const SLOTS = new Set(["a1", "a2", "b1", "b2"]);
+export async function labelCameraThrowAction(
+  sessionId: string,
+  n: number,
+  label: { x: number; y: number; owner: string; no: number }[],
+  how: "auto" | "confirmed" | "corrected",
+) {
+  if (!Number.isInteger(n) || !spotsOk(label) || !label.every((c) => SLOTS.has(c.owner) && Number.isInteger(c.no)) || !["auto", "confirmed", "corrected"].includes(how))
+    throw new Error("Bad label");
+  await labelCameraThrow(
+    await requireUserId(),
+    sessionId,
+    n,
+    label.map((c) => ({ ...clean([c])[0], owner: c.owner, no: c.no })),
+    how,
+  );
+}
+
+export async function getLiveCamerasAction(groupId: string) {
+  const userId = await requireUserId();
+  await requireGroupMember(userId, groupId);
+  return getLiveCameras(groupId);
 }

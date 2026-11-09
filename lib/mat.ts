@@ -295,6 +295,47 @@ export function dropCap(st: MatState, no: number) {
   }
 }
 
+/** A camera saw the throw: `landed` = where caps came to rest (strongest
+ * first), `gone` = where caps were knocked away from (logger coordinates).
+ * Knocked caps take the nearest landing spot, the thrower's cap the best one
+ * left. Returns whether the thrower's cap got a spot. */
+export function placeFromCamera(st: MatState, landed: { x: number; y: number }[], gone: { x: number; y: number }[]): boolean {
+  const mine = st.caps.find((c) => c.no === st.activeCap);
+  if (!mine) return false;
+  const others = st.caps.filter((c) => c.no !== mine.no && !c.waiting);
+  const knocked: Cap[] = [];
+  for (const g of gone) {
+    let best: Cap | null = null;
+    let bd = 40;
+    for (const c of others) {
+      if (knocked.includes(c)) continue;
+      const d = Math.hypot(c.x - g.x, c.y - g.y);
+      if (d < bd) [best, bd] = [c, d];
+    }
+    if (best) knocked.push(best);
+  }
+  // A landing right where an untouched cap already lies is that cap, seen again.
+  const free = landed.filter((p) => !others.some((c) => !knocked.includes(c) && Math.hypot(c.x - p.x, c.y - p.y) < 18));
+  for (const c of knocked) {
+    if (free.length <= 1) break;
+    let bi = -1;
+    let bd = Infinity;
+    free.forEach((p, i) => {
+      if (i === 0 && free.length > 1 && knocked.length < free.length) return; // keep the strongest for the thrower
+      const d = Math.hypot(c.x - p.x, c.y - p.y);
+      if (d < bd) [bi, bd] = [i, d];
+    });
+    if (bi < 0) continue;
+    const [p] = free.splice(bi, 1);
+    Object.assign(c, { x: Math.round(p.x), y: Math.round(p.y), waiting: false });
+    dropCap(st, c.no);
+  }
+  if (!free.length) return false;
+  Object.assign(mine, { x: Math.round(free[0].x), y: Math.round(free[0].y), waiting: false });
+  dropCap(st, mine.no);
+  return true;
+}
+
 /* ---------- what gets saved ---------- */
 
 export type MatMoveLog = { capNo: number; ownerId: string; isThrownCap: boolean; fromX: number; fromY: number; fromSpot: string; toX: number; toY: number; toSpot: string; toCountsForTeam: number | null };

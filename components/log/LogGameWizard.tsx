@@ -482,6 +482,7 @@ export function LogGameWizard({
 
       {step === "play" && teams && (
         <MatLogger
+          groupId={groupId}
           teams={teams}
           names={Object.fromEntries(teams.flatMap((x) => x.players).map((p) => [p.id, shortNames[p.id] ?? p.name]))}
           saving={isPending}

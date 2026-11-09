@@ -725,6 +725,16 @@ export const cameraSessions = pgTable("camera_session", {
   snapRequest: integer("snap_request").notNull().default(0),
   // Field corners on the snapshot (photo pixels, mat order).
   corners: jsonb("corners").$type<{ x: number; y: number }[]>(),
+  // "test" until a mat logger links it to a game; only "game" data is used
+  // for training.
+  kind: text("kind").notNull().default("test"),
+  // The player logging the game in the mat logger (null = camera on its own).
+  loggerId: uuid("logger_id").references(() => users.id, { onDelete: "set null" }),
+  // Linked to a logger, the camera only judges throws while armed (a throw is
+  // expected); a bump of armVersion = start from the mat as it is now (after
+  // clearing it for a new round).
+  armed: boolean("armed").notNull().default(false),
+  armVersion: integer("arm_version").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -745,6 +755,11 @@ export const cameraThrows = pgTable(
     // Where caps were knocked away from.
     gone: jsonb("gone").$type<{ x: number; y: number }[]>().notNull().default([]),
     correctedBy: uuid("corrected_by").references(() => users.id, { onDelete: "set null" }),
+    // Training label: every cap on the mat after the throw (field units,
+    // with owner slot), as confirmed in the mat logger, and how sure it is:
+    // "corrected" (moved by hand), "confirmed" (tapped done), "auto".
+    label: jsonb("label").$type<{ x: number; y: number; owner: string; no: number }[]>(),
+    labelHow: text("label_how"),
     // Small top-down JPEG (data URL) of the mat after the throw.
     image: text("image"),
     createdAt: timestamp("created_at").notNull().defaultNow(),

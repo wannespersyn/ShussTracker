@@ -43,6 +43,10 @@ export type CameraState = {
   snap: { version: number; w: number; h: number } | null;
   snapRequest: number;
   corners: { x: number; y: number }[] | null;
+  /** Linked to a mat logger: only judge throws while armed. */
+  logger: { id: string; name: string } | null;
+  armed: boolean;
+  armVersion: number;
   throws: CameraThrow[];
 };
 
@@ -104,7 +108,7 @@ export async function correctCameraThrowByN(userId: string, sessionId: string, n
 export async function getCameraState(userId: string, sessionId: string): Promise<CameraState> {
   const s = await sessionFor(userId, sessionId);
   if (s.userId === userId && s.live) await db.update(cameraSessions).set({ updatedAt: new Date() }).where(eq(cameraSessions.id, sessionId));
-  const [rows, cam] = await Promise.all([
+  const [rows, cam, logger] = await Promise.all([
     db
       .select({ id: cameraThrows.id, n: cameraThrows.n, found: cameraThrows.found, spots: cameraThrows.spots, gone: cameraThrows.gone, correctedBy: cameraThrows.correctedBy, createdAt: cameraThrows.createdAt })
       .from(cameraThrows)
@@ -112,6 +116,7 @@ export async function getCameraState(userId: string, sessionId: string): Promise
       .orderBy(desc(cameraThrows.n))
       .limit(MAX_THROWS),
     db.query.users.findFirst({ where: eq(users.id, s.userId), columns: { name: true } }),
+    s.loggerId ? db.query.users.findFirst({ where: eq(users.id, s.loggerId), columns: { id: true, name: true } }) : Promise.resolve(undefined),
   ]);
   return {
     id: s.id,
@@ -123,6 +128,9 @@ export async function getCameraState(userId: string, sessionId: string): Promise
     snap: s.snapVersion > 0 && s.snapW && s.snapH ? { version: s.snapVersion, w: s.snapW, h: s.snapH } : null,
     snapRequest: s.snapRequest,
     corners: s.corners ?? null,
+    logger: logger ? { id: logger.id, name: logger.name ?? "?" } : null,
+    armed: s.armed,
+    armVersion: s.armVersion,
     throws: rows.map((r) => ({
       id: r.id,
       n: r.n,
@@ -164,6 +172,43 @@ export async function setCameraCorners(userId: string, sessionId: string, versio
   const s = await sessionFor(userId, sessionId);
   if (s.snapVersion !== version || !s.snapW || !s.snapH || !cornersOk(corners, s.snapW, s.snapH)) throw new Error("Outdated snapshot");
   await db.update(cameraSessions).set({ corners, phase: "watching" }).where(eq(cameraSessions.id, sessionId));
+}
+
+/** A mat logger takes the camera for its game (it becomes training data). */
+export async function linkCameraLogger(userId: string, sessionId: string) {
+  await sessionFor(userId, sessionId);
+  await db.update(cameraSessions).set({ loggerId: userId, kind: "game", armed: false }).where(eq(cameraSessions.id, sessionId));
+}
+
+export async function unlinkCameraLogger(userId: string, sessionId: string) {
+  await db
+    .update(cameraSessions)
+    .set({ loggerId: null, armed: false })
+    .where(and(eq(cameraSessions.id, sessionId), eq(cameraSessions.loggerId, userId)));
+}
+
+/** The logger arms (a throw is expected) or disarms the camera; `fresh`
+ * also tells it to start from the mat as it is now. */
+export async function armCamera(userId: string, sessionId: string, armed: boolean, fresh: boolean) {
+  const s = await db.query.cameraSessions.findFirst({ where: and(eq(cameraSessions.id, sessionId), eq(cameraSessions.loggerId, userId)) });
+  if (!s) throw new Error("Not your game");
+  await db
+    .update(cameraSessions)
+    .set({ armed, armVersion: fresh ? s.armVersion + 1 : s.armVersion })
+    .where(eq(cameraSessions.id, sessionId));
+}
+
+/** The logger stores the confirmed mat after a camera throw (training label). */
+export async function labelCameraThrow(
+  userId: string,
+  sessionId: string,
+  n: number,
+  label: { x: number; y: number; owner: string; no: number }[],
+  how: "auto" | "confirmed" | "corrected",
+) {
+  const s = await db.query.cameraSessions.findFirst({ where: and(eq(cameraSessions.id, sessionId), eq(cameraSessions.loggerId, userId)), columns: { id: true } });
+  if (!s) throw new Error("Not your game");
+  await db.update(cameraThrows).set({ label, labelHow: how }).where(and(eq(cameraThrows.sessionId, sessionId), eq(cameraThrows.n, n)));
 }
 
 /** The current empty-mat snapshot. */
