@@ -86,7 +86,7 @@ export default async function RotationPage({
 
   return (
     <Screen className="gap-4.5">
-      <RotationHeader v={rotation} R={R} backHref={`/crews/${rotation.groupId}`} backLabel={t.common.back} tvHref={live ? `${base}/tv` : undefined} />
+      <RotationHeader v={rotation} R={R} backHref={`/crews/${rotation.groupId}`} backLabel={t.common.back} tvHref={live ? `${base}/tv` : undefined} manageHref={mayFinish ? `${base}/manage` : undefined} />
       {live && <RoundProgress v={rotation} R={R} />}
       <RotationTabs base={base} tab={tab} R={R} />
 

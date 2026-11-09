@@ -152,9 +152,19 @@ export type RotationStanding = {
   partners: number;
 };
 
-/** Individual standings: win %, then wins, then mamas, then Elo gained in
- * the tournament (win % rather than raw wins, so a bye doesn't cost you). */
-export function rotationStandings(players: string[], games: RotationGameResult[], byeRounds: string[][]): RotationStanding[] {
+export type TiebreakKey = "pct" | "wins" | "mama" | "elo";
+export const TIEBREAK_KEYS: TiebreakKey[] = ["pct", "wins", "mama", "elo"];
+
+/** Parses a stored "pct,wins,mama,elo" order; unknown keys dropped, missing ones appended. */
+export function parseTiebreaks(raw: string | null | undefined): TiebreakKey[] {
+  const picked = (raw ?? "").split(",").filter((k): k is TiebreakKey => (TIEBREAK_KEYS as string[]).includes(k));
+  return [...new Set([...picked, ...TIEBREAK_KEYS])];
+}
+
+/** Individual standings, sorted by `order` (default: win %, then wins,
+ * mamas and Elo gained in the tournament — win % rather than raw wins, so a
+ * bye doesn't cost you); fewer losses breaks any tie left. */
+export function rotationStandings(players: string[], games: RotationGameResult[], byeRounds: string[][], order: TiebreakKey[] = TIEBREAK_KEYS): RotationStanding[] {
   const s = new Map<string, RotationStanding & { partnerSet: Set<string> }>(
     players.map((id) => [id, { userId: id, games: 0, wins: 0, losses: 0, winPct: 0, mama: 0, kruipen: 0, elo: 0, byes: 0, partners: 0, partnerSet: new Set() }]),
   );
@@ -181,9 +191,12 @@ export function rotationStandings(players: string[], games: RotationGameResult[]
   return [...s.values()]
     .map(({ partnerSet, ...x }) => ({ ...x, partners: partnerSet.size, winPct: x.games ? Math.round((x.wins / x.games) * 100) : 0 }))
     .sort((x, y) => {
-      const px = x.games ? x.wins / x.games : 0;
-      const py = y.games ? y.wins / y.games : 0;
-      return py - px || y.wins - x.wins || y.mama - x.mama || y.elo - x.elo || x.losses - y.losses;
+      const val = (s: RotationStanding, k: TiebreakKey) => (k === "pct" ? (s.games ? s.wins / s.games : 0) : k === "wins" ? s.wins : k === "mama" ? s.mama : s.elo);
+      for (const k of order) {
+        const d = val(y, k) - val(x, k);
+        if (d !== 0) return d;
+      }
+      return x.losses - y.losses;
     });
 }
 

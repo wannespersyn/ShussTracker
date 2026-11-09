@@ -15,9 +15,13 @@ import { runAtomic } from "@/lib/db/batch";
 import { games, rotationGames, rotationPlayers, rotations, users } from "@/lib/db/schema";
 import { getCrewInsights } from "@/lib/db/crew-insights";
 import {
+  parseTiebreaks,
   planAmericano,
+  planAmericanoRound,
   planMexicanoRound,
   rotationStandings,
+  TIEBREAK_KEYS,
+  type TiebreakKey,
   type RotationGameResult,
   type RotationMode,
   type RotationRound,
@@ -75,7 +79,9 @@ export type RotationView = {
   rounds: number;
   status: "setup" | "active" | "completed";
   createdBy: string;
-  players: { id: string; name: string }[];
+  /** `active` false = stopped: no new games, played games still count. */
+  players: { id: string; name: string; active: boolean }[];
+  tiebreaks: TiebreakKey[];
   games: RotationGameView[];
   /** Per planned round, who sits out. */
   byes: Record<number, string[]>;
@@ -91,7 +97,7 @@ export async function getRotation(rotationId: string): Promise<RotationView | nu
   if (!rotation) return null;
   const [playerRows, rows] = await Promise.all([
     db
-      .select({ id: users.id, name: users.name })
+      .select({ id: users.id, name: users.name, active: rotationPlayers.active, joinedRound: rotationPlayers.joinedRound })
       .from(rotationPlayers)
       .innerJoin(users, eq(users.id, rotationPlayers.userId))
       .where(eq(rotationPlayers.rotationId, rotationId)),
@@ -134,11 +140,18 @@ export async function getRotation(rotationId: string): Promise<RotationView | nu
   });
 
   const playerIds = playerRows.map((p) => p.id);
+  const tiebreaks = parseTiebreaks(rotation.tiebreaks);
   const plannedRounds = Math.max(0, ...list.map((g) => g.round));
+  // Who sat out each round: only from the round a player joined and, for
+  // someone who stopped, up to the last round they were in.
+  const lastRound = new Map<string, number>();
+  for (const g of list) for (const id of [...g.a, ...g.b]) lastRound.set(id, Math.max(lastRound.get(id) ?? 0, g.round));
   const byes: Record<number, string[]> = {};
   for (let r = 1; r <= plannedRounds; r++) {
     const inRound = new Set(list.filter((g) => g.round === r).flatMap((g) => [...g.a, ...g.b]));
-    byes[r] = playerIds.filter((id) => !inRound.has(id));
+    byes[r] = playerRows
+      .filter((p) => !inRound.has(p.id) && r >= p.joinedRound && (p.active || r <= (lastRound.get(p.id) ?? 0)))
+      .map((p) => p.id);
   }
 
   return {
@@ -150,10 +163,11 @@ export async function getRotation(rotationId: string): Promise<RotationView | nu
     rounds: rotation.rounds,
     status: rotation.status,
     createdBy: rotation.createdBy,
-    players: playerRows.map((p) => ({ id: p.id, name: p.name ?? "Player" })),
+    players: playerRows.map((p) => ({ id: p.id, name: p.name ?? "Player", active: p.active })),
+    tiebreaks,
     games: list,
     byes,
-    standings: rotationStandings(playerIds, list, Object.values(byes)),
+    standings: rotationStandings(playerIds, list, Object.values(byes), tiebreaks),
     plannedRounds,
     crewElo: Object.fromEntries(insights.players.map((p) => [p.userId, p.elo])),
   };
@@ -184,9 +198,10 @@ async function advanceRotation(rotationId: string) {
   if (!view || view.status === "completed") return;
   const open = view.games.filter((g) => !g.played);
   if (open.length > 0) return;
-  if (view.mode === "mexicano" && view.plannedRounds < view.rounds) {
+  const active = new Set(view.players.filter((p) => p.active).map((p) => p.id));
+  if (view.mode === "mexicano" && view.plannedRounds < view.rounds && active.size >= 4) {
     const next = planMexicanoRound(
-      view.standings.map((s) => s.userId),
+      view.standings.map((s) => s.userId).filter((id) => active.has(id)),
       view.games,
       Object.values(view.byes),
     );
@@ -211,4 +226,70 @@ export async function finishRotation(rotationId: string) {
 export async function getGroupRotations(groupId: string) {
   const rows = await db.query.rotations.findMany({ where: eq(rotations.groupId, groupId) });
   return rows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+}
+
+export type RotationUpdate = {
+  mats: number;
+  rounds: number;
+  /** Everyone who keeps playing (existing players not listed stop). */
+  activeIds: string[];
+  /** New players joining from the next round. */
+  addIds: string[];
+  tiebreaks: TiebreakKey[];
+};
+
+/** Changes a running rotation: mats, rounds, the line-up and the
+ * tie-breaker order. Played games always stay. Unplayed games with someone
+ * who stopped are dropped; for Americano every round after the current one
+ * is planned again with whoever is playing now (Mexicano plans round by
+ * round anyway). */
+export async function updateRotation(rotationId: string, u: RotationUpdate): Promise<void> {
+  const view = await getRotation(rotationId);
+  if (!view || view.status === "completed") return;
+  const known = new Set(view.players.map((p) => p.id));
+  const add = [...new Set(u.addIds)].filter((id) => !known.has(id)).slice(0, ROTATION_MAX_PLAYERS - known.size);
+  const active = new Set([...u.activeIds.filter((id) => known.has(id)), ...add]);
+  if (active.size < 4) throw new Error("A rotation needs at least 4 active players");
+
+  const open = view.games.filter((g) => !g.played);
+  const current = open.length ? Math.min(...open.map((g) => g.round)) : view.plannedRounds + 1;
+  const rounds = Math.min(ROTATION_MAX_ROUNDS, Math.max(current, Math.round(u.rounds)));
+  const tiebreaks = [...new Set(u.tiebreaks.filter((k) => TIEBREAK_KEYS.includes(k)))].join(",") || TIEBREAK_KEYS.join(",");
+
+  // Unplayed games that can't happen any more (someone stopped), and for
+  // Americano everything after the current round (re-planned below).
+  const drop = open.filter((g) => [...g.a, ...g.b].some((id) => !active.has(id)) || (view.mode === "americano" && g.round > current));
+  const kept = view.games.filter((g) => !drop.includes(g));
+
+  // The current round keeps its games; if it has none left, new players and
+  // the re-plan start from it, else from the next one.
+  const firstNewRound = kept.some((g) => g.round === current) ? current + 1 : current;
+  const plan: ReturnType<typeof gameRows> = [];
+  if (view.mode === "americano") {
+    const ids = [...active];
+    const history = kept.map((g) => ({ a: g.a, b: g.b }));
+    const byeRounds: string[][] = [];
+    for (let r = 1; r <= current; r++) {
+      const inRound = new Set(kept.filter((g) => g.round === r).flatMap((g) => [...g.a, ...g.b]));
+      byeRounds.push(ids.filter((id) => !inRound.has(id)));
+    }
+    for (let r = firstNewRound; r <= rounds; r++) {
+      const round = planAmericanoRound(ids, history, byeRounds);
+      plan.push(...gameRows(rotationId, r, round));
+      history.push(...round.games);
+      byeRounds.push(round.byes);
+    }
+  }
+
+  const status = new Map(view.players.map((p) => [p.id, p.active]));
+  await runAtomic((x) => [
+    x.update(rotations).set({ mats: Math.min(8, Math.max(1, Math.round(u.mats))), rounds, tiebreaks }).where(eq(rotations.id, rotationId)),
+    ...view.players
+      .filter((p) => status.get(p.id) !== active.has(p.id))
+      .map((p) => x.update(rotationPlayers).set({ active: active.has(p.id) }).where(and(eq(rotationPlayers.rotationId, rotationId), eq(rotationPlayers.userId, p.id)))),
+    ...(add.length ? [x.insert(rotationPlayers).values(add.map((userId) => ({ rotationId, userId, active: true, joinedRound: firstNewRound })))] : []),
+    ...(drop.length ? [x.delete(rotationGames).where(inArray(rotationGames.id, drop.map((g) => g.id)))] : []),
+    ...(plan.length ? [x.insert(rotationGames).values(plan)] : []),
+  ]);
+  await advanceRotation(rotationId);
 }

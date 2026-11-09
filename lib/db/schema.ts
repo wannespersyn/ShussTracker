@@ -430,6 +430,8 @@ export const rotations = pgTable("rotation", {
   mats: integer("mats").notNull().default(1),
   // Planned rounds (Americano: all generated up front; Mexicano: the cap).
   rounds: integer("rounds").notNull(),
+  // Standings order after win %: comma list of "wins" | "mama" | "elo" | "pct".
+  tiebreaks: text("tiebreaks").notNull().default("pct,wins,mama,elo"),
   status: tournamentStatusEnum("status").notNull().default("active"),
   createdBy: uuid("created_by")
     .notNull()
@@ -446,6 +448,10 @@ export const rotationPlayers = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    // False once they stopped: no new games, their played games still count.
+    active: boolean("active").notNull().default(true),
+    // First round they could play (later for someone who joined mid-way).
+    joinedRound: integer("joined_round").notNull().default(1),
   },
   (t) => [primaryKey({ columns: [t.rotationId, t.userId] })],
 );

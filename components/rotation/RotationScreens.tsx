@@ -22,7 +22,7 @@ export type RotationTab = "live" | "standings" | "rounds";
 const kicker = "font-heading font-bold text-[12px] tracking-[0.14em] text-muted";
 const initials = (name: string) => name.slice(0, 2).toUpperCase();
 
-export function RotationHeader({ v, R, backHref, backLabel, tvHref }: Readonly<{ v: RotationView; R: R; backHref: string; backLabel: string; tvHref?: string }>) {
+export function RotationHeader({ v, R, backHref, backLabel, tvHref, manageHref }: Readonly<{ v: RotationView; R: R; backHref: string; backLabel: string; tvHref?: string; manageHref?: string }>) {
   const live = v.status !== "completed";
   return (
     <header className="flex items-center gap-3 h-11">
@@ -41,6 +41,15 @@ export function RotationHeader({ v, R, backHref, backLabel, tvHref }: Readonly<{
           {format(R.meta, { mode: v.mode === "americano" ? R.americano : R.mexicano, n: v.players.length, m: v.mats })}
         </span>
       </span>
+      {manageHref && (
+        <Link href={manageHref} aria-label={R.manage} className="w-11 h-11 shrink-0 rounded-pill bg-surface-panel border border-line-strong text-cream flex items-center justify-center">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+            <path d="M4 7h10M18 7h2M4 17h4M12 17h8" />
+            <circle cx="16" cy="7" r="2" />
+            <circle cx="10" cy="17" r="2" />
+          </svg>
+        </Link>
+      )}
       {tvHref && (
         <Link href={tvHref} aria-label={R.tv} className="w-11 h-11 shrink-0 rounded-pill bg-surface-panel border border-line-strong text-cream flex items-center justify-center">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
@@ -283,6 +292,7 @@ export function Podium({ top, name }: Readonly<{ top: RotationStanding[]; name: 
 
 export function StandingsTable({ v, R, name, userId }: Readonly<{ v: RotationView; R: R; name: Names; userId: string }>) {
   const form = formOf(v);
+  const stopped = new Set(v.players.filter((p) => !p.active).map((p) => p.id));
   const cols = "grid grid-cols-[26px_minmax(0,1fr)_44px_36px_38px_44px] gap-2 items-center";
   return (
     <section aria-label={R.tabStandings} className="rounded-[18px] bg-surface-deep border border-line overflow-hidden">
@@ -300,7 +310,10 @@ export function StandingsTable({ v, R, name, userId }: Readonly<{ v: RotationVie
           <div key={s.userId} className={cn(cols, "px-3.5 py-2.75 border-t border-cream/6", s.userId === userId && "bg-amber/8")}>
             <span className={cn("font-heading font-extrabold text-[17px]", i === 0 && s.games > 0 ? "text-gold" : "text-muted")}>{i + 1}</span>
             <span className="min-w-0 flex flex-col gap-0.75">
-              <span className="font-body font-semibold text-[15px] truncate">{s.userId === userId ? format(R.you, { name: name(s.userId) }) : name(s.userId)}</span>
+              <span className="font-body font-semibold text-[15px] truncate">
+                {s.userId === userId ? format(R.you, { name: name(s.userId) }) : name(s.userId)}
+                {stopped.has(s.userId) && <span className="ml-1.5 font-normal text-xs text-red-pale">{R.stoppedTag}</span>}
+              </span>
               <span className="flex gap-0.75" aria-hidden="true">
                 {f.map((x, k) => (
                   <span key={k} className={cn("w-3.5 h-1.25 rounded-[2px]", x === "W" ? "bg-gold" : "bg-[#3a4245]")} />

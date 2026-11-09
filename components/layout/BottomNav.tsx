@@ -50,6 +50,7 @@ export function BottomNav({ currentUserId }: Readonly<{ currentUserId: string }>
     pathname === "/americano/new" ||
     /\/americano\/[^/]+\/game\//.test(pathname) ||
     /\/americano\/[^/]+\/tv$/.test(pathname) ||
+    /\/americano\/[^/]+\/manage$/.test(pathname) ||
     pathname.endsWith("/recap") ||
     pathname.startsWith("/game/") ||
     pathname.endsWith("/sessions") ||
