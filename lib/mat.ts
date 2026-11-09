@@ -4,35 +4,54 @@
  * the MatLogger component (client) and the game-saving code (server types).
  *
  * Coordinates are landscape mat space (824 × 265, same geometry as the mama
- * animation); the component draws it rotated upright. Corners are named as seen
+ * animation; the black field is 28–796 × 10–255, shapes measured on the real
+ * mat in lib/mat-geometry.ts); the component draws it rotated upright. Corners are named as seen
  * with the mat upright on a phone (TL = top-left).
  */
+
+import { FIELD_BOTTLES, FIELD_CUT, FIELD_H, FIELD_MAMAS, FIELD_W, FIELD_ZONES } from "@/lib/mat-geometry";
 
 export type Slot = "a1" | "a2" | "b1" | "b2";
 export type Corner = "TL" | "TR" | "BL" | "BR";
 type Pt = [number, number];
 
-export const ZONES: { id: string; v: number; pts: Pt[] }[] = [
-  { id: "L3", v: 3, pts: [[95, 131], [175, 100], [175, 163]] },
-  { id: "L2", v: 2, pts: [[182, 96], [255, 70], [255, 195], [182, 167]] },
-  { id: "L1", v: 1, pts: [[262, 66], [344, 34], [401, 131], [344, 229], [262, 197]] },
-  { id: "R1", v: 1, pts: [[423, 131], [480, 34], [562, 66], [562, 197], [480, 229]] },
-  { id: "R2", v: 2, pts: [[569, 70], [642, 96], [642, 167], [569, 195]] },
-  { id: "R3", v: 3, pts: [[649, 100], [729, 131], [649, 163]] },
-];
-export const MAMAS = [
-  { id: "ML", x: 40, y: 94, w: 40, h: 77 },
-  { id: "MR", x: 744, y: 94, w: 40, h: 77 },
-];
-/** Shooting boxes are the four gold corners; each player's cap waits on the spot in their corner. */
-export const CORNERS: Record<Corner, { end: "T" | "B"; pts: Pt[]; start: { x: number; y: number } }> = {
-  TL: { end: "T", pts: [[28, 255], [92, 255], [28, 191]], start: { x: 56, y: 227 } },
-  TR: { end: "T", pts: [[28, 10], [92, 10], [28, 74]], start: { x: 56, y: 38 } },
-  BL: { end: "B", pts: [[796, 255], [732, 255], [796, 191]], start: { x: 768, y: 227 } },
-  BR: { end: "B", pts: [[796, 10], [732, 10], [796, 74]], start: { x: 768, y: 38 } },
+/* The mat as measured from photos (lib/mat-geometry.ts, black field 824 ×
+ * 265), placed on the logger's drawing where the field is 28–796 × 10–255. */
+const fx = (x: number) => Math.round((28 + (x * 768) / FIELD_W) * 10) / 10;
+const fy = (y: number) => Math.round((10 + (y * 245) / FIELD_H) * 10) / 10;
+const fp = ([x, y]: Pt): Pt => [fx(x), fy(y)];
+/** Camera/field coordinates → logger coordinates, and back. */
+export const fromField = (p: { x: number; y: number }) => ({ x: fx(p.x), y: fy(p.y) });
+export const toField = (p: { x: number; y: number }) => ({ x: ((p.x - 28) * FIELD_W) / 768, y: ((p.y - 10) * FIELD_H) / 245 });
+
+export const ZONES: { id: string; v: number; pts: Pt[] }[] = FIELD_ZONES.map((z) => ({ ...z, pts: z.pts.map(fp) }));
+export const MAMAS = FIELD_MAMAS.map((m) => ({ id: m.id, x: fx(m.x), y: fy(m.y), w: fx(m.x + m.w) - fx(m.x), h: fy(m.y + m.h) - fy(m.y) }));
+/** The field's outline: a rectangle with its corners cut off (the shooting boxes). */
+const CUT = FIELD_CUT;
+export const FIELD_OUTLINE: Pt[] = (
+  [
+    [CUT, 0], [FIELD_W - CUT, 0], [FIELD_W, CUT], [FIELD_W, FIELD_H - CUT],
+    [FIELD_W - CUT, FIELD_H], [CUT, FIELD_H], [0, FIELD_H - CUT], [0, CUT],
+  ] as Pt[]
+).map(fp);
+/** Shooting boxes are the four white cut-off corners; each player's cap waits
+ * on the spot in their corner. A bit larger than the printed corner, so a
+ * cap lying half over the edge still counts. */
+const BOX = CUT + 14;
+const box = (cx: number, cy: number): Pt[] => {
+  const sx = cx === 0 ? 1 : -1;
+  const sy = cy === 0 ? 1 : -1;
+  return ([[cx, cy], [cx + sx * BOX, cy], [cx, cy + sy * BOX]] as Pt[]).map(fp);
 };
-/** The four brown circles are bottles: a cap can't come to rest on one. */
-export const BOTTLES: Pt[] = [[76, 101], [76, 166], [748, 101], [748, 166]];
+const startAt = (cx: number, cy: number) => fromField({ x: cx === 0 ? 13 : FIELD_W - 13, y: cy === 0 ? 13 : FIELD_H - 13 });
+export const CORNERS: Record<Corner, { end: "T" | "B"; pts: Pt[]; start: { x: number; y: number } }> = {
+  TL: { end: "T", pts: box(0, FIELD_H), start: startAt(0, FIELD_H) },
+  TR: { end: "T", pts: box(0, 0), start: startAt(0, 0) },
+  BL: { end: "B", pts: box(FIELD_W, FIELD_H), start: startAt(FIELD_W, FIELD_H) },
+  BR: { end: "B", pts: box(FIELD_W, 0), start: startAt(FIELD_W, 0) },
+};
+/** The four bottles: a cap can't come to rest on one. */
+export const BOTTLES: Pt[] = FIELD_BOTTLES.map(fp);
 export const BOTTLE_CLEAR = 37;
 
 /** Only A1's corner is chosen: A2 sits beside A1, B1 diagonally across from A1

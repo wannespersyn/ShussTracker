@@ -15,7 +15,7 @@ import type { Duo } from "@/lib/teams";
 import { BetaPill } from "@/components/beta/BetaUi";
 import { MamaShot } from "@/components/beta/MamaShot";
 import {
-  BOTTLES, CORNERS, MAMAS, ZONES,
+  BOTTLES, CORNERS, FIELD_OUTLINE, MAMAS, ZONES,
   dropCap, drunk, finishThrow, knockedMamas, mamaTeam, playJoker, newMatState, nextRound, placeA1, spotOf, teamOfSlot, toGameLog, turnInfo, zoneTeam,
   type Corner, type MatGameLog, type MatState, type Slot, type Spot,
 } from "@/lib/mat";
@@ -283,8 +283,7 @@ export function MatLogger({
             aria-label={M.matAlt}
           >
             <g ref={gRef} transform="translate(265 0) rotate(90)">
-              <rect x={28} y={10} width={768} height={245} rx={16} fill="#0E1012" stroke="#E0A43A" strokeWidth={6} />
-              <rect x={36} y={18} width={752} height={229} rx={10} fill="none" stroke="#1E2124" strokeWidth={2} />
+              <polygon points={FIELD_OUTLINE.map((p) => p.join(",")).join(" ")} fill="#0E1012" stroke="#E0A43A" strokeWidth={6} strokeLinejoin="round" />
               {MAMAS.map((m) => <rect key={m.id} x={m.x} y={m.y} width={m.w} height={m.h} fill="#E3101E" />)}
               {ZONES.map((z) => {
                 const cx = z.pts.reduce((a, p) => a + p[0], 0) / z.pts.length, cy = z.pts.reduce((a, p) => a + p[1], 0) / z.pts.length;

@@ -21,6 +21,8 @@
  * zones, silver caps) in a lit room.
  */
 
+import { FIELD_MAMAS, FIELD_ZONES } from "@/lib/mat-geometry";
+
 export const MAT_W = 824;
 export const MAT_H = 265;
 /** Warped image size (mat space × SCALE). */
@@ -817,31 +819,9 @@ export function detect(empty: Float32Array, prev: Float32Array, cur: Float32Arra
   };
 }
 
-/* -----------------------------------------------------------------------
- * The real mat, measured on photos (black playing field = 824 × 265): each
- * side has a kite-shaped white diamond split into the 3-point tip, the
- * 2-point band ("DRINKING SINCE 2005") and the 1-point part with the Mena
- * logo; the mama is the red holder between the bottles at each end. Kept
- * here (not in lib/mat.ts, which the mat logger draws) until the two are
- * reconciled.
- * --------------------------------------------------------------------- */
-type P2 = [number, number];
-const mirror = (pts: P2[]): P2[] => pts.map(([x, y]) => [MAT_W - x, y]);
-const L3: P2[] = [[60, 132.5], [147, 86], [147, 179]];
-const L2: P2[] = [[147, 86], [237.5, 37.7], [237.5, 227.3], [147, 179]];
-const L1: P2[] = [[237.5, 37.7], [282, 14], [361, 132.5], [282, 251], [237.5, 227.3]];
-export const REAL_ZONES: { id: string; v: number; pts: P2[] }[] = [
-  { id: "L3", v: 3, pts: L3 },
-  { id: "L2", v: 2, pts: L2 },
-  { id: "L1", v: 1, pts: L1 },
-  { id: "R1", v: 1, pts: mirror(L1) },
-  { id: "R2", v: 2, pts: mirror(L2) },
-  { id: "R3", v: 3, pts: mirror(L3) },
-];
-export const REAL_MAMAS = [
-  { id: "ML", x: 4, y: 98, w: 50, h: 69 },
-  { id: "MR", x: MAT_W - 54, y: 98, w: 50, h: 69 },
-];
+/** The real mat (lib/mat-geometry.ts), in the same space as the camera. */
+export const REAL_ZONES = FIELD_ZONES;
+export const REAL_MAMAS = FIELD_MAMAS;
 
 function inPoly(x: number, y: number, pts: [number, number][]) {
   let inside = false;
