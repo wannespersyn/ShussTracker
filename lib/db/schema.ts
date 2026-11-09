@@ -166,6 +166,10 @@ export const gameTeams = pgTable("game_team", {
     .references(() => games.id, { onDelete: "cascade" }),
   teamLabel: text("team_label").notNull(),
   finalRank: integer("final_rank"),
+  // Kruipen: this (losing) team didn't get to drink anything before the
+  // winners emptied their pints. Set automatically by the mat logger, or
+  // ticked by hand when logging; stats count it for every player in the team.
+  kruip: boolean("kruip").notNull().default(false),
 });
 
 // Team size (1 player for a 2-player head-to-head mat, 2 for a 4/8-player

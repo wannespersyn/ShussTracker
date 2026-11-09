@@ -1,3 +1,9 @@
+/**
+ * MatchPlayer
+ *
+ * Plays a tournament match with the log wizard on locked teams and records
+ * the result (winner, shots, kruip) through playTournamentMatch.
+ */
 "use client";
 
 import { LogGameWizard } from "@/components/log/LogGameWizard";
@@ -50,11 +56,13 @@ export function MatchPlayer({
 
   async function handleComplete(result: {
     matType: "2" | "4" | "8";
-    teams: { label: string; playerIds: string[]; finalRank: number }[];
+    teams: { label: string; playerIds: string[]; finalRank: number; kruip?: boolean }[];
     shotsByPlayer: ShotInput[];
   }) {
     const winner = result.teams.find((t) => t.finalRank === 1)!;
-    const winnerEntrantId = winner.playerIds.includes(teamA.players[0].id) ? teamA.entrantId : teamB.entrantId;
+    const entrantOf = (playerIds: string[]) => (playerIds.includes(teamA.players[0].id) ? teamA.entrantId : teamB.entrantId);
+    const winnerEntrantId = entrantOf(winner.playerIds);
+    const kruipTeam = result.teams.find((t) => t.finalRank !== 1 && t.kruip);
 
     await playTournamentMatch({
       matchId,
@@ -62,6 +70,7 @@ export function MatchPlayer({
       teamB: { entrantId: teamB.entrantId, playerIds: [teamB.players[0].id, teamB.players[1].id] },
       winnerEntrantId,
       shotsByPlayer: result.shotsByPlayer,
+      kruipEntrantId: kruipTeam ? entrantOf(kruipTeam.playerIds) : null,
     });
   }
 

@@ -283,6 +283,17 @@ export type MatThrowLog = { seq: number; playerId: string; slot: Slot; kind: Thr
 export type MatRoundLog = { number: number; complete: boolean; jokerTeam: number | null; allDrink: boolean; teams: { sips: number; mama: boolean }[]; throws: MatThrowLog[] };
 export type MatGameLog = { a1Corner: Corner; endedBy: "pints_empty"; winnerTeam: number; rounds: MatRoundLog[] };
 
+/** Stats that follow from a finished mat log. `kruipTeams`: losing teams
+ * that never got to drink (no sips or mama in a finished, non-joker round and
+ * no "3 empty rounds" ad fundum) before the winners emptied their pints. */
+export function matExtras(log: MatGameLog): { kruipTeams: number[] } {
+  const done = log.rounds.filter((r) => r.complete);
+  const drank = (ti: number) =>
+    done.some((r) => r.allDrink || (r.jokerTeam === null && ((r.teams[ti]?.sips ?? 0) > 0 || r.teams[ti]?.mama)));
+  const kruipTeams = [0, 1].filter((ti) => ti !== log.winnerTeam && !drank(ti));
+  return { kruipTeams };
+}
+
 /** Field hit for the classic `shot` row of a throw (first landing of the thrown cap). */
 export function fieldHitOf(t: ThrowRec): "1" | "2" | "3" | "mama" | "mama_out" | "miss" | null {
   if (t.kind === "skipped" || !t.firstSpot) return null;

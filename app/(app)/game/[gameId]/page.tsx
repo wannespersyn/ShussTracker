@@ -1,3 +1,10 @@
+/**
+ * Game page
+ *
+ * One logged game: result per team (mamas, kruip, Elo change), photo, shot
+ * zones, reactions, trash talk, rematch and delete. Players can toggle
+ * kruip on a losing team after the fact.
+ */
 import Link from "next/link";
 import { eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
@@ -16,8 +23,8 @@ import { Avatar, Kicker, Screen } from "@/components/v2";
 import { PhotoUpload } from "@/components/game/PhotoUpload";
 import { GamePhoto } from "@/components/game/GamePhoto";
 import { ReactionIcon } from "@/components/game/ReactionIcon";
-import { addCommentAction, deleteCommentAction, deleteGameAction, toggleReactionAction, uploadGamePhotoAction } from "./actions";
-import { canDeleteGame } from "@/lib/db/game-permissions";
+import { addCommentAction, deleteCommentAction, deleteGameAction, setKruipAction, toggleReactionAction, uploadGamePhotoAction } from "./actions";
+import { canDeleteGame, canEditKruip } from "@/lib/db/game-permissions";
 import { ConfirmForm } from "@/components/ui";
 import { hasBeta } from "@/lib/db/beta";
 import { getCelebration } from "@/lib/db/celebrate";
@@ -52,7 +59,7 @@ export default async function GamePage({ params }: Readonly<{ params: Promise<{ 
     getLocale(),
   ]);
   const elo = insights?.gameElo[gameId] ?? {};
-  const mayDelete = await canDeleteGame(game, userId);
+  const [mayDelete, mayKruip] = await Promise.all([canDeleteGame(game, userId), canEditKruip(game, userId)]);
   const celebration = (await hasBeta(userId, "celebrations")) ? await getCelebration(gameId, userId) : [];
   const teams = [...game.teams].sort((a, b) => (a.finalRank ?? 99) - (b.finalRank ?? 99));
   const multi = teams.length > 2;
@@ -149,7 +156,24 @@ export default async function GamePage({ params }: Readonly<{ params: Promise<{ 
                     .join(" · ") || "—"}
                 </span>
               </span>
-              <span className="flex flex-col items-end">
+              <span className="flex flex-col items-end gap-0.5">
+                {!won && (mayKruip ? (
+                  <form action={setKruipAction.bind(null, gameId, tm.id, !tm.kruip)}>
+                    <button
+                      type="submit"
+                      aria-pressed={tm.kruip}
+                      title={t.game.kruipToggle}
+                      className={cn(
+                        "h-7 px-2.5 rounded-pill font-heading font-bold text-[12px] tracking-[0.1em] uppercase border",
+                        tm.kruip ? "bg-red/15 border-red/50 text-red-pale" : "border-dashed border-cream/20 text-muted",
+                      )}
+                    >
+                      {tm.kruip ? t.game.kruiped : t.game.kruipAdd}
+                    </button>
+                  </form>
+                ) : (
+                  tm.kruip && <span className="font-heading font-bold text-[13px] tracking-[0.1em] uppercase text-red-pale">{t.game.kruiped}</span>
+                ))}
                 {teamMama > 0 && <span className="font-heading font-bold text-[15px] text-red">{teamMama} MAMA</span>}
                 {d !== undefined && (
                   <span className={cn("font-heading font-bold text-[15px]", d >= 0 ? "text-mint" : "text-red-pale")}>

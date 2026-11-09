@@ -1,7 +1,13 @@
+/**
+ * Stats page
+ *
+ * Server entry for /stats: loads the viewer's crews and games and renders
+ * the StatsPage explorer, or an empty state without crew/games.
+ */
 import { requireSession } from "@/lib/db/authz";
 import { getStatsExplorerData } from "@/lib/db/stats";
 import { Card, LinkButton } from "@/components/ui";
-import { DeepStats } from "@/components/stats/DeepStats";
+import { StatsPage as StatsView } from "@/components/stats/StatsPage";
 import { getT } from "@/lib/i18n/server";
 
 export default async function StatsPage() {
@@ -38,5 +44,5 @@ export default async function StatsPage() {
     );
   }
 
-  return <DeepStats data={data} currentUserId={userId} backHref={`/players/${userId}`} />;
+  return <StatsView data={data} currentUserId={userId} backHref={`/players/${userId}`} />;
 }
