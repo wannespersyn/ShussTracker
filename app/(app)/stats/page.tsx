@@ -6,6 +6,7 @@
  */
 import { requireSession } from "@/lib/db/authz";
 import { getStatsExplorerData } from "@/lib/db/stats";
+import { getRememberedCrewId } from "@/lib/active-crew";
 import { Card, LinkButton } from "@/components/ui";
 import { StatsPage as StatsView } from "@/components/stats/StatsPage";
 import { getT } from "@/lib/i18n/server";
@@ -14,7 +15,7 @@ export default async function StatsPage() {
   const session = await requireSession();
   const userId = session.user.id;
 
-  const [data, t] = await Promise.all([getStatsExplorerData(userId), getT()]);
+  const [data, t, rememberedCrewId] = await Promise.all([getStatsExplorerData(userId), getT(), getRememberedCrewId()]);
 
   if (data.crews.length === 0) {
     return (
@@ -44,5 +45,5 @@ export default async function StatsPage() {
     );
   }
 
-  return <StatsView data={data} currentUserId={userId} backHref={`/players/${userId}`} />;
+  return <StatsView data={data} currentUserId={userId} backHref={`/players/${userId}`} initialCrewId={rememberedCrewId} />;
 }

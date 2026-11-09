@@ -18,6 +18,7 @@ import { firstName } from "@/lib/insights";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/client";
 import { format } from "@/lib/i18n";
+import { rememberCrewAction } from "@/app/(app)/crews/active-crew-actions";
 
 type Period = "session" | "7d" | "30d" | "season" | "ever" | "custom";
 const DAY = 24 * 3600 * 1000;
@@ -53,17 +54,23 @@ function longestStreak(m: Mine[]): number {
 
 const dayInput = (ms: number) => new Date(ms - new Date(ms).getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 
-export function StatsPage({ data, currentUserId, backHref }: Readonly<{ data: StatsExplorerData; currentUserId: string; backHref: string }>) {
+export function StatsPage({
+  data,
+  currentUserId,
+  backHref,
+  initialCrewId,
+}: Readonly<{ data: StatsExplorerData; currentUserId: string; backHref: string; initialCrewId?: string }>) {
   const { t, locale } = useT();
   const d = t.stats3;
   const [now] = useState(() => Date.now());
 
-  // Default crew: where the viewer played the most.
+  // Default crew: the remembered choice, else where the viewer played the most.
   const defaultCrew = useMemo(() => {
+    if (initialCrewId && data.crews.some((c) => c.id === initialCrewId)) return initialCrewId;
     const count = new Map<string, number>();
     for (const g of data.games) if (g.crewId && g.teams.some((x) => x.userIds.includes(currentUserId))) count.set(g.crewId, (count.get(g.crewId) ?? 0) + 1);
     return [...data.crews].sort((a, b) => (count.get(b.id) ?? 0) - (count.get(a.id) ?? 0))[0]?.id ?? "";
-  }, [data, currentUserId]);
+  }, [data, currentUserId, initialCrewId]);
 
   const [crewId, setCrewId] = useState(defaultCrew);
   const [playerId, setPlayerId] = useState(currentUserId);
@@ -211,7 +218,7 @@ export function StatsPage({ data, currentUserId, backHref }: Readonly<{ data: St
       {/* Filters: crew + player, then period */}
       <div className="flex gap-2">
         {data.crews.length > 1 && (
-          <Select label={d.crew} value={crewId} onChange={(v) => { setCrewId(v); setPicked(null); }} options={data.crews.map((c) => [c.id, c.name])} />
+          <Select label={d.crew} value={crewId} onChange={(v) => { setCrewId(v); setPicked(null); rememberCrewAction(v).catch(() => {}); }} options={data.crews.map((c) => [c.id, c.name])} />
         )}
         <Select
           label={d.player}

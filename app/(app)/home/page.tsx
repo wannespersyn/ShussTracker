@@ -1,6 +1,15 @@
+/**
+ * Home
+ *
+ * The signed-in player's dashboard for their active crew (remembered choice,
+ * else most active): rank, streak, recent nights and quick actions, with a
+ * crew switcher when they're in more than one crew.
+ */
 import Link from "next/link";
 import { requireSession } from "@/lib/db/authz";
-import { getCrewInsights, getUserCrews } from "@/lib/db/crew-insights";
+import { getCrewInsights } from "@/lib/db/crew-insights";
+import { getActiveCrew } from "@/lib/active-crew";
+import { CrewSwitcher } from "@/components/crews/CrewSwitcher";
 import { getFlair, getLocale, getT } from "@/lib/i18n/server";
 import { format } from "@/lib/i18n";
 import { firstName } from "@/lib/insights";
@@ -30,14 +39,8 @@ export default async function HomePage({
 }: Readonly<{ searchParams: Promise<{ crew?: string }> }>) {
   const session = await requireSession();
   const userId = session.user.id;
-  const [{ crew: crewParam }, crews, t, locale, flair] = await Promise.all([
-    searchParams,
-    getUserCrews(userId),
-    getT(),
-    getLocale(),
-    getFlair(),
-  ]);
-  const crew = crews.find((c) => c.id === crewParam) ?? crews[0];
+  const [{ crew: crewParam }, t, locale, flair] = await Promise.all([searchParams, getT(), getLocale(), getFlair()]);
+  const { crews, crew } = await getActiveCrew(userId, crewParam);
 
   const header = (
     <header className="flex items-center justify-between h-11">
@@ -131,6 +134,7 @@ export default async function HomePage({
   return (
     <Screen className={onFire ? cn("on-fire", heat && heat.level > 0 && `heat-${heat.level}`) : undefined}>
       {header}
+      <CrewSwitcher crews={crews} currentId={crew.id} next="/home" label={t.home.switchCrew} />
 
       {onFire && me?.streak && (
         <section

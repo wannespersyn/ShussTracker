@@ -1,13 +1,15 @@
 /**
  * Shussapp Wrapped (beta): the season story for the signed-in player in
- * their most active crew (or ?crewId=). Not in the beta → its explainer;
+ * their active crew (?crewId=, else the remembered crew, else most active),
+ * with a crew switcher when they're in more than one. Not in the beta → its explainer;
  * fewer than 10 season games → a "play N more" screen.
  */
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/db/authz";
 import { hasBeta } from "@/lib/db/beta";
-import { getUserCrews } from "@/lib/db/crew-insights";
+import { getActiveCrew } from "@/lib/active-crew";
+import { CrewSwitcher } from "@/components/crews/CrewSwitcher";
 import { getWrapped } from "@/lib/db/wrapped";
 import { getT } from "@/lib/i18n/server";
 import { format } from "@/lib/i18n";
@@ -21,8 +23,9 @@ export default async function WrappedPage({ searchParams }: Readonly<{ searchPar
   const session = await requireSession();
   const userId = session.user.id;
   if (!(await hasBeta(userId, "wrapped"))) redirect("/settings/beta/wrapped");
-  const [{ crewId }, crews, t] = await Promise.all([searchParams, getUserCrews(userId), getT()]);
-  const crew = crews.find((c) => c.id === crewId) ?? crews[0];
+  const [{ crewId }, t] = await Promise.all([searchParams, getT()]);
+  const { crews, crew } = await getActiveCrew(userId, crewId);
+  const switcher = (tone: "app" | "overlay") => <CrewSwitcher crews={crews} currentId={crew?.id} next="/wrapped" label={t.home.switchCrew} tone={tone} />;
   const closeHref = `/players/${userId}`;
   const W = t.beta.wrapped;
 
@@ -33,6 +36,7 @@ export default async function WrappedPage({ searchParams }: Readonly<{ searchPar
         <header className="flex items-center h-11">
           <BackLink href={closeHref} label={t.common.back} />
         </header>
+        {switcher("app")}
         <div className="flex-1 flex flex-col items-center justify-center text-center gap-3">
           <span className="font-heading font-bold text-[12px] tracking-[0.16em] text-muted">{W.kicker}</span>
           <h1 className="font-display font-extrabold text-[52px] leading-[0.9] uppercase">{W.notEnoughTitle}</h1>
@@ -51,5 +55,5 @@ export default async function WrappedPage({ searchParams }: Readonly<{ searchPar
     );
   }
 
-  return <WrappedPlayer data={result.data} closeHref={closeHref} />;
+  return <WrappedPlayer data={result.data} closeHref={closeHref} switcher={crews.length > 1 ? switcher("overlay") : undefined} />;
 }
