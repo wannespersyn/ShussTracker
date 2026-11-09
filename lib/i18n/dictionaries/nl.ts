@@ -283,6 +283,13 @@ export const nl: Dictionary = {
     rematch: "Revanche",
   },
   feed: {
+    recStreak: "{name}: nieuw crew-record — {n} wins op rij",
+    recMamaGame: "{name}: crew-record — {n} mama's in één game",
+    recMamaLeader: "{name} heeft nu de meeste mama's (adjes) van de crew — {n}",
+    recKruipLeader: "{name} is de nieuwe kruipkoning — {n}× gekropen",
+    recPrev: "Vorig record: {name} ({n})",
+    recPrevNone: "Eerste record van de crew",
+    recordTag: "RECORD",
     mamaN: "{n} mama",
     gotw: "Game van de week",
     reactionsComments: "{r} reacties · {c} comments",

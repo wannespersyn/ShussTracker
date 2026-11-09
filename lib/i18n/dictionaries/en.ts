@@ -284,6 +284,13 @@ export const en = {
     rematch: "Rematch",
   },
   feed: {
+    recStreak: "{name}: new crew record — {n} wins in a row",
+    recMamaGame: "{name}: crew record — {n} mamas in one game",
+    recMamaLeader: "{name} now has the most mamas (adjes) in the crew — {n}",
+    recKruipLeader: "{name} is the new kruipkoning — {n}× kruipen",
+    recPrev: "Previous record: {name} ({n})",
+    recPrevNone: "First record of the crew",
+    recordTag: "RECORD",
     mamaN: "{n} mama",
     gotw: "Game of the week",
     reactionsComments: "{r} reactions · {c} comments",
