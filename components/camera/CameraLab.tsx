@@ -15,7 +15,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { IGNORE, MAT_H, MAT_W, REAL_MAMAS, REAL_ZONES, WH, WW, align, detect, findField, spotAt, toPhoto, warp, type Blob, type Detection, type Frame, type Pt } from "@/lib/camera";
+import { MAT_H, MAT_W, REAL_MAMAS, REAL_ZONES, WH, WW, align, detect, findField, spotAt, toPhoto, warp, type Blob, type Detection, type Frame, type Pt } from "@/lib/camera";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/client";
 import { format, type Dictionary } from "@/lib/i18n";
@@ -33,11 +33,17 @@ async function load(file: File): Promise<Photo> {
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(bmp.width * k);
   canvas.height = Math.round(bmp.height * k);
-  const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) throw new Error("no canvas");
   ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+  bmp.close();
   const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
   const url = await new Promise<string>((res) => canvas.toBlob((b) => res(b ? URL.createObjectURL(b) : canvas.toDataURL("image/jpeg")), "image/jpeg", 0.9));
-  return { url, frame: { w: canvas.width, h: canvas.height, data: img.data } };
+  // iOS caps the memory of all canvases together and frees them late: release it now.
+  const frame = { w: canvas.width, h: canvas.height, data: img.data };
+  canvas.width = 0;
+  canvas.height = 0;
+  return { url, frame };
 }
 
 /** A starting guess when the mat isn't found: an inset rectangle. */
@@ -58,6 +64,7 @@ export function CameraLab() {
   const file = useRef<HTMLInputElement>(null);
   const [phase, setPhase] = useState<Phase>("empty");
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(false);
   const [empty, setEmpty] = useState<Photo | null>(null);
   const [corners, setCorners] = useState<Pt[]>([]);
   const [auto, setAuto] = useState(false);
@@ -71,7 +78,10 @@ export function CameraLab() {
 
   async function onPhoto(f: File) {
     setBusy(true);
+    setError(false);
     try {
+      // Let the "working…" state paint before the heavy, blocking maths.
+      await new Promise((r) => setTimeout(r, 50));
       const photo = await load(f);
       if (phase === "empty" || phase === "corners") {
         const found = findField(photo.frame);
@@ -89,6 +99,8 @@ export function CameraLab() {
       const warped = warp(photo.frame, c);
       setPending({ url: photo.url, photo, warped, corners: c, result: detect(emptyWarp, prev, warped, minDiff) });
       setPhase("review");
+    } catch {
+      setError(true);
     } finally {
       setBusy(false);
     }
@@ -109,6 +121,7 @@ export function CameraLab() {
   }
 
   function retake() {
+    if (pending) URL.revokeObjectURL(pending.url);
     setPending(null);
     setPhase("throw");
   }
@@ -179,6 +192,12 @@ export function CameraLab() {
           e.target.value = "";
         }}
       />
+
+      {error && (
+        <p role="alert" className="font-body text-sm font-semibold text-red-pale">
+          {C.loadError}
+        </p>
+      )}
 
       {phase === "empty" && (
         <section className="flex flex-col gap-3">
@@ -441,9 +460,6 @@ function TopDown({ warped, label }: Readonly<{ warped: Float32Array; label: stri
       <div className="relative">
         <canvas ref={ref} width={WW} height={WH} className="w-full h-auto rounded-[12px] border border-line" aria-label={label} />
         <svg viewBox={`0 0 ${MAT_W} ${MAT_H}`} className="absolute inset-0 w-full h-full pointer-events-none" aria-hidden="true">
-          {IGNORE.map((r) => (
-            <rect key={`${r.x}-${r.y}`} x={r.x} y={r.y} width={r.w} height={r.h} fill="none" stroke="rgba(255,255,255,0.35)" strokeDasharray="6 5" />
-          ))}
         </svg>
       </div>
       <figcaption className="font-body text-xs text-muted">{label}</figcaption>

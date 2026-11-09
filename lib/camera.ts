@@ -3,14 +3,18 @@
  *
  * Finds caps on photos of the mat taken from above — handheld is fine:
  *  1. find the black playing field in every photo (largest dark area) and
- *     fit its four edges, ignoring the bottles at the ends → corners;
+ *     fit its four edges, ignoring the bottles at the ends → corners; then
+ *     place the ends exactly using the two white tip triangles;
  *  2. fine-tune those corners against the reference photo (small search
  *     that minimises the pixel difference), and pick which end is which;
  *  3. warp to a small top-down image of the mat (824 × 265 mat space);
  *  4. compare high-passed images (so glare and light changes don't count),
- *     allowing a 1-pixel shift, with the bottle ends masked out;
- *  5. blobs that appeared since the previous photo = caps that landed,
- *     blobs that vanished = caps shot away, one huge blob = a hand.
+ *     allowing a 1-pixel shift, forgiving the mat's own print (letters and
+ *     edges differ when photos are a hair off), bottle ends masked out;
+ *  5. average that over cap-sized squares, so a cap counts both as a solid
+ *     disk (on black) and as just a dark rim (on white); peaks that appeared
+ *     since the previous photo = caps that landed, peaks that vanished =
+ *     caps shot away, a huge changed area = a hand.
  *
  * Data: raw RGBA pixels in, mat coordinates (lib/mat.ts) out. Pure JS.
  * Notes: tuned on real photos of the Leberschuss mat (black field, white
@@ -193,7 +197,104 @@ export function findField(frame: Frame): Pt[] | null {
     const t = a1 * s + b1;
     return { x: (mx + s * u.x + t * n.x) / k, y: (my + s * u.y + t * n.y) / k };
   };
-  return [meet(T1, L1), meet(T1, R1), meet(B1, R1), meet(B1, L1)];
+  const rough = [meet(T1, L1), meet(T1, R1), meet(B1, R1), meet(B1, L1)];
+  return refineEnds(frame, refineEnds(frame, rough));
+}
+
+/** Along the field's centre line, the white tip triangles are the cleanest
+ * landmarks: they run from TIP to TIP_IN mat units from each end. */
+const TIP = 60;
+const TIP_IN = 146;
+
+/** The ends of the field are the weak spot (bottles, cut-off corners): put
+ * them where the two white tip triangles say they are. Samples the centre
+ * line, finds both triangles, fits the 1-D perspective through their four
+ * ends and moves the end corners to mat x = 0 and x = 824. Returns the
+ * corners unchanged when the triangles aren't clearly visible. */
+export function refineEnds(frame: Frame, corners: Pt[]): Pt[] {
+  const h = homography(MAT_CORNERS, corners);
+  const STEP = 0.5;
+  const x0 = -60;
+  const n = Math.round((MAT_W + 120) / STEP);
+  const lum = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    let s = 0;
+    for (const dy of [-4, 0, 4]) {
+      const p = apply(h, { x: x0 + i * STEP, y: MAT_H / 2 + dy });
+      const px = Math.min(frame.w - 1, Math.max(0, Math.round(p.x)));
+      const py = Math.min(frame.h - 1, Math.max(0, Math.round(p.y)));
+      const j = (py * frame.w + px) * 4;
+      s += 0.299 * frame.data[j] + 0.587 * frame.data[j + 1] + 0.114 * frame.data[j + 2];
+    }
+    lum[i] = s / 3;
+  }
+  // Black: the middle of the field; white: the bright end of the samples.
+  const mid: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const x = x0 + i * STEP;
+    if (x > 380 && x < MAT_W - 380) mid.push(lum[i]);
+  }
+  const sorted = Array.from(lum).sort((a, b) => a - b);
+  const black = median(mid);
+  const white = sorted[Math.floor(sorted.length * 0.9)];
+  if (white - black < 40) return corners;
+  const cut = (black + white) / 2;
+  const runs: [number, number][] = [];
+  let start = -1;
+  for (let i = 0; i <= n; i++) {
+    const on = i < n && lum[i] > cut;
+    if (on && start < 0) start = i;
+    if (!on && start >= 0) {
+      runs.push([x0 + start * STEP, x0 + (i - 1) * STEP]);
+      start = -1;
+    }
+  }
+  const len = TIP_IN - TIP;
+  const pick = (lo: number, hi: number) =>
+    runs
+      .filter(([a, b]) => b - a > len * 0.6 && b - a < len * 1.5 && (a + b) / 2 > lo && (a + b) / 2 < hi)
+      .sort((p, q) => q[1] - q[0] - (p[1] - p[0]))[0];
+  const left = pick(TIP - 30, TIP_IN + 40);
+  const right = pick(MAT_W - TIP_IN - 40, MAT_W - TIP + 30);
+  if (!left || !right) return corners;
+  // u = (a·x + b) / (c·x + 1) through the four (true x, measured u) pairs.
+  const pairs: [number, number][] = [
+    [TIP, left[0]],
+    [TIP_IN, left[1]],
+    [MAT_W - TIP_IN, right[0]],
+    [MAT_W - TIP, right[1]],
+  ];
+  const A: number[][] = [];
+  const B: number[] = [];
+  for (const [x, u] of pairs) {
+    A.push([x, 1, -x * u]);
+    B.push(u);
+  }
+  const sol = leastSquares3(A, B);
+  if (!sol) return corners;
+  const [a, b, c] = sol;
+  const f = (x: number) => (a * x + b) / (c * x + 1);
+  const worst = Math.max(...pairs.map(([x, u]) => Math.abs(f(x) - u)));
+  const u0 = f(0);
+  const u1 = f(MAT_W);
+  if (!(worst < 6) || Math.abs(u0) > 90 || Math.abs(u1 - MAT_W) > 90) return corners;
+  return [apply(h, { x: u0, y: 0 }), apply(h, { x: u1, y: 0 }), apply(h, { x: u1, y: MAT_H }), apply(h, { x: u0, y: MAT_H })];
+}
+
+/** Least squares for 3 unknowns (normal equations, Cramer's rule). */
+function leastSquares3(A: number[][], B: number[]): [number, number, number] | null {
+  const M = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+  const v = [0, 0, 0];
+  for (let r = 0; r < A.length; r++)
+    for (let i = 0; i < 3; i++) {
+      v[i] += A[r][i] * B[r];
+      for (let j = 0; j < 3; j++) M[i * 3 + j] += A[r][i] * A[r][j];
+    }
+  const det = (m: number[]) => m[0] * (m[4] * m[8] - m[5] * m[7]) - m[1] * (m[3] * m[8] - m[5] * m[6]) + m[2] * (m[3] * m[7] - m[4] * m[6]);
+  const d = det(M);
+  if (Math.abs(d) < 1e-12) return null;
+  const col = (k: number) => M.map((x, idx) => (idx % 3 === k ? v[Math.floor(idx / 3)] : x));
+  return [det(col(0)) / d, det(col(1)) / d, det(col(2)) / d];
 }
 
 /** Mat point → photo point for a set of field corners (for overlays). */
@@ -316,20 +417,34 @@ function largest(m: Uint8Array, w: number, h: number): number[] | null {
   return best;
 }
 
-/** Warps a photo to a WW × WH top-down RGB image (3 bytes per pixel). */
+/** Warps a photo to a WW × WH top-down RGB image (3 values per pixel).
+ * Each pixel averages a small grid of photo samples, so fine print (the
+ * logo, "DRINKING SINCE") doesn't turn into flickering noise. */
 export function warp(frame: Frame, corners: Pt[]): Float32Array {
   const toPhoto = homography(MAT_CORNERS, corners);
   const out = new Float32Array(WW * WH * 3);
+  const span = Math.hypot(corners[1].x - corners[0].x, corners[1].y - corners[0].y) / WW;
+  const k = Math.min(4, Math.max(1, Math.round(span)));
   for (let y = 0; y < WH; y++)
     for (let x = 0; x < WW; x++) {
-      const p = apply(toPhoto, { x: (x + 0.5) / SCALE, y: (y + 0.5) / SCALE });
-      const px = Math.min(frame.w - 1, Math.max(0, Math.round(p.x)));
-      const py = Math.min(frame.h - 1, Math.max(0, Math.round(p.y)));
-      const i = (py * frame.w + px) * 4;
+      let r = 0;
+      let g = 0;
+      let b = 0;
+      for (let sy = 0; sy < k; sy++)
+        for (let sx = 0; sx < k; sx++) {
+          const p = apply(toPhoto, { x: (x + (sx + 0.5) / k) / SCALE, y: (y + (sy + 0.5) / k) / SCALE });
+          const px = Math.min(frame.w - 1, Math.max(0, Math.round(p.x)));
+          const py = Math.min(frame.h - 1, Math.max(0, Math.round(p.y)));
+          const i = (py * frame.w + px) * 4;
+          r += frame.data[i];
+          g += frame.data[i + 1];
+          b += frame.data[i + 2];
+        }
       const o = (y * WW + x) * 3;
-      out[o] = frame.data[i];
-      out[o + 1] = frame.data[i + 1];
-      out[o + 2] = frame.data[i + 2];
+      const n = k * k;
+      out[o] = r / n;
+      out[o + 1] = g / n;
+      out[o + 2] = b / n;
     }
   return out;
 }
@@ -426,10 +541,13 @@ export function highPass(img: Float32Array): Float32Array {
 
 /** Ends of the mat ignored by the comparison: the bottles stand there and,
  * being tall, look different from every angle. */
-const END = Math.round(WW * 0.07);
+const END = Math.round(WW * 0.06);
+/** The long edges of the field: black against the white sheet, so the
+ * slightest misalignment lights them up. A cap there is off the zones anyway. */
+const EDGE = 6;
 
-/** Per-pixel difference between two high-passed images, the smallest over a
- * 1-pixel shift (photos never line up perfectly). */
+/** Per-pixel difference between two high-passed images (summed over RGB),
+ * the smallest over a 1-pixel shift (photos never line up perfectly). */
 function shiftDiff(a: Float32Array, b: Float32Array): Float32Array {
   const out = new Float32Array(WW * WH).fill(Infinity);
   for (let dy = -1; dy <= 1; dy++)
@@ -445,103 +563,127 @@ function shiftDiff(a: Float32Array, b: Float32Array): Float32Array {
         }
       }
   for (let y = 0; y < WH; y++)
-    for (let x = 0; x < WW; x++) if (x < END || x >= WW - END) out[y * WW + x] = 0;
-  for (const r of IGNORE)
-    for (let y = Math.floor(r.y * SCALE); y < Math.min(WH, Math.ceil((r.y + r.h) * SCALE)); y++)
-      for (let x = Math.floor(r.x * SCALE); x < Math.min(WW, Math.ceil((r.x + r.w) * SCALE)); x++) out[y * WW + x] = 0;
+    for (let x = 0; x < WW; x++) if (x < END || x >= WW - END || y < EDGE || y >= WH - EDGE) out[y * WW + x] = 0;
   return out;
 }
 
-function mask(d: Float32Array, min: number): Uint8Array {
-  let sum = 0;
-  let sq = 0;
-  for (const v of d) {
-    sum += v;
-    sq += v * v;
-  }
-  const mean = sum / d.length;
-  const sd = Math.sqrt(Math.max(0, sq / d.length - mean * mean));
-  const t = Math.max(min, mean + 4 * sd);
-  const m = new Uint8Array(d.length);
-  for (let i = 0; i < d.length; i++) m[i] = d[i] > t ? 1 : 0;
-  // Opening: drop 1-pixel specks.
-  return morph(morph(m, WW, WH, false), WW, WH, true);
-}
-
-/** Connected blobs (4-neighbour) with centre in mat coordinates. */
-export function blobs(m: Uint8Array): Blob[] {
-  const seen = new Uint8Array(m.length);
-  const out: Blob[] = [];
-  for (let s = 0; s < m.length; s++) {
-    if (!m[s] || seen[s]) continue;
-    let area = 0;
-    let sx = 0;
-    let sy = 0;
-    let x0 = WW;
-    let x1 = 0;
-    let y0 = WH;
-    let y1 = 0;
-    const stack = [s];
-    seen[s] = 1;
-    while (stack.length) {
-      const p = stack.pop()!;
-      const x = p % WW;
-      const y = (p - x) / WW;
-      area++;
-      sx += x;
-      sy += y;
-      x0 = Math.min(x0, x);
-      x1 = Math.max(x1, x);
-      y0 = Math.min(y0, y);
-      y1 = Math.max(y1, y);
-      for (const q of [p - 1, p + 1, p - WW, p + WW]) {
-        if (q < 0 || q >= m.length || seen[q] || !m[q]) continue;
-        if ((q === p - 1 && x === 0) || (q === p + 1 && x === WW - 1)) continue;
-        seen[q] = 1;
-        stack.push(q);
-      }
+/** How busy the print is around each pixel (strongest detail within 1 px):
+ * where the mat has edges and letters, a slightly-off photo differs too. */
+function busyness(hp: Float32Array): Float32Array {
+  const e = new Float32Array(WW * WH);
+  for (let p = 0; p < e.length; p++) e[p] = Math.abs(hp[p * 3]) + Math.abs(hp[p * 3 + 1]) + Math.abs(hp[p * 3 + 2]);
+  const out = new Float32Array(e.length);
+  for (let y = 0; y < WH; y++)
+    for (let x = 0; x < WW; x++) {
+      let m = 0;
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -1; dx <= 1; dx++) {
+          const xx = x + dx;
+          const yy = y + dy;
+          if (xx >= 0 && yy >= 0 && xx < WW && yy < WH) m = Math.max(m, e[yy * WW + xx]);
+        }
+      out[y * WW + x] = m;
     }
-    const bw = x1 - x0 + 1;
-    const bh = y1 - y0 + 1;
-    out.push({
-      x: (sx / area + 0.5) / SCALE,
-      y: (sy / area + 0.5) / SCALE,
-      area: area / (SCALE * SCALE),
-      fill: area / (bw * bh),
-      aspect: Math.max(bw, bh) / Math.min(bw, bh),
-    });
-  }
   return out;
 }
 
-/** A cap is ~32 mat units across (≈ 800 units²); allow for blur, shadow and
- * a partly hidden cap. */
-export const CAP_MIN = 120;
-export const CAP_MAX = 3500;
+/** Mean of a single-channel image over a (2r+1)² square. */
+function boxMean(img: Float32Array, r: number): Float32Array {
+  const I = new Float64Array((WW + 1) * (WH + 1));
+  for (let y = 0; y < WH; y++) {
+    let row = 0;
+    for (let x = 0; x < WW; x++) {
+      row += img[y * WW + x];
+      I[(y + 1) * (WW + 1) + x + 1] = I[y * (WW + 1) + x + 1] + row;
+    }
+  }
+  const out = new Float32Array(WW * WH);
+  for (let y = 0; y < WH; y++)
+    for (let x = 0; x < WW; x++) {
+      const x0 = Math.max(0, x - r);
+      const y0 = Math.max(0, y - r);
+      const x1 = Math.min(WW, x + r + 1);
+      const y1 = Math.min(WH, y + r + 1);
+      out[y * WW + x] = (I[y1 * (WW + 1) + x1] - I[y0 * (WW + 1) + x1] - I[y1 * (WW + 1) + x0] + I[y0 * (WW + 1) + x0]) / ((x1 - x0) * (y1 - y0));
+    }
+  return out;
+}
+
+/** A cap is ~32 mat units across: 16 warped pixels. */
+const CAP_R = 6;
+/** How much of the print's own detail is forgiven (misalignment). */
+const BUSY = 0.6;
+/** Cap-sized "something changed here" score: the difference minus what
+ * misalignment of the print could explain, averaged over a cap-sized
+ * square. A cap scores high whether it shows as a solid disk (on black) or
+ * only as a dark rim (on white); thin lines and letter edges average out. */
+function changeScore(a: Float32Array, b: Float32Array, busyA: Float32Array, busyB: Float32Array): Float32Array {
+  // Both ways round: the shift may hide a thin rim in whichever image it moves.
+  const d = shiftDiff(a, b);
+  const r = shiftDiff(b, a);
+  for (let p = 0; p < d.length; p++) d[p] = Math.min(150, Math.max(0, Math.max(d[p], r[p]) - BUSY * Math.min(busyA[p], busyB[p])));
+  return boxMean(d, CAP_R);
+}
+
+/** Local maxima above `t`, at least a cap apart, strongest first. */
+function peaks(s: Float32Array, t: number): Blob[] {
+  const R = 8;
+  const out: Blob[] = [];
+  for (let y = 0; y < WH; y++)
+    for (let x = END; x < WW - END; x++) {
+      const v = s[y * WW + x];
+      if (v <= t) continue;
+      let top = true;
+      for (let dy = -R; dy <= R && top; dy++)
+        for (let dx = -R; dx <= R; dx++) {
+          const xx = x + dx;
+          const yy = y + dy;
+          if (xx < 0 || yy < 0 || xx >= WW || yy >= WH || (dx === 0 && dy === 0)) continue;
+          const w = s[yy * WW + xx];
+          if (w > v || (w === v && (dy < 0 || (dy === 0 && dx < 0)))) {
+            top = false;
+            break;
+          }
+        }
+      if (!top) continue;
+      // Size of the bright patch around the peak tells a cap from a hand.
+      let area = 0;
+      for (let dy = -2 * R; dy <= 2 * R; dy++)
+        for (let dx = -2 * R; dx <= 2 * R; dx++) {
+          const xx = x + dx;
+          const yy = y + dy;
+          if (xx >= 0 && yy >= 0 && xx < WW && yy < WH && s[yy * WW + xx] > t) area++;
+        }
+      out.push({ x: (x + 0.5) / SCALE, y: (y + 0.5) / SCALE, area: area / (SCALE * SCALE), fill: v, aspect: 1 });
+    }
+  return out.sort((a, b) => b.fill - a.fill);
+}
+
+const at = (s: Float32Array, b: Blob) => s[Math.min(WH - 1, Math.floor(b.y * SCALE)) * WW + Math.min(WW - 1, Math.floor(b.x * SCALE))];
+
+/** A patch this big that changed is a hand or arm, not a cap (mat units²). */
 export const HAND_MIN = 9000;
-/** Caps are round: compact blobs only (glare edges and lines are long and thin). */
-const caps = (bs: Blob[]) => bs.filter((b) => b.area >= CAP_MIN && b.area <= CAP_MAX && b.aspect <= 1.8 && b.fill >= 0.45);
 
 /** Compares the current photo with the empty mat and the previous photo
- * (all three already warped with `warp`). */
+ * (all three already warped with `warp`). `minDiff` is the sensitivity
+ * slider: lower finds fainter caps (and more false ones). */
 export function detect(empty: Float32Array, prev: Float32Array, cur: Float32Array, minDiff = 45): Detection {
   const [e, p, c] = [highPass(empty), highPass(prev), highPass(cur)];
-  const nowMask = mask(shiftDiff(c, e), minDiff);
-  const prevMask = mask(shiftDiff(p, e), minDiff);
-  const changed = mask(shiftDiff(c, p), minDiff);
-  const landed = new Uint8Array(nowMask.length);
-  const gone = new Uint8Array(nowMask.length);
-  for (let i = 0; i < nowMask.length; i++) {
-    if (!changed[i]) continue;
-    if (nowMask[i]) landed[i] = 1;
-    else if (prevMask[i]) gone[i] = 1;
-  }
-  const all = blobs(nowMask);
+  const [be, bp, bc] = [busyness(e), busyness(p), busyness(c)];
+  const t = minDiff * 0.4;
+  const now = changeScore(c, e, bc, be);
+  const before = changeScore(p, e, bp, be);
+  const changed = changeScore(c, p, bc, bp);
+  const present = peaks(now, t);
+  const landed = present.filter((b) => at(changed, b) > t * 0.7 && b.area < HAND_MIN);
+  const gone = peaks(before, t).filter((b) => at(changed, b) > t * 0.7 && at(now, b) < t * 0.6);
+  let big = 0;
+  for (const v of changed) if (v > t) big++;
   return {
-    landed: caps(blobs(landed)),
-    gone: caps(blobs(gone)),
-    present: caps(all),
-    occluded: blobs(changed).some((b) => b.area >= HAND_MIN),
+    landed,
+    gone,
+    present,
+    occluded: big / (SCALE * SCALE) >= HAND_MIN,
   };
 }
 
@@ -555,9 +697,9 @@ export function detect(empty: Float32Array, prev: Float32Array, cur: Float32Arra
  * --------------------------------------------------------------------- */
 type P2 = [number, number];
 const mirror = (pts: P2[]): P2[] => pts.map(([x, y]) => [MAT_W - x, y]);
-const L3: P2[] = [[80, 132.5], [161, 81], [161, 184]];
-const L2: P2[] = [[161, 81], [247, 26], [247, 239], [161, 184]];
-const L1: P2[] = [[247, 26], [275, 8], [365, 132.5], [275, 257], [247, 239]];
+const L3: P2[] = [[60, 132.5], [147, 86], [147, 179]];
+const L2: P2[] = [[147, 86], [237.5, 37.7], [237.5, 227.3], [147, 179]];
+const L1: P2[] = [[237.5, 37.7], [282, 14], [361, 132.5], [282, 251], [237.5, 227.3]];
 export const REAL_ZONES: { id: string; v: number; pts: P2[] }[] = [
   { id: "L3", v: 3, pts: L3 },
   { id: "L2", v: 2, pts: L2 },
@@ -567,14 +709,8 @@ export const REAL_ZONES: { id: string; v: number; pts: P2[] }[] = [
   { id: "R3", v: 3, pts: mirror(L3) },
 ];
 export const REAL_MAMAS = [
-  { id: "ML", x: 18, y: 92, w: 58, h: 81 },
-  { id: "MR", x: MAT_W - 76, y: 92, w: 58, h: 81 },
-];
-/** Printed bits that never move but confuse the comparison (the
- * "LEBERSCHUSS" lines with their referee square): ignored. */
-export const IGNORE: { x: number; y: number; w: number; h: number }[] = [
-  { x: 330, y: 14, w: 165, h: 48 },
-  { x: 330, y: 190, w: 165, h: 50 },
+  { id: "ML", x: 4, y: 98, w: 50, h: 69 },
+  { id: "MR", x: MAT_W - 54, y: 98, w: 50, h: 69 },
 ];
 
 function inPoly(x: number, y: number, pts: [number, number][]) {

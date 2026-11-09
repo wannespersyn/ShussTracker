@@ -742,6 +742,7 @@ export const en = {
     fine: "FINE",
     coarse: "COARSE",
     cornerShort: "Corner {n}",
+    loadError: "That photo didn't work. Try again — closing other apps can help.",
   },
   sb: {
     title: "STATS",

@@ -741,6 +741,7 @@ export const nl: Dictionary = {
     fine: "FIJN",
     coarse: "GROF",
     cornerShort: "Hoek {n}",
+    loadError: "Die foto lukte niet. Probeer opnieuw — andere apps sluiten kan helpen.",
   },
   sb: {
     title: "STATS",
