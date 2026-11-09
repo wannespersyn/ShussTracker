@@ -14,10 +14,10 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { spotAt, type Pt } from "@/lib/camera";
+import type { Pt } from "@/lib/camera";
 import { CornerEditor } from "@/components/camera/CameraLab";
 import type { CameraState } from "@/lib/db/camera";
-import { MatPick } from "@/components/camera/MatPick";
+import { MatPick, SpotsEditor, spotsLabel, type Spot } from "@/components/camera/MatPick";
 import {
   correctCameraThrowAction,
   getCameraSnapshotAction,
@@ -31,7 +31,6 @@ import { useT } from "@/lib/i18n/client";
 import { format } from "@/lib/i18n";
 
 const POLL = 2000;
-type Spot = { x: number; y: number } | null;
 
 export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraState; crewName: string }>) {
   const { t } = useT();
@@ -89,17 +88,12 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
   }, [version, snap?.version, initial.id, state.corners]);
 
   const th = state.throws.find((x) => x.id === open);
-  const spotText = (s: Spot) => {
-    if (!s) return L.noCap;
-    const z = spotAt(s);
-    if (z.v === "mama") return format(C.mama, { side: z.id === "ML" ? C.left : C.right });
-    if (z.v !== null) return format(C.zone, { id: z.id, v: z.v });
-    return z.id === "off" ? C.off : C.none;
-  };
-  function correct(id: string, spot: Spot) {
-    setState((st) => ({ ...st, throws: st.throws.map((x) => (x.id === id ? { ...x, spot, corrected: true } : x)) }));
+  const spotText = (sp: Spot[]) => spotsLabel(sp, C, L);
+
+  function correct(id: string, spots: Spot[]) {
+    setState((st) => ({ ...st, throws: st.throws.map((x) => (x.id === id ? { ...x, spots, corrected: true } : x)) }));
     setFixing(false);
-    correctCameraThrowAction(id, spot).catch(() => {});
+    correctCameraThrowAction(id, spots).catch(() => {});
   }
 
   const kicker = "font-heading font-bold text-[12px] tracking-[0.14em] text-gold";
@@ -164,26 +158,13 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
       {th && state.phase === "watching" && (
         <section className="flex flex-col gap-3" aria-live="polite">
           <span className={kicker}>{format(L.throwN, { n: th.n })}</span>
-          <MatPick
-            src={images[th.id] ?? null}
-            spot={th.spot}
-            label={fixing ? L.whereSub : spotText(th.spot)}
-            onTap={fixing ? (p) => correct(th.id, p) : undefined}
-          />
           {fixing ? (
-            <>
-              <p className="font-body text-[15px] text-soft">{L.whereSub}</p>
-              <button type="button" onClick={() => correct(th.id, null)} className={secondary}>
-                {L.noCapBtn}
-              </button>
-              <button type="button" onClick={() => setFixing(false)} className="font-heading font-bold text-[13px] tracking-[0.08em] text-muted py-2">
-                {t.common.close}
-              </button>
-            </>
+            <SpotsEditor key={th.id} src={images[th.id] ?? null} initial={th.spots} gone={th.gone} C={C} L={L} onSave={(sp) => correct(th.id, sp)} onClose={() => setFixing(false)} />
           ) : (
             <>
+              <MatPick src={images[th.id] ?? null} spots={th.spots} gone={th.gone} label={spotText(th.spots)} />
               <p className="font-display font-extrabold text-2xl leading-tight">
-                {th.corrected ? spotText(th.spot) : th.spot ? format(L.capIn, { where: spotText(th.spot) }) : L.noCapQ}
+                {th.corrected ? spotText(th.spots) : th.spots.length ? format(th.spots.length > 1 ? L.capsIn : L.capIn, { where: spotText(th.spots) }) : L.noCapQ}
               </p>
               {th.corrected || okd.has(th.id) ? (
                 <button type="button" onClick={() => setFixing(true)} className={secondary}>
@@ -219,7 +200,7 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
               className={cn("flex items-center gap-3 px-3.5 py-2.5 rounded-[14px] border text-left", x.id === open ? "bg-surface-raised border-gold/50" : "bg-surface-deep border-line")}
             >
               <span className="font-heading font-extrabold text-sm text-gold w-14">{format(C.throwShort, { n: x.n })}</span>
-              <span className="flex-1 min-w-0 truncate font-body text-sm">{spotText(x.spot)}</span>
+              <span className="flex-1 min-w-0 truncate font-body text-sm">{spotText(x.spots)}</span>
               {x.corrected && <span className="font-heading font-bold text-[11px] tracking-[0.08em] text-muted">{L.fixed}</span>}
             </button>
           ))}

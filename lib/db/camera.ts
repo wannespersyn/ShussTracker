@@ -19,11 +19,16 @@ const STALE_MS = 2 * 60 * 1000;
 /** Throws sent per poll (newest first). */
 const MAX_THROWS = 60;
 
+export type Spot = { x: number; y: number };
 export type CameraThrow = {
   id: string;
   n: number;
-  found: { x: number; y: number } | null;
-  spot: { x: number; y: number } | null;
+  /** Caps the camera saw land or move in this throw. */
+  found: Spot[];
+  /** The final list (corrected or as found). */
+  spots: Spot[];
+  /** Where caps were knocked away from. */
+  gone: Spot[];
   corrected: boolean;
   createdAt: Date;
 };
@@ -62,35 +67,35 @@ export async function endCameraSession(userId: string, sessionId: string) {
   await db.update(cameraSessions).set({ live: false }).where(and(eq(cameraSessions.id, sessionId), eq(cameraSessions.userId, userId)));
 }
 
-/** The camera posts a judged throw (x/y null = no cap). */
-export async function addCameraThrow(userId: string, sessionId: string, t: { n: number; x: number | null; y: number | null; image: string | null }) {
+/** The camera posts a judged throw. */
+export async function addCameraThrow(userId: string, sessionId: string, t: { n: number; spots: Spot[]; gone: Spot[]; image: string | null }) {
   const s = await db.query.cameraSessions.findFirst({ where: and(eq(cameraSessions.id, sessionId), eq(cameraSessions.userId, userId)) });
   if (!s) throw new Error("Not your camera");
   const image = t.image && t.image.startsWith("data:image/jpeg;base64,") && t.image.length < 120_000 ? t.image : null;
   await db
     .insert(cameraThrows)
-    .values({ sessionId, n: t.n, foundX: t.x, foundY: t.y, x: t.x, y: t.y, image })
+    .values({ sessionId, n: t.n, found: t.spots, spots: t.spots, gone: t.gone, image })
     .onConflictDoNothing();
   await db.update(cameraSessions).set({ updatedAt: new Date() }).where(eq(cameraSessions.id, sessionId));
 }
 
 /** Anyone in the crew (the camera too) fixes where a throw's cap lies. */
-export async function correctCameraThrow(userId: string, throwId: string, spot: { x: number; y: number } | null) {
+export async function correctCameraThrow(userId: string, throwId: string, spots: Spot[]) {
   const t = await db.query.cameraThrows.findFirst({ where: eq(cameraThrows.id, throwId), columns: { sessionId: true } });
   if (!t) throw new Error("Not found");
   await sessionFor(userId, t.sessionId);
   await db
     .update(cameraThrows)
-    .set({ x: spot?.x ?? null, y: spot?.y ?? null, correctedBy: userId })
+    .set({ spots, correctedBy: userId })
     .where(eq(cameraThrows.id, throwId));
 }
 
 /** Same, by throw number (the camera knows its own numbers, not the ids). */
-export async function correctCameraThrowByN(userId: string, sessionId: string, n: number, spot: { x: number; y: number } | null) {
+export async function correctCameraThrowByN(userId: string, sessionId: string, n: number, spots: Spot[]) {
   await sessionFor(userId, sessionId);
   await db
     .update(cameraThrows)
-    .set({ x: spot?.x ?? null, y: spot?.y ?? null, correctedBy: userId })
+    .set({ spots, correctedBy: userId })
     .where(and(eq(cameraThrows.sessionId, sessionId), eq(cameraThrows.n, n)));
 }
 
@@ -101,7 +106,7 @@ export async function getCameraState(userId: string, sessionId: string): Promise
   if (s.userId === userId && s.live) await db.update(cameraSessions).set({ updatedAt: new Date() }).where(eq(cameraSessions.id, sessionId));
   const [rows, cam] = await Promise.all([
     db
-      .select({ id: cameraThrows.id, n: cameraThrows.n, foundX: cameraThrows.foundX, foundY: cameraThrows.foundY, x: cameraThrows.x, y: cameraThrows.y, correctedBy: cameraThrows.correctedBy, createdAt: cameraThrows.createdAt })
+      .select({ id: cameraThrows.id, n: cameraThrows.n, found: cameraThrows.found, spots: cameraThrows.spots, gone: cameraThrows.gone, correctedBy: cameraThrows.correctedBy, createdAt: cameraThrows.createdAt })
       .from(cameraThrows)
       .where(eq(cameraThrows.sessionId, sessionId))
       .orderBy(desc(cameraThrows.n))
@@ -121,8 +126,9 @@ export async function getCameraState(userId: string, sessionId: string): Promise
     throws: rows.map((r) => ({
       id: r.id,
       n: r.n,
-      found: r.foundX === null || r.foundY === null ? null : { x: r.foundX, y: r.foundY },
-      spot: r.x === null || r.y === null ? null : { x: r.x, y: r.y },
+      found: r.found,
+      spots: r.spots,
+      gone: r.gone,
       corrected: r.correctedBy !== null,
       createdAt: r.createdAt,
     })),

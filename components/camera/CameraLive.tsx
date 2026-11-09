@@ -23,9 +23,9 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { WH, WW, align, detect, findField, spotAt, warp, type Frame, type Pt } from "@/lib/camera";
+import { WH, WW, align, detect, findField, warp, type Frame, type Pt } from "@/lib/camera";
 import { CornerEditor, Overlay, defaultCorners, type Photo } from "@/components/camera/CameraLab";
-import { MatPick, warpedToJpeg } from "@/components/camera/MatPick";
+import { SpotsEditor, spotsLabel, warpedToJpeg, type Spot } from "@/components/camera/MatPick";
 import {
   addCameraThrowAction,
   correctCameraThrowByNAction,
@@ -60,8 +60,7 @@ const CONFIRM_S = 6;
 
 type Phase = "start" | "calibrate" | "live";
 type Status = "waiting" | "moving" | "looking";
-type Spot = { x: number; y: number } | null;
-type Throw = { n: number; spot: Spot; corrected: boolean; img: string | null };
+type Throw = { n: number; spots: Spot[]; gone: Spot[]; corrected: boolean; img: string | null };
 /** How often the session is synced with the crew (ms). */
 const SYNC = 2500;
 
@@ -284,13 +283,13 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
           const cur = warp(f, S.corners);
           const r = detect(S.empty!, S.still!, cur);
           S.still = cur;
-          const cap = r.landed[0];
           const n = ++S.n;
-          const spot = cap ? { x: cap.x, y: cap.y } : null;
+          const spots = r.landed.map((b) => ({ x: b.x, y: b.y }));
+          const gone = r.gone.map((b) => ({ x: b.x, y: b.y }));
           const img = warpedToJpeg(cur, WW, WH);
-          setThrows((ts) => [{ n, spot, corrected: false, img }, ...ts]);
+          setThrows((ts) => [{ n, spots, gone, corrected: false, img }, ...ts]);
           setAsk({ n, left: CONFIRM_S });
-          if (session.current) addCameraThrowAction(session.current, { n, x: spot?.x ?? null, y: spot?.y ?? null, image: img }).catch(() => {});
+          if (session.current) addCameraThrowAction(session.current, { n, spots, gone, image: img }).catch(() => {});
         } finally {
           S.busy = false;
           setStatus("waiting");
@@ -307,11 +306,11 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
     return () => window.clearTimeout(id);
   }, [ask, fixing]);
 
-  function correct(n: number, spot: Spot) {
-    setThrows((ts) => ts.map((th) => (th.n === n ? { ...th, spot, corrected: true } : th)));
+  function correct(n: number, spots: Spot[]) {
+    setThrows((ts) => ts.map((th) => (th.n === n ? { ...th, spots, corrected: true } : th)));
     setFixing(null);
     setAsk(null);
-    if (session.current) correctCameraThrowByNAction(session.current, n, spot).catch(() => {});
+    if (session.current) correctCameraThrowByNAction(session.current, n, spots).catch(() => {});
   }
 
   // Sync with the crew: corners set on another phone or laptop, requests
@@ -330,9 +329,9 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
             watch(st.corners);
             return;
           }
-          const remote = new Map(st.throws.filter((th) => th.corrected).map((th) => [th.n, th.spot]));
+          const remote = new Map(st.throws.filter((th) => th.corrected).map((th) => [th.n, th.spots]));
           if (!remote.size) return;
-          setThrows((ts) => ts.map((th) => (remote.has(th.n) && !th.corrected ? { ...th, spot: remote.get(th.n) ?? null, corrected: true } : th)));
+          setThrows((ts) => ts.map((th) => (remote.has(th.n) && !th.corrected ? { ...th, spots: remote.get(th.n) ?? [], corrected: true } : th)));
           setAsk((a) => (a && remote.has(a.n) ? null : a));
         })
         .catch(() => {});
@@ -342,13 +341,8 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
-  const spotText = (s: Spot) => {
-    if (!s) return L.noCap;
-    const z = spotAt(s);
-    if (z.v === "mama") return format(C.mama, { side: z.id === "ML" ? C.left : C.right });
-    if (z.v !== null) return format(C.zone, { id: z.id, v: z.v });
-    return z.id === "off" ? C.off : C.none;
-  };
+  const spotText = (sp: Spot[]) => spotsLabel(sp, C, L);
+
 
   const kicker = "font-heading font-bold text-[12px] tracking-[0.14em] text-gold";
   const primary = "h-14 rounded-[16px] bg-amber text-ink font-heading font-extrabold text-lg tracking-[0.06em] disabled:opacity-40";
@@ -461,21 +455,23 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
       {phase === "live" && fixingThrow && (
         <section className="flex flex-col gap-3" aria-live="polite">
           <span className={kicker}>{format(L.whereN, { n: fixingThrow.n })}</span>
-          <p className="font-body text-[15px] leading-normal text-soft">{L.whereSub}</p>
-          <MatPick src={fixingThrow.img} spot={fixingThrow.spot} label={L.whereSub} onTap={(p) => correct(fixingThrow.n, p)} />
-          <button type="button" onClick={() => correct(fixingThrow.n, null)} className={secondary}>
-            {L.noCapBtn}
-          </button>
-          <button type="button" onClick={() => setFixing(null)} className="font-heading font-bold text-[13px] tracking-[0.08em] text-muted py-2">
-            {t.common.close}
-          </button>
+          <SpotsEditor
+            key={fixingThrow.n}
+            src={fixingThrow.img}
+            initial={fixingThrow.spots}
+            gone={fixingThrow.gone}
+            C={C}
+            L={L}
+            onSave={(sp) => correct(fixingThrow.n, sp)}
+            onClose={() => setFixing(null)}
+          />
         </section>
       )}
 
       {phase === "live" && !fixingThrow && asked && (
         <section className="flex flex-col gap-3 p-4 rounded-[18px] bg-surface-deep border border-gold/50" aria-live="polite">
           <span className={kicker}>{format(L.throwN, { n: asked.n })}</span>
-          <p className="font-display font-extrabold text-2xl leading-tight">{asked.spot ? format(L.capIn, { where: spotText(asked.spot) }) : L.noCapQ}</p>
+          <p className="font-display font-extrabold text-2xl leading-tight">{asked.spots.length ? format(asked.spots.length > 1 ? L.capsIn : L.capIn, { where: spotText(asked.spots) }) : L.noCapQ}</p>
           <div className="grid grid-cols-2 gap-2">
             <button type="button" onClick={() => setAsk(null)} className="h-12 rounded-[14px] bg-mint text-ink font-heading font-extrabold text-base tracking-[0.06em]">
               ✓ {format(L.right, { s: ask!.left })}
@@ -502,7 +498,7 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
               className="flex items-center gap-3 px-3.5 py-2.5 rounded-[14px] bg-surface-deep border border-line text-left"
             >
               <span className="font-heading font-extrabold text-sm text-gold w-14">{format(C.throwShort, { n: th.n })}</span>
-              <span className="flex-1 min-w-0 truncate font-body text-sm">{spotText(th.spot)}</span>
+              <span className="flex-1 min-w-0 truncate font-body text-sm">{spotText(th.spots)}</span>
               {th.corrected && <span className="font-heading font-bold text-[11px] tracking-[0.08em] text-muted">{L.fixed}</span>}
             </button>
           ))}

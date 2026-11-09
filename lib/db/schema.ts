@@ -10,7 +10,6 @@ import {
   primaryKey,
   unique,
   jsonb,
-  real,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
@@ -738,12 +737,13 @@ export const cameraThrows = pgTable(
       .notNull()
       .references(() => cameraSessions.id, { onDelete: "cascade" }),
     n: integer("n").notNull(),
-    // What the camera found (mat units, 824 × 265); null = no cap.
-    foundX: real("found_x"),
-    foundY: real("found_y"),
-    // The final spot (same as found unless someone corrected it).
-    x: real("x"),
-    y: real("y"),
+    // Caps that landed or moved there in this throw (mat units, 824 × 265):
+    // what the camera found, and the final list (corrected or not). One
+    // throw can move several caps (the thrown one knocks another).
+    found: jsonb("found").$type<{ x: number; y: number }[]>().notNull().default([]),
+    spots: jsonb("spots").$type<{ x: number; y: number }[]>().notNull().default([]),
+    // Where caps were knocked away from.
+    gone: jsonb("gone").$type<{ x: number; y: number }[]>().notNull().default([]),
     correctedBy: uuid("corrected_by").references(() => users.id, { onDelete: "set null" }),
     // Small top-down JPEG (data URL) of the mat after the throw.
     image: text("image"),

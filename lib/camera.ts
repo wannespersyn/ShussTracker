@@ -801,8 +801,11 @@ export function detect(empty: Float32Array, prev: Float32Array, cur: Float32Arra
   const before = changeScore(P, E);
   const changed = changeScore(C, P);
   const present = peaks(now, t).filter((b) => isolated(now, b));
-  // One throw, one cap: the strongest new bump is the one that landed.
-  const landed = present.filter((b) => at(changed, b) > t * 0.7 && isolated(changed, b) && b.area < HAND_MIN).slice(0, 1);
+  // One throw moves a few caps at most (the thrown one can knock another
+  // on): keep the strongest new bumps; much fainter ones are mostly shadows.
+  const fresh = present.filter((b) => at(changed, b) > t * 0.7 && isolated(changed, b) && b.area < HAND_MIN);
+  const top = fresh[0]?.fill ?? 0;
+  const landed = fresh.filter((b) => b.fill >= top * 0.45).slice(0, 3);
   const gone = peaks(before, t).filter((b) => isolated(before, b) && at(changed, b) > t * 0.7 && at(now, b) < t * 0.6);
   let big = 0;
   for (const v of changed) if (v > t) big++;

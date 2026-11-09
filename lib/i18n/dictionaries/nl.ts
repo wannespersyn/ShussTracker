@@ -793,6 +793,9 @@ export const nl: Dictionary = {
     calRemoteWaiting: "De camera neemt een foto van de lege mat…",
     calRemoteSent: "VERSTUURD — DE CAMERA BEGINT",
     crewCardCal: "{name} zet een camera klaar — kalibreer mee",
+    capsIn: "Doppen {where}?",
+    save: "OPSLAAN",
+    cancel: "Annuleren",
   },
   sb: {
     title: "STATS",

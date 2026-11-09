@@ -794,6 +794,9 @@ export const en = {
     calRemoteWaiting: "The camera is taking a picture of the empty mat…",
     calRemoteSent: "SENT — THE CAMERA STARTS",
     crewCardCal: "{name} is setting up a camera — help calibrate",
+    capsIn: "Caps {where}?",
+    save: "SAVE",
+    cancel: "Cancel",
   },
   sb: {
     title: "STATS",
