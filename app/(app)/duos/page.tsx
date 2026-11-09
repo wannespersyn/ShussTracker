@@ -143,6 +143,7 @@ export default async function DuosPage({
             { label: t.home.winPct, value: `${duo.winPct}%` },
             { label: t.duo.bestRun, value: `${duo.bestWinStreak} W` },
             { label: t.duo.duoElo, value: duo.duoElo },
+            { label: t.duo.kruipen, value: duo.kruipen },
           ]}
           size={24}
         />
@@ -187,6 +188,7 @@ export default async function DuosPage({
               <span className="font-body text-[11px] text-muted">
                 {dateFmt.format(g.playedAt)}
                 {g.mama > 0 && ` · ${format(t.feed.mamaN, { n: g.mama })}`}
+                {g.kruip && ` · ${t.duo.kruiped}`}
               </span>
             </span>
             {g.won && g.streakAfter >= 2 && (

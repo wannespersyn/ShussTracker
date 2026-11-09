@@ -23,7 +23,7 @@ type CachedCrewData = {
  * invalidated by the server actions that change it — see lib/cache-tags.ts.
  * Stored with plain-number dates so it survives the cache's JSON round trip. */
 function loadCrewData(groupId: string): Promise<CachedCrewData> {
-  return unstable_cache(() => fetchCrewData(groupId), ["crew-data-v1", groupId], {
+  return unstable_cache(() => fetchCrewData(groupId), ["crew-data-v2", groupId], {
     tags: [crewTag(groupId), ALL_CREWS_TAG],
     revalidate: CREW_CACHE_SECONDS,
   })();
@@ -37,7 +37,7 @@ async function fetchCrewData(groupId: string): Promise<CachedCrewData> {
       columns: { id: true, playedAt: true, matType: true },
       with: {
         teams: {
-          columns: { finalRank: true },
+          columns: { finalRank: true, kruip: true },
           with: {
             players: {
               columns: { userId: true },
@@ -56,6 +56,7 @@ async function fetchCrewData(groupId: string): Promise<CachedCrewData> {
       matType: g.matType,
       teams: g.teams.map((t) => ({
         rank: t.finalRank,
+        kruip: t.kruip,
         players: t.players.map((p) => ({
           id: p.userId,
           name: p.user.name ?? "Player",
