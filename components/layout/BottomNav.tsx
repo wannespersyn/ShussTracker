@@ -47,6 +47,8 @@ export function BottomNav({ currentUserId }: Readonly<{ currentUserId: string }>
   if (
     pathname.startsWith("/log") ||
     /\/tournaments\/[^/]+\/match\//.test(pathname) ||
+    pathname === "/americano/new" ||
+    /\/americano\/[^/]+\/game\//.test(pathname) ||
     pathname.endsWith("/recap") ||
     pathname.startsWith("/game/") ||
     pathname.endsWith("/sessions") ||

@@ -110,7 +110,7 @@ function CapSvg({ size, fill, inner, ring, children }: Readonly<{ size: number; 
   );
 }
 
-export function WrappedPlayer({ data, closeHref, switcher }: Readonly<{ data: WrappedData; closeHref: string; switcher?: ReactNode }>) {
+export function WrappedPlayer({ data, closeHref }: Readonly<{ data: WrappedData; closeHref: string }>) {
   const { t, locale } = useT();
   const W = t.beta.wrapped;
   const [{ slide, elapsed }, setPos] = useState({ slide: 0, elapsed: 0 });
@@ -223,11 +223,6 @@ export function WrappedPlayer({ data, closeHref, switcher }: Readonly<{ data: Wr
             </Link>
           </div>
         </div>
-        {switcher && slide === 0 && (
-          <div style={{ marginTop: 4 }} onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
-            {switcher}
-          </div>
-        )}
       </div>
 
       <div key={slide} style={abs({ left: 20, right: 20, top: 84, bottom: 30, zIndex: 2, pointerEvents: "none" })}>

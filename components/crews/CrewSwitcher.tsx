@@ -14,8 +14,7 @@ export function CrewSwitcher({
   currentId,
   next,
   label,
-  tone = "app",
-}: Readonly<{ crews: { id: string; name: string }[]; currentId: string | undefined; next: string; label: string; tone?: "app" | "overlay" }>) {
+}: Readonly<{ crews: { id: string; name: string }[]; currentId: string | undefined; next: string; label: string }>) {
   if (crews.length < 2) return null;
   return (
     <nav aria-label={label} className="flex gap-1.5 overflow-x-auto -mx-5 px-5">
@@ -30,13 +29,7 @@ export function CrewSwitcher({
               aria-current={active ? "true" : undefined}
               className={cn(
                 "h-8 px-3 rounded-sm flex items-center font-heading font-bold text-sm tracking-[0.06em] uppercase whitespace-nowrap",
-                tone === "overlay"
-                  ? active
-                    ? "bg-black/80 text-white"
-                    : "bg-black/15 text-current border border-current/30"
-                  : active
-                    ? "bg-surface-raised text-cream border border-gold/50"
-                    : "text-muted border border-line",
+                active ? "bg-surface-raised text-cream border border-gold/50" : "text-muted border border-line",
               )}
             >
               {c.name}
