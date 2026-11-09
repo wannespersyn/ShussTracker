@@ -12,14 +12,19 @@
  *    tap on "Wrong" lets them point at the real spot on the mat (or say
  *    there was no cap). Corrections are kept with the throw, so they can
  *    later become training data.
- * Everything runs on the phone; nothing is uploaded.
+ * The session is shared with a crew: every judged throw (spot + a small
+ * top-down picture) is posted, crew members follow and correct it from
+ * their own phone (CameraViewer, linked from the crew page), and their
+ * corrections come back here through polling.
  */
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
-import { MAT_H, MAT_W, REAL_MAMAS, REAL_ZONES, WH, WW, align, detect, findField, spotAt, warp, type Frame, type Pt } from "@/lib/camera";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { WH, WW, align, detect, findField, spotAt, warp, type Frame, type Pt } from "@/lib/camera";
 import { CornerEditor, Overlay, defaultCorners, type Photo } from "@/components/camera/CameraLab";
+import { MatPick, warpedToJpeg } from "@/components/camera/MatPick";
+import { addCameraThrowAction, correctCameraThrowByNAction, endCameraSessionAction, getCameraStateAction, startCameraSessionAction } from "@/app/(app)/camera/actions";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/client";
 import { format } from "@/lib/i18n";
@@ -39,7 +44,9 @@ const CONFIRM_S = 6;
 type Phase = "start" | "calibrate" | "live";
 type Status = "waiting" | "moving" | "looking";
 type Spot = { x: number; y: number } | null;
-type Throw = { n: number; spot: Spot; corrected: boolean; warped: Float32Array };
+type Throw = { n: number; spot: Spot; corrected: boolean; img: string | null };
+/** How often the session is synced with the crew (ms). */
+const SYNC = 2500;
 
 /** Small grey copy of a warped frame for the movement check. */
 function tiny(w: Float32Array): Float32Array {
@@ -66,7 +73,7 @@ function change(a: Float32Array, b: Float32Array): number {
   return s / a.length;
 }
 
-export function CameraLive() {
+export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: string; name: string }[]; initialCrewId?: string }>) {
   const { t } = useT();
   const C = t.cam;
   const L = t.camLive;
@@ -81,6 +88,9 @@ export function CameraLive() {
   const [throws, setThrows] = useState<Throw[]>([]);
   const [ask, setAsk] = useState<{ n: number; left: number } | null>(null);
   const [fixing, setFixing] = useState<number | null>(null);
+  const [crewId, setCrewId] = useState(initialCrewId ?? crews[0]?.id ?? "");
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const session = useRef<string | null>(null);
 
   // Live state the camera loop reads without re-rendering.
   const live = useRef({
@@ -97,6 +107,8 @@ export function CameraLive() {
   const stop = useCallback(() => {
     stream.current?.getTracks().forEach((tr) => tr.stop());
     stream.current = null;
+    if (session.current) endCameraSessionAction(session.current).catch(() => {});
+    session.current = null;
   }, []);
   useEffect(() => stop, [stop]);
 
@@ -164,6 +176,15 @@ export function CameraLive() {
     setAsk(null);
     setFixing(null);
     setPhase("live");
+    if (crewId) {
+      if (session.current) endCameraSessionAction(session.current).catch(() => {});
+      startCameraSessionAction(crewId)
+        .then((id) => {
+          session.current = id;
+          setSessionId(id);
+        })
+        .catch(() => setError(L.shareError));
+    }
   }
 
   // The camera loop.
@@ -199,8 +220,11 @@ export function CameraLive() {
           S.still = cur;
           const cap = r.landed[0];
           const n = ++S.n;
-          setThrows((ts) => [{ n, spot: cap ? { x: cap.x, y: cap.y } : null, corrected: false, warped: cur }, ...ts]);
+          const spot = cap ? { x: cap.x, y: cap.y } : null;
+          const img = warpedToJpeg(cur, WW, WH);
+          setThrows((ts) => [{ n, spot, corrected: false, img }, ...ts]);
           setAsk({ n, left: CONFIRM_S });
+          if (session.current) addCameraThrowAction(session.current, { n, x: spot?.x ?? null, y: spot?.y ?? null, image: img }).catch(() => {});
         } finally {
           S.busy = false;
           setStatus("waiting");
@@ -221,7 +245,25 @@ export function CameraLive() {
     setThrows((ts) => ts.map((th) => (th.n === n ? { ...th, spot, corrected: true } : th)));
     setFixing(null);
     setAsk(null);
+    if (session.current) correctCameraThrowByNAction(session.current, n, spot).catch(() => {});
   }
+
+  // Corrections made by crew members on their own phone come back here
+  // (and the poll keeps the session marked live).
+  useEffect(() => {
+    if (phase !== "live" || !sessionId) return;
+    const id = window.setInterval(() => {
+      getCameraStateAction(sessionId)
+        .then((st) => {
+          const remote = new Map(st.throws.filter((th) => th.corrected).map((th) => [th.n, th.spot]));
+          if (!remote.size) return;
+          setThrows((ts) => ts.map((th) => (remote.has(th.n) && !th.corrected ? { ...th, spot: remote.get(th.n) ?? null, corrected: true } : th)));
+          setAsk((a) => (a && remote.has(a.n) ? null : a));
+        })
+        .catch(() => {});
+    }, SYNC);
+    return () => window.clearInterval(id);
+  }, [phase, sessionId]);
 
   const spotText = (s: Spot) => {
     if (!s) return L.noCap;
@@ -286,6 +328,25 @@ export function CameraLive() {
             <li>{L.tip2}</li>
             <li>{L.tip3}</li>
           </ul>
+          {crews.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <span className={kicker}>{L.shareWith}</span>
+              <div className="flex flex-wrap gap-1.5">
+                {crews.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    aria-pressed={crewId === c.id}
+                    onClick={() => setCrewId(c.id)}
+                    className={cn("h-10 px-4 rounded-pill font-heading font-bold text-sm", crewId === c.id ? "bg-amber text-ink" : "bg-surface-deep border border-line text-soft")}
+                  >
+                    {c.name}
+                  </button>
+                ))}
+              </div>
+              <p className="font-body text-[13px] text-muted">{L.shareSub}</p>
+            </div>
+          )}
           <button type="button" onClick={start} className={primary}>
             {L.start}
           </button>
@@ -323,7 +384,7 @@ export function CameraLive() {
         <section className="flex flex-col gap-3" aria-live="polite">
           <span className={kicker}>{format(L.whereN, { n: fixingThrow.n })}</span>
           <p className="font-body text-[15px] leading-normal text-soft">{L.whereSub}</p>
-          <MatTap warped={fixingThrow.warped} label={L.whereSub} onTap={(p) => correct(fixingThrow.n, p)} />
+          <MatPick src={fixingThrow.img} spot={fixingThrow.spot} label={L.whereSub} onTap={(p) => correct(fixingThrow.n, p)} />
           <button type="button" onClick={() => correct(fixingThrow.n, null)} className={secondary}>
             {L.noCapBtn}
           </button>
@@ -346,6 +407,10 @@ export function CameraLive() {
             </button>
           </div>
         </section>
+      )}
+
+      {phase === "live" && sessionId && (
+        <p className="font-body text-[13px] text-muted">{format(L.sharing, { crew: crews.find((c) => c.id === crewId)?.name ?? "" })}</p>
       )}
 
       {phase === "live" && throws.length > 0 && (
@@ -385,41 +450,5 @@ function MiniOverlay({ photo, corners, label }: Readonly<{ photo: Photo; corners
         </svg>
       </div>
     </details>
-  );
-}
-
-/** The mat seen from above (that throw's frame) with the zones: tap where
- * the cap really lies. */
-function MatTap({ warped, label, onTap }: Readonly<{ warped: Float32Array; label: string; onTap: (p: { x: number; y: number }) => void }>) {
-  const ref = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    const c = ref.current;
-    const ctx = c?.getContext("2d");
-    if (!c || !ctx) return;
-    const img = ctx.createImageData(WW, WH);
-    for (let p = 0; p < WW * WH; p++) {
-      img.data[p * 4] = warped[p * 3];
-      img.data[p * 4 + 1] = warped[p * 3 + 1];
-      img.data[p * 4 + 2] = warped[p * 3 + 2];
-      img.data[p * 4 + 3] = 255;
-    }
-    ctx.putImageData(img, 0, 0);
-  }, [warped]);
-  function tap(e: ReactMouseEvent<HTMLButtonElement>) {
-    const b = e.currentTarget.getBoundingClientRect();
-    onTap({ x: ((e.clientX - b.left) / b.width) * MAT_W, y: ((e.clientY - b.top) / b.height) * MAT_H });
-  }
-  return (
-    <button type="button" onClick={tap} aria-label={label} className="relative block w-full">
-      <canvas ref={ref} width={WW} height={WH} className="w-full h-auto rounded-[12px] border border-line" />
-      <svg viewBox={`0 0 ${MAT_W} ${MAT_H}`} className="absolute inset-0 w-full h-full pointer-events-none" aria-hidden="true">
-        {REAL_ZONES.map((z) => (
-          <polygon key={z.id} points={z.pts.map(([x, y]) => `${x},${y}`).join(" ")} fill="rgba(79,209,255,0.10)" stroke="#4fd1ff" strokeWidth={1.5} />
-        ))}
-        {REAL_MAMAS.map((m) => (
-          <rect key={m.id} x={m.x} y={m.y} width={m.w} height={m.h} fill="rgba(255,107,91,0.15)" stroke="#ff6b5b" strokeWidth={1.5} />
-        ))}
-      </svg>
-    </button>
   );
 }

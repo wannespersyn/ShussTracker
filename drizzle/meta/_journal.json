@@ -134,6 +134,13 @@
       "when": 1794230592758,
       "tag": "0018_rotation_manage",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1794257084316,
+      "tag": "0019_camera_live",
+      "breakpoints": true
     }
   ]
 }

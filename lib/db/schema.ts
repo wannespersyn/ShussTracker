@@ -10,6 +10,7 @@ import {
   primaryKey,
   unique,
   jsonb,
+  real,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
@@ -696,3 +697,45 @@ export const feedbackVotesRelations = relations(feedbackVotes, ({ one }) => ({
   feedback: one(feedback, { fields: [feedbackVotes.feedbackId], references: [feedback.id] }),
   user: one(users, { fields: [feedbackVotes.userId], references: [users.id] }),
 }));
+
+/* -----------------------------------------------------------------------
+ * Camera (beta): a phone fixed above the mat streams its throws to the crew,
+ * so others can follow and correct them from their own phone.
+ * --------------------------------------------------------------------- */
+
+export const cameraSessions = pgTable("camera_session", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  groupId: uuid("group_id")
+    .notNull()
+    .references(() => groups.id, { onDelete: "cascade" }),
+  // The player whose phone is the camera.
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  // Live until stopped; "live" also needs a recent heartbeat (updatedAt).
+  live: boolean("live").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const cameraThrows = pgTable(
+  "camera_throw",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => cameraSessions.id, { onDelete: "cascade" }),
+    n: integer("n").notNull(),
+    // What the camera found (mat units, 824 × 265); null = no cap.
+    foundX: real("found_x"),
+    foundY: real("found_y"),
+    // The final spot (same as found unless someone corrected it).
+    x: real("x"),
+    y: real("y"),
+    correctedBy: uuid("corrected_by").references(() => users.id, { onDelete: "set null" }),
+    // Small top-down JPEG (data URL) of the mat after the throw.
+    image: text("image"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [unique("camera_throw_session_n").on(t.sessionId, t.n)],
+);

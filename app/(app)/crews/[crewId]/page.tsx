@@ -9,6 +9,7 @@ import { requireGroupMember, requireSession } from "@/lib/db/authz";
 import { getCrew, getCrewInsights } from "@/lib/db/crew-insights";
 import { getCrewGuests } from "@/lib/db/guests";
 import { getCrewEvents } from "@/lib/db/crew-events";
+import { getLiveCameras } from "@/lib/db/camera";
 import { CrewEventRow, NewEventButtons } from "@/components/crews/CrewEvents";
 import { addGuestAction, removeGuestAction } from "./guests/actions";
 import { leaveCrew } from "@/app/(app)/crews/actions";
@@ -42,10 +43,11 @@ export default async function CrewPage({
   const group = await getCrew(crewId);
   if (!group) notFound();
 
-  const [insights, guests, events, t, locale] = await Promise.all([
+  const [insights, guests, events, cameras, t, locale] = await Promise.all([
     getCrewInsights(crewId),
     getCrewGuests(crewId),
     getCrewEvents(crewId, { limit: 12 }),
+    getLiveCameras(crewId),
     getT(),
     getLocale(),
   ]);
@@ -107,6 +109,14 @@ export default async function CrewPage({
           { href: `/crews/${crewId}/sessions`, label: t.crew.sessions, active: false },
         ]}
       />
+
+      {cameras.map((c) => (
+        <Link key={c.id} href={`/camera/view/${c.id}`} className="flex items-center gap-3 px-4 py-3 rounded-[16px] bg-surface-deep border border-red/50">
+          <span className="w-2.5 h-2.5 rounded-full bg-red animate-pulse" aria-hidden="true" />
+          <span className="flex-1 font-heading font-extrabold text-sm tracking-[0.06em]">{format(t.camLive.crewCard, { name: c.name })}</span>
+          <span aria-hidden="true" className="text-gold text-lg">→</span>
+        </Link>
+      ))}
 
       <SegmentLinks
         options={[
