@@ -9,6 +9,7 @@ import {
   date,
   primaryKey,
   unique,
+  jsonb,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
@@ -468,6 +469,16 @@ export const rotationGames = pgTable(
   },
   (t) => [unique().on(t.rotationId, t.round, t.idx)],
 );
+
+/** A player's own stats page: screens of blocks (see lib/stats-layout.ts),
+ * validated on every save. No row = the default layout. */
+export const statsLayouts = pgTable("stats_layout", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  layout: jsonb("layout").notNull(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
 
 /* -----------------------------------------------------------------------
  * Feedback & feature requests — the in-app "help build Shussapp" inbox.

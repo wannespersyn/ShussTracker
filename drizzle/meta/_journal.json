@@ -120,6 +120,13 @@
       "when": 1794221379090,
       "tag": "0016_rotation",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1794228574749,
+      "tag": "0017_stats_layout",
+      "breakpoints": true
     }
   ]
 }
