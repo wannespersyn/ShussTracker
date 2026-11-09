@@ -22,7 +22,7 @@ import { format, type Dictionary } from "@/lib/i18n";
 
 const MAX_SIDE = 1600;
 
-type Photo = { url: string; frame: Frame };
+export type Photo = { url: string; frame: Frame };
 type Kept = { url: string; warped: Float32Array; corners: Pt[]; result: Detection };
 type Phase = "empty" | "corners" | "throw" | "review";
 
@@ -47,7 +47,7 @@ async function load(file: File): Promise<Photo> {
 }
 
 /** A starting guess when the mat isn't found: an inset rectangle. */
-function defaultCorners(f: Frame): Pt[] {
+export function defaultCorners(f: Frame): Pt[] {
   const landscape = f.w >= f.h;
   const [mx, my] = landscape ? [0.12, 0.3] : [0.3, 0.12];
   const tl = { x: f.w * mx, y: f.h * my };
@@ -201,6 +201,13 @@ export function CameraLab() {
 
       {phase === "empty" && (
         <section className="flex flex-col gap-3">
+          <Link href="/camera/live" className="flex items-center gap-3 p-3.5 rounded-[16px] bg-surface-deep border border-gold/40">
+            <span className="flex-1 flex flex-col gap-0.5">
+              <span className="font-heading font-extrabold text-sm tracking-[0.08em] text-gold">{t.camLive.promoTitle}</span>
+              <span className="font-body text-[13px] text-soft">{t.camLive.promoSub}</span>
+            </span>
+            <span aria-hidden="true" className="text-gold text-xl">→</span>
+          </Link>
           <span className={kicker}>{C.step1}</span>
           <p className="font-body text-[15px] leading-normal text-soft">{C.step1Sub}</p>
           <button type="button" disabled={busy} onClick={pick} className={primary}>
@@ -303,7 +310,7 @@ export function CameraLab() {
 /** Corner fine-tuning: pick a corner, see it magnified, nudge it with the
  * arrows (or drag it), tick it off. The zones are drawn over the photo so
  * you can see when everything lines up. */
-function CornerEditor({ photo, corners, onChange, labels }: Readonly<{ photo: Photo; corners: Pt[]; onChange: (c: Pt[]) => void; labels: Dictionary["cam"] }>) {
+export function CornerEditor({ photo, corners, onChange, labels }: Readonly<{ photo: Photo; corners: Pt[]; onChange: (c: Pt[]) => void; labels: Dictionary["cam"] }>) {
   const svg = useRef<SVGSVGElement>(null);
   const [sel, setSel] = useState(0);
   const [drag, setDrag] = useState(false);
@@ -401,7 +408,7 @@ function CornerEditor({ photo, corners, onChange, labels }: Readonly<{ photo: Ph
 }
 
 /** The mat's zones, mamas and outline projected onto the photo. */
-function Overlay({ corners, w }: Readonly<{ corners: Pt[]; w: number }>) {
+export function Overlay({ corners, w }: Readonly<{ corners: Pt[]; w: number }>) {
   const P = (x: number, y: number) => {
     const p = toPhoto(corners, { x, y });
     return `${p.x},${p.y}`;
