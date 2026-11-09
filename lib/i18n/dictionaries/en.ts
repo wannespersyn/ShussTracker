@@ -743,6 +743,7 @@ export const en = {
     coarse: "COARSE",
     cornerShort: "Corner {n}",
     loadError: "That photo didn't work. Try again — closing other apps can help.",
+    downloadEmpty: "Download the empty-mat photo",
   },
   sb: {
     title: "STATS",

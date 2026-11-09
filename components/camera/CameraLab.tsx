@@ -230,6 +230,11 @@ export function CameraLab() {
           <button type="button" disabled={busy} onClick={pick} className={primary}>
             {busy ? C.working : format(C.throwPhoto, { n: kept.length + 1 })}
           </button>
+          {empty && (
+            <a href={empty.url} download="shussapp-mat-0-leeg.jpg" className="self-start font-heading font-bold text-xs text-muted">
+              ↓ {C.downloadEmpty}
+            </a>
+          )}
           {kept.length > 0 && (
             <div className="flex flex-col gap-1.5">
               {[...kept].reverse().map((k, i) => (

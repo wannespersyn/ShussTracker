@@ -499,11 +499,11 @@ function largest(m: Uint8Array, w: number, h: number): number[] | null {
 /** Warps a photo to a WW × WH top-down RGB image (3 values per pixel).
  * Each pixel averages a small grid of photo samples, so fine print (the
  * logo, "DRINKING SINCE") doesn't turn into flickering noise. */
-export function warp(frame: Frame, corners: Pt[]): Float32Array {
+export function warp(frame: Frame, corners: Pt[], fast = false): Float32Array {
   const toPhoto = homography(MAT_CORNERS, corners);
   const out = new Float32Array(WW * WH * 3);
   const span = Math.hypot(corners[1].x - corners[0].x, corners[1].y - corners[0].y) / WW;
-  const k = Math.min(4, Math.max(1, Math.round(span)));
+  const k = fast ? 1 : Math.min(4, Math.max(1, Math.round(span)));
   for (let y = 0; y < WH; y++)
     for (let x = 0; x < WW; x++) {
       let r = 0;
@@ -535,16 +535,16 @@ function luma(img: Float32Array): Float32Array {
 }
 
 /** Mean |a − b·k| after matching overall brightness. */
+/** Brightness relative to the surroundings: the same under a shadow. */
+function contrast(l: Float32Array): Float32Array {
+  const m = boxMean(l, 6);
+  const out = new Float32Array(l.length);
+  for (let i = 0; i < l.length; i++) out[i] = (l[i] - m[i]) / (m[i] + 20);
+  return out;
+}
 function cost(a: Float32Array, b: Float32Array): number {
-  let sa = 0;
-  let sb = 0;
-  for (let i = 0; i < a.length; i++) {
-    sa += a[i];
-    sb += b[i];
-  }
-  const k = sb > 0 ? sa / sb : 1;
   let c = 0;
-  for (let i = 0; i < a.length; i++) c += Math.abs(a[i] - b[i] * k);
+  for (let i = 0; i < a.length; i++) c += Math.abs(a[i] - b[i]);
   return c / a.length;
 }
 
@@ -552,8 +552,9 @@ function cost(a: Float32Array, b: Float32Array): number {
  * reference photo): tries both ends, then nudges each corner (½–4 px) while
  * the difference keeps dropping. */
 export function align(frame: Frame, corners: Pt[], ref: Float32Array): Pt[] {
-  const refL = luma(ref);
-  const score = (c: Pt[]) => cost(refL, luma(warp(frame, c)));
+  // Compared on local contrast, so a shadow or lamp doesn't pull the fit.
+  const refL = contrast(luma(ref));
+  const score = (c: Pt[]) => cost(refL, contrast(luma(warp(frame, c, true))));
   let best = corners;
   let cur = score(best);
   const t = turned(corners);
@@ -692,17 +693,64 @@ function boxMean(img: Float32Array, r: number): Float32Array {
 const CAP_R = 6;
 /** How much of the print's own detail is forgiven (misalignment). */
 const BUSY = 0.6;
-/** Cap-sized "something changed here" score: the difference minus what
- * misalignment of the print could explain, averaged over a cap-sized
- * square. A cap scores high whether it shows as a solid disk (on black) or
- * only as a dark rim (on white); thin lines and letter edges average out. */
-function changeScore(a: Float32Array, b: Float32Array, busyA: Float32Array, busyB: Float32Array): Float32Array {
+
+/** What the comparison needs from one warped photo. */
+type Prepped = { hp: Float32Array; light: Float32Array; busy: Float32Array };
+
+/** Detail (small blur minus wide blur), local brightness (the wide blur,
+ * grey) and how busy the print is. */
+function prep(img: Float32Array): Prepped {
+  const fine = box(img, 1);
+  const wide = box(img, 10);
+  const light = new Float32Array(WW * WH);
+  for (let i = 0; i < fine.length; i++) fine[i] -= wide[i];
+  for (let p = 0; p < light.length; p++) light[p] = (wide[p * 3] + wide[p * 3 + 1] + wide[p * 3 + 2]) / 3;
+  return { hp: fine, light, busy: busyness(fine) };
+}
+
+/** Cap-sized "something changed here" score between two photos.
+ *  - Shadows and lamps: B's detail is first scaled by how much darker or
+ *    lighter A is at that spot, so a shadow over the print doesn't count.
+ *  - The difference minus what misalignment of the print could explain.
+ *  - Averaged over a cap-sized square: a cap scores high whether it shows
+ *    as a solid disk (on black) or only as a dark rim (on white). */
+function changeScore(A: Prepped, B: Prepped): Float32Array {
+  const scaled = new Float32Array(B.hp.length);
+  const busyB = new Float32Array(B.busy.length);
+  for (let p = 0; p < B.light.length; p++) {
+    const g = Math.min(1.6, Math.max(0.3, (A.light[p] + 12) / (B.light[p] + 12)));
+    scaled[p * 3] = B.hp[p * 3] * g;
+    scaled[p * 3 + 1] = B.hp[p * 3 + 1] * g;
+    scaled[p * 3 + 2] = B.hp[p * 3 + 2] * g;
+    busyB[p] = B.busy[p] * g;
+  }
   // Both ways round: the shift may hide a thin rim in whichever image it moves.
-  const d = shiftDiff(a, b);
-  const r = shiftDiff(b, a);
-  for (let p = 0; p < d.length; p++) d[p] = Math.min(150, Math.max(0, Math.max(d[p], r[p]) - BUSY * Math.min(busyA[p], busyB[p])));
+  const d = shiftDiff(A.hp, scaled);
+  const r = shiftDiff(scaled, A.hp);
+  for (let p = 0; p < d.length; p++) d[p] = Math.min(150, Math.max(0, Math.max(d[p], r[p]) - BUSY * Math.min(A.busy[p], busyB[p])));
   return boxMean(d, CAP_R);
 }
+
+/** A cap is a lone bump: around it (a cap-width away) the score drops off
+ * in every direction. A shadow edge or a line stays high along its length,
+ * a changed area stays high all round. */
+function isolated(s: Float32Array, b: Blob): boolean {
+  const cx = b.x * SCALE;
+  const cy = b.y * SCALE;
+  const v = at(s, b);
+  const D = 15;
+  const high: boolean[] = [];
+  for (let k = 0; k < 8; k++) {
+    const a = (k * Math.PI) / 4;
+    const x = Math.round(cx + D * Math.cos(a));
+    const y = Math.round(cy + D * Math.sin(a));
+    high.push(x >= 0 && y >= 0 && x < WW && y < WH && s[y * WW + x] > v * 0.55);
+  }
+  const n = high.filter(Boolean).length;
+  const line = high.some((h, k) => h && high[(k + 4) % 8]);
+  return n <= 2 && !line;
+}
+
 
 /** Local maxima above `t`, at least a cap apart, strongest first. */
 function peaks(s: Float32Array, t: number): Blob[] {
@@ -747,15 +795,15 @@ export const HAND_MIN = 9000;
  * (all three already warped with `warp`). `minDiff` is the sensitivity
  * slider: lower finds fainter caps (and more false ones). */
 export function detect(empty: Float32Array, prev: Float32Array, cur: Float32Array, minDiff = 45): Detection {
-  const [e, p, c] = [highPass(empty), highPass(prev), highPass(cur)];
-  const [be, bp, bc] = [busyness(e), busyness(p), busyness(c)];
+  const [E, P, C] = [prep(empty), prep(prev), prep(cur)];
   const t = minDiff * 0.4;
-  const now = changeScore(c, e, bc, be);
-  const before = changeScore(p, e, bp, be);
-  const changed = changeScore(c, p, bc, bp);
-  const present = peaks(now, t);
-  const landed = present.filter((b) => at(changed, b) > t * 0.7 && b.area < HAND_MIN);
-  const gone = peaks(before, t).filter((b) => at(changed, b) > t * 0.7 && at(now, b) < t * 0.6);
+  const now = changeScore(C, E);
+  const before = changeScore(P, E);
+  const changed = changeScore(C, P);
+  const present = peaks(now, t).filter((b) => isolated(now, b));
+  // One throw, one cap: the strongest new bump is the one that landed.
+  const landed = present.filter((b) => at(changed, b) > t * 0.7 && isolated(changed, b) && b.area < HAND_MIN).slice(0, 1);
+  const gone = peaks(before, t).filter((b) => isolated(before, b) && at(changed, b) > t * 0.7 && at(now, b) < t * 0.6);
   let big = 0;
   for (const v of changed) if (v > t) big++;
   return {

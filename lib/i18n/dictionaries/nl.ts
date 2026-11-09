@@ -742,6 +742,7 @@ export const nl: Dictionary = {
     coarse: "GROF",
     cornerShort: "Hoek {n}",
     loadError: "Die foto lukte niet. Probeer opnieuw — andere apps sluiten kan helpen.",
+    downloadEmpty: "Download de foto van de lege mat",
   },
   sb: {
     title: "STATS",
