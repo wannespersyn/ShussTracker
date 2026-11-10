@@ -4,13 +4,14 @@
  * Your duos in the selected crew, like the website's duo page: pick a
  * partner, then see your record together, duo rank, win %, best run, duo
  * Elo, who carries the mama hits and your recent games (tap to open).
+ * `?with=` (from a duo row on the crew board) preselects the partner.
  *
  * Data: GET /api/v1/crews/{crewId} (insights.duos)
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useAuth } from "@/auth/AuthProvider";
 import type { CrewDetail } from "@/api/types";
 import { useCrew } from "@/lib/crew";
@@ -35,7 +36,11 @@ export default function DuosTab() {
   const { me } = useAuth();
   const { crew, version } = useCrew();
   const q = useQuery<CrewDetail>(crew ? `/crews/${crew.id}` : null, version);
-  const [partnerId, setPartnerId] = useState<string | null>(null);
+  const params = useLocalSearchParams<{ with?: string }>();
+  const [partnerId, setPartnerId] = useState<string | null>(params.with ?? null);
+  useEffect(() => {
+    if (params.with) setPartnerId(params.with);
+  }, [params.with]);
 
   if (!crew) return <NoCrew />;
   if (q.error && !q.data) return <ErrorState error={q.error} onRetry={q.reload} />;

@@ -54,7 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const finish = useCallback(async (res: SignInResponse) => {
     await tokenStore.save(res.token);
-    setMe({ user: res.user, crews: res.crews });
+    setMe({ user: res.user, crews: res.crews, beta: res.beta });
     setStatus("signedIn");
   }, []);
 

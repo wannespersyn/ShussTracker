@@ -1,13 +1,14 @@
 /**
  * Game screen — Route: /game/[id]
  *
- * One game's result: teams in finishing order with each player's mama hits
- * and Elo change, the shot-zone totals when tracked, the mat photo,
- * reactions and trash talk (comments). Anyone in the crew can add or change
- * the photo; the logger, crew owner or an admin can delete the game.
+ * One game's result: teams in finishing order with each player's mama hits,
+ * defenses, kruip and Elo change, the shot-zone totals when tracked, the
+ * mat photo, reactions and trash talk (comments). Players can toggle kruip
+ * on a losing team; anyone in the crew can add or change the photo; the
+ * logger, crew owner or an admin can delete the game. Beta: celebrations.
  *
- * Data: GET/DELETE /api/v1/games/{id}, POST …/reactions, POST/DELETE …/comments,
- *       POST …/photo
+ * Data: GET/DELETE /api/v1/games/{id}, PATCH …/kruip, POST …/reactions,
+ *       POST/DELETE …/comments, POST …/photo
  */
 import { useState } from "react";
 import { Alert, KeyboardAvoidingView, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
@@ -22,6 +23,7 @@ import { format, useT } from "@/lib/i18n";
 import { useQuery } from "@/lib/useQuery";
 import { Avatar, Button, CenterState, ErrorState, Kicker, Txt } from "@/components/ui";
 import { PhotoButton } from "@/components/game/PhotoButton";
+import { Celebration } from "@/components/beta/Celebration";
 import { colors, fonts, radius } from "@/theme";
 
 const GLYPH: Record<Reaction, string> = { fire: "🔥", laugh: "😂", beer: "🍺", skull: "💀" };
@@ -38,6 +40,7 @@ export default function GameScreen() {
   const [photoPath, setPhotoPath] = useState<string | null | undefined>(undefined);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
+  const [kruip, setKruip] = useState<Record<string, boolean>>({});
 
   if (q.error && !q.data) return <ErrorState error={q.error} onRetry={q.reload} />;
   if (!q.data) return <CenterState />;
@@ -59,7 +62,19 @@ export default function GameScreen() {
   const zoneTotals = (["1", "2", "3", "mama", "miss"] as const).map(
     (z) => [z, game.teams.reduce((n, tm) => n + tm.players.reduce((m, p) => m + p.shots[z], 0), 0)] as const,
   );
-  const tracked = zoneTotals.some(([z, n]) => z !== "mama" && n > 0);
+  const defenseTotal = game.teams.reduce((n, tm) => n + tm.players.reduce((m, p) => m + p.shots.defense, 0), 0);
+  const tracked = zoneTotals.some(([z, n]) => z !== "mama" && n > 0) || defenseTotal > 0;
+  const kruipOf = (tm: (typeof game.teams)[number]) => kruip[tm.id] ?? tm.kruip;
+
+  async function toggleKruip(teamId: string, next: boolean) {
+    setKruip((k) => ({ ...k, [teamId]: next }));
+    const ok = await api(`/games/${id}/kruip`, { method: "PATCH", body: { gameTeamId: teamId, kruip: next } }).then(
+      () => true,
+      () => false,
+    );
+    if (ok) invalidate();
+    else setKruip((k) => ({ ...k, [teamId]: !next }));
+  }
 
   async function react(reaction: Reaction) {
     const res = await api<{ reactions: ReactionTally[] }>(`/games/${id}/reactions`, { method: "POST", body: { reaction } }).catch(() => null);
@@ -99,6 +114,7 @@ export default function GameScreen() {
 
   return (
     <SafeAreaView style={styles.screen} edges={["top", "bottom"]}>
+      <Celebration gameId={game.id} moments={q.data.celebration ?? []} />
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} hitSlop={10} accessibilityLabel={t.common.back} style={styles.round}>
@@ -124,8 +140,10 @@ export default function GameScreen() {
           {game.teams.map((tm, i) => {
             const won = (tm.finalRank ?? i + 1) === 1;
             const mama = tm.players.reduce((n, p) => n + p.shots.mama, 0);
+            const defenses = tm.players.reduce((n, p) => n + p.shots.defense, 0);
+            const kr = kruipOf(tm);
             return (
-              <View key={i} style={[styles.team, won && { borderColor: colors.gold }]}>
+              <View key={tm.id} style={[styles.team, won && { borderColor: colors.gold }]}>
                 <View style={[styles.rank, won ? { backgroundColor: colors.gold } : { backgroundColor: colors.chip }]}>
                   <Text style={[styles.rankText, { color: won ? colors.ink : colors.soft }]}>{multi ? ORD[(tm.finalRank ?? i + 1) - 1] : won ? "W" : "L"}</Text>
                 </View>
@@ -134,8 +152,22 @@ export default function GameScreen() {
                     {tm.players.map((p) => first(p.name)).join(" & ")}
                   </Txt>
                   {mama > 0 && <Txt style={{ color: colors.red, fontFamily: fonts.headBold }}>{format(t.feed.mamaN, { n: mama }).toUpperCase()}</Txt>}
+                  {defenses > 0 && <Txt style={{ color: colors.gold, fontFamily: fonts.headBold, fontSize: 13 }}>{format(t.log.defenses, { n: defenses }).toUpperCase()}</Txt>}
                 </View>
-                <View style={{ alignItems: "flex-end" }}>
+                <View style={{ alignItems: "flex-end", gap: 4 }}>
+                  {!won &&
+                    (game.canEditKruip ? (
+                      <Pressable
+                        onPress={() => toggleKruip(tm.id, !kr)}
+                        accessibilityState={{ selected: kr }}
+                        accessibilityLabel={t.game.kruipToggle}
+                        style={[styles.kruip, kr && styles.kruipOn]}
+                      >
+                        <Text style={[styles.kruipText, kr && { color: colors.redPale }]}>{kr ? t.game.kruiped : t.game.kruipAdd}</Text>
+                      </Pressable>
+                    ) : (
+                      kr && <Text style={[styles.kruipText, { color: colors.redPale }]}>{t.game.kruiped}</Text>
+                    ))}
                   {tm.players.map((p) =>
                     p.eloDelta === null ? null : (
                       <Txt key={p.id} style={{ fontFamily: fonts.headBold, color: p.eloDelta >= 0 ? colors.mint : colors.redPale }}>
@@ -158,6 +190,14 @@ export default function GameScreen() {
                   </Txt>
                 </View>
               ))}
+              {defenseTotal > 0 && (
+                <View style={[styles.zone, { borderColor: "rgba(255,182,39,0.4)" }]}>
+                  <Txt style={[styles.zoneN, { color: colors.gold }]}>{defenseTotal}</Txt>
+                  <Txt v="label" style={{ fontSize: 10 }}>
+                    {t.log.defend}
+                  </Txt>
+                </View>
+              )}
             </View>
           )}
 
@@ -196,7 +236,11 @@ export default function GameScreen() {
             </View>
           ))}
 
-          {!game.tournamentId && game.crew && (
+          {game.rotationId && (
+            <Button label={`← ${t.rot.title}`} kind="outline" onPress={() => router.push({ pathname: "/americano/[id]", params: { id: game.rotationId! } })} />
+          )}
+
+          {!game.tournamentId && !game.rotationId && game.crew && (
             <Button
               label={t.game.rematch}
               kind="outline"
@@ -253,6 +297,9 @@ const styles = StyleSheet.create({
   rank: { minWidth: 40, height: 40, borderRadius: radius.sm, alignItems: "center", justifyContent: "center", paddingHorizontal: 6 },
   rankText: { fontFamily: fonts.display, fontSize: 18 },
   teamName: { fontFamily: fonts.headBold, fontSize: 19, color: colors.cream, textTransform: "uppercase" },
+  kruip: { height: 28, paddingHorizontal: 10, borderRadius: 999, borderWidth: 1, borderStyle: "dashed", borderColor: "rgba(243,241,234,0.2)", justifyContent: "center" },
+  kruipOn: { borderStyle: "solid", borderColor: "rgba(255,107,91,0.5)", backgroundColor: "rgba(255,107,91,0.15)" },
+  kruipText: { fontFamily: fonts.headBold, fontSize: 12, letterSpacing: 1.2, color: colors.muted, textTransform: "uppercase" },
   zones: { flexDirection: "row", gap: 6 },
   zone: { flex: 1, alignItems: "center", paddingVertical: 8, borderRadius: radius.sm, backgroundColor: colors.deep, borderWidth: 1, borderColor: colors.line },
   zoneN: { fontFamily: fonts.display, fontSize: 20 },

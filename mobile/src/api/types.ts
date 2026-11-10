@@ -4,9 +4,13 @@
  * Shapes of the /api/v1 responses the app uses (see docs/api-v1.md in the
  * repo root). Dates arrive as ISO strings.
  */
+export type BetaKey = "wrapped" | "start" | "celebrations" | "mat" | "camera";
+export type BetaInfo = { optIn: boolean; newCount: number; features: Record<BetaKey, boolean>; disabled: string[] };
+
 export type Me = {
   user: { id: string; name: string | null; email: string | null; image: string | null; isAdmin: boolean };
   crews: CrewSummary[];
+  beta: BetaInfo;
 };
 
 export type CrewSummary = {
@@ -72,7 +76,7 @@ export type SessionInsight = {
 };
 
 export type CrewDetail = {
-  crew: { id: string; name: string; createdBy: string; isOwner: boolean; plan: string; isPro: boolean; trackShotZones: boolean; inviteCode?: string };
+  crew: { id: string; name: string; createdBy: string; isOwner: boolean; plan: string; isPro: boolean; inviteCode?: string };
   insights: {
     players: PlayerInsight[];
     duos: DuoInsight[];
@@ -82,6 +86,33 @@ export type CrewDetail = {
   };
   guests: { id: string; name: string; claimToken: string | null }[];
   tournaments: { id: string; name: string; format: string; status: "setup" | "active" | "completed"; createdAt: string }[];
+  events: CrewEvent[];
+  cameras: { id: string; name: string; calibrating: boolean }[];
+};
+
+export type CrewEvent = {
+  kind: "bracket" | "rotation";
+  id: string;
+  href: string;
+  name: string;
+  format: TournamentFormat | "americano" | "mexicano";
+  live: boolean;
+  createdAt: string;
+  champion: string | null;
+  players: number;
+};
+
+export type RecordKind = "streak" | "mamaGame" | "mamaLeader" | "kruipLeader";
+export type CrewRecord = {
+  kind: RecordKind;
+  userId: string;
+  name: string | null;
+  value: number;
+  previous: number;
+  previousHolder: string | null;
+  previousName: string | null;
+  at: string;
+  gameId: string;
 };
 
 export type Reaction = "fire" | "laugh" | "beer" | "skull";
@@ -97,22 +128,34 @@ export type GameDetail = {
     crew: { id: string; name: string } | null;
     photoPath: string | null;
     tournamentId: string | null;
+    rotationId: string | null;
     canDelete: boolean;
+    canEditKruip: boolean;
     teams: {
+      id: string;
       label: string;
       finalRank: number | null;
+      kruip: boolean;
       players: {
         id: string;
         name: string | null;
         isGuest: boolean;
         eloDelta: number | null;
-        shots: Record<"1" | "2" | "3" | "mama" | "miss", number>;
+        shots: Record<"1" | "2" | "3" | "mama" | "mamaOut" | "miss" | "defense", number>;
       }[];
     }[];
   };
   comments: GameComment[];
   reactions: ReactionTally[];
+  celebration: CelebrationMoment[];
 };
+
+export type RankRow = { rank: number; name: string; initial: string; elo: number; me: boolean };
+export type CelebrationMoment =
+  | { kind: "win"; elo: number; before: number; after: number; team: string }
+  | { kind: "streak"; n: number; record: boolean; team: string; crew: string }
+  | { kind: "climb"; from: number; to: number; crew: string; rows: RankRow[]; oldSlot: number; newSlot: number; eloBefore: number; eloAfter: number }
+  | { kind: "achievement"; name: string; desc: string; icon: string; have: number; need: number; before: number; rarity: number };
 
 export type FeedGame = {
   id: string;

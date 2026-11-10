@@ -1,7 +1,8 @@
 /**
  * POST /api/v1/tournaments/[tournamentId]/matches/[matchId]
  *
- * Plays a match: `{ winnerEntrantId, shotsByPlayer? }`. The teams come from
+ * Plays a match: `{ winnerEntrantId, shotsByPlayer?, kruip? }` (`kruip`: the
+ * losers didn't drink a sip). The teams come from
  * the bracket itself (not the request), the game is logged like any other
  * 4-mat game and the winner moves on. Returns `{ gameId }`.
  */
@@ -18,7 +19,7 @@ import { expireCrew } from "@/lib/cache-tags";
 import { notifyGameLogged } from "@/lib/notify";
 
 type Ctx = { params: Promise<{ tournamentId: string; matchId: string }> };
-const HITS: FieldHit[] = ["1", "2", "3", "mama", "miss"];
+const HITS: FieldHit[] = ["1", "2", "3", "mama", "mama_out", "miss"];
 
 export const POST = api<Ctx>(async (req, { params }) => {
   const userId = await requireApiUser(req);
@@ -44,10 +45,10 @@ export const POST = api<Ctx>(async (req, { params }) => {
   const raw = Array.isArray(body.shotsByPlayer) ? body.shotsByPlayer : [];
   if (raw.length > 400) throw badRequest("Too many shots");
   const shotsByPlayer = raw.map((s) => {
-    const shot = s as { playerId?: unknown; fieldHit?: unknown };
+    const shot = s as { playerId?: unknown; fieldHit?: unknown; defense?: unknown };
     if (typeof shot.playerId !== "string" || !inGame.has(shot.playerId)) throw badRequest("Shots must belong to players in this match");
-    if (typeof shot.fieldHit !== "string" || !HITS.includes(shot.fieldHit as FieldHit)) throw badRequest('"fieldHit" must be 1, 2, 3, mama or miss');
-    return { playerId: shot.playerId, fieldHit: shot.fieldHit as FieldHit };
+    if (typeof shot.fieldHit !== "string" || !HITS.includes(shot.fieldHit as FieldHit)) throw badRequest('"fieldHit" must be 1, 2, 3, mama, mama_out or miss');
+    return { playerId: shot.playerId, fieldHit: shot.fieldHit as FieldHit, defense: shot.defense === true };
   });
 
   const { gameId } = await createGameRecord({
@@ -55,8 +56,8 @@ export const POST = api<Ctx>(async (req, { params }) => {
     createdBy: userId,
     matType: "4",
     teams: [
-      { label: "A", playerIds: a, finalRank: winner === match.entrantA.id ? 1 : 2 },
-      { label: "B", playerIds: b, finalRank: winner === match.entrantB.id ? 1 : 2 },
+      { label: "A", playerIds: a, finalRank: winner === match.entrantA.id ? 1 : 2, kruip: winner !== match.entrantA.id && body.kruip === true },
+      { label: "B", playerIds: b, finalRank: winner === match.entrantB.id ? 1 : 2, kruip: winner !== match.entrantB.id && body.kruip === true },
     ],
     shotsByPlayer,
   });

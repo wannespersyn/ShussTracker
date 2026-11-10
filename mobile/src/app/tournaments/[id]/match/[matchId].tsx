@@ -1,8 +1,8 @@
 /**
  * Play a tournament match — Route: /tournaments/[id]/match/[matchId]
  *
- * The log flow's result step with the bracket's two duos locked in: tap
- * the winner, count mama hits (or every shot) and save. The winner moves on
+ * The log flow with the bracket's two duos locked in (start, then the
+ * result: tap the winner, count mama hits, kruipen) and save. The winner moves on
  * in the bracket and the game counts for Elo like any other.
  *
  * Data: GET /api/v1/tournaments/{id} + /crews/{crewId},
@@ -53,7 +53,7 @@ export default function PlayMatch() {
           const winner = result.teams.find((x) => x.finalRank === 1)!;
           const res = await api<{ gameId: string }>(`/tournaments/${id}/matches/${matchId}`, {
             method: "POST",
-            body: { winnerEntrantId: winner.id, shotsByPlayer: result.shotsByPlayer },
+            body: { winnerEntrantId: winner.id, shotsByPlayer: result.shotsByPlayer, kruip: result.teams.some((x) => x.finalRank !== 1 && x.kruip) },
           });
           return res.gameId;
         }}

@@ -5,8 +5,8 @@
  * styles, cards, buttons, chips, form dots, avatars, a crew switcher and
  * the shared loading / error / empty states.
  *
- * Exports: Txt, Kicker, Card, Button, Chip, FormDots, Avatar, StatTile,
- *          Segmented, CenterState, ErrorState
+ * Exports: Txt, Kicker, Card, Button, Chip, MoveChip, FormDots, Avatar,
+ *          StatTile, Segmented, Toggle, CenterState, ErrorState
  */
 import type { ReactNode } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View, type StyleProp, type TextProps, type TextStyle, type ViewStyle } from "react-native";
@@ -70,17 +70,37 @@ export function Button({
   );
 }
 
-export function Chip({ label, tone = "neutral" }: { label: string; tone?: "neutral" | "hot" | "guest" | "info" }) {
-  const toneStyle: Record<string, ViewStyle> = {
+type ChipTone = "neutral" | "hot" | "guest" | "info" | "up" | "down" | "gold";
+export function Chip({ label, tone = "neutral" }: { label: string; tone?: ChipTone }) {
+  const toneStyle: Record<ChipTone, ViewStyle> = {
     neutral: { backgroundColor: colors.chip },
     hot: { backgroundColor: "rgba(255,107,91,0.18)" },
     guest: { backgroundColor: colors.chip },
     info: { backgroundColor: "rgba(79,209,255,0.15)" },
+    up: { backgroundColor: "rgba(127,224,168,0.15)" },
+    down: { backgroundColor: "rgba(255,107,91,0.15)" },
+    gold: { backgroundColor: "rgba(255,182,39,0.16)" },
   };
-  const color = tone === "hot" ? colors.redPale : tone === "info" ? "#4fd1ff" : colors.soft;
+  const color = { hot: colors.redPale, info: "#4fd1ff", up: colors.mint, down: colors.redPale, gold: colors.gold, neutral: colors.soft, guest: colors.soft }[tone];
   return (
     <View style={[styles.chip, toneStyle[tone]]}>
       <Text style={[styles.chipText, { color }]}>{label}</Text>
+    </View>
+  );
+}
+
+/** Rank move since a week ago: ▲n / ▼n / —. */
+export function MoveChip({ move }: { move: number }) {
+  if (move > 0) return <Chip tone="up" label={`▲${move}`} />;
+  if (move < 0) return <Chip tone="down" label={`▼${Math.abs(move)}`} />;
+  return <Chip label="—" />;
+}
+
+/** On/off pill switch in the website's style (gold or red when on). */
+export function Toggle({ on, tone = "gold" }: { on: boolean; tone?: "gold" | "red" }) {
+  return (
+    <View style={[styles.toggle, on && { backgroundColor: tone === "red" ? colors.red : colors.gold, alignItems: "flex-end" }]}>
+      <View style={[styles.knob, on && { backgroundColor: colors.ink }]} />
     </View>
   );
 }
@@ -179,5 +199,7 @@ const styles = StyleSheet.create({
   segmented: { flexDirection: "row", gap: 4, padding: 4, borderRadius: 14, backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line },
   segment: { flex: 1, height: 38, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   segmentText: { fontFamily: fonts.headBold, fontSize: 15, letterSpacing: 0.6, textTransform: "uppercase" },
+  toggle: { width: 48, height: 28, borderRadius: 999, padding: 3, backgroundColor: colors.chip, alignItems: "flex-start" },
+  knob: { width: 22, height: 22, borderRadius: 11, backgroundColor: colors.muted },
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, padding: 24 },
 });

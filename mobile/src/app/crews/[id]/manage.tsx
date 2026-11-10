@@ -2,14 +2,14 @@
  * Manage crew — Route: /crews/[id]/manage (owner only)
  *
  * The website's "Manage crew" in the app: invite code (share or replace),
- * the crew's "track every shot" default, rename, members (remove) and
+ * rename, members (remove) and
  * delete the crew.
  *
  * Data: GET/PATCH/DELETE /api/v1/crews/{id}, POST …/invite-code,
  *       DELETE …/members/{userId}
  */
 import { useState } from "react";
-import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Share, StyleSheet, Switch, TextInput, View } from "react-native";
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Share, StyleSheet, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import { api, apiUrl } from "@/api/client";
@@ -30,7 +30,6 @@ export default function ManageScreen() {
   const q = useQuery<CrewDetail>(`/crews/${id}`, version);
   const [name, setName] = useState<string | null>(null);
   const [code, setCode] = useState<string | null>(null);
-  const [track, setTrack] = useState<boolean | null>(null);
 
   if (q.error && !q.data) return <ErrorState error={q.error} onRetry={q.reload} />;
   if (!q.data) return <CenterState />;
@@ -39,7 +38,6 @@ export default function ManageScreen() {
 
   const inviteCode = code ?? crew.inviteCode ?? "";
   const shownName = name ?? crew.name;
-  const tracking = track ?? crew.trackShotZones;
   const members = insights.players.filter((p) => !p.isGuest);
 
   async function patch(body: Record<string, unknown>) {
@@ -106,22 +104,6 @@ export default function ManageScreen() {
             </View>
           </Card>
 
-          <Card style={styles.toggle}>
-            <View style={{ flex: 1 }}>
-              <Txt v="bodySemi">{t.manage.track}</Txt>
-              <Txt style={{ color: colors.muted, fontSize: 12 }}>{t.manage.trackSub}</Txt>
-            </View>
-            <Switch
-              value={tracking}
-              onValueChange={(v) => {
-                setTrack(v);
-                void patch({ trackShotZones: v });
-              }}
-              trackColor={{ true: colors.gold, false: colors.chip }}
-              thumbColor={tracking ? colors.ink : colors.muted}
-            />
-          </Card>
-
           <Card style={{ gap: 10 }}>
             <Kicker>{t.manage.name}</Kicker>
             <View style={{ flexDirection: "row", gap: 8 }}>
@@ -173,7 +155,6 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.surface },
   content: { padding: 20, gap: 12, paddingBottom: 40 },
   code: { fontFamily: fonts.display, fontSize: 40, letterSpacing: 6, color: colors.cream },
-  toggle: { flexDirection: "row", alignItems: "center", gap: 12 },
   input: {
     flex: 1,
     height: 54,

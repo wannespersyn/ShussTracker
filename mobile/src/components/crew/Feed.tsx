@@ -3,7 +3,8 @@
  *
  * The crew's recent games, newest first, grouped per night: winners vs
  * losers, mama hits, reactions and comment count, with a photo thumbnail
- * when there is one. Tapping a game opens the game screen.
+ * when there is one, and new crew records above the game that set them.
+ * Tapping a game or record opens the game screen.
  *
  * Data: GET /api/v1/crews/{crewId}/feed?limit=40 (refetches on `version`).
  */
@@ -11,7 +12,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Image } from "expo-image";
 import { router } from "expo-router";
 import { apiUrl, authHeaders } from "@/api/client";
-import type { FeedGame } from "@/api/types";
+import type { CrewRecord, FeedGame } from "@/api/types";
 import { format, useT } from "@/lib/i18n";
 import { Kicker, Txt } from "@/components/ui";
 import { colors, fonts, radius } from "@/theme";
@@ -21,10 +22,18 @@ const first = (name: string) => name.trim().split(/\s+/)[0] ?? name;
 /** Games before 06:00 belong to the evening before, like on the website. */
 const nightOf = (iso: string) => new Date(new Date(iso).getTime() - 6 * 3600 * 1000).toDateString();
 
-export function Feed({ games }: { games: FeedGame[] }) {
+export function Feed({ games, records = [] }: { games: FeedGame[]; records?: CrewRecord[] }) {
   const { t, locale } = useT();
   const dayFmt = new Intl.DateTimeFormat(locale === "nl" ? "nl-BE" : "en-GB", { weekday: "long", day: "numeric", month: "long" });
   const timeFmt = new Intl.DateTimeFormat(locale === "nl" ? "nl-BE" : "en-GB", { hour: "2-digit", minute: "2-digit" });
+
+  const recordTitle: Record<CrewRecord["kind"], string> = {
+    streak: t.feed.recStreak,
+    mamaGame: t.feed.recMamaGame,
+    mamaLeader: t.feed.recMamaLeader,
+    kruipLeader: t.feed.recKruipLeader,
+  };
+  const recordsFor = (gameId: string) => records.filter((r) => r.gameId === gameId);
 
   if (games.length === 0) return <Txt style={{ color: colors.muted, paddingVertical: 12 }}>{t.feed.empty}</Txt>;
 
@@ -45,8 +54,24 @@ export function Feed({ games }: { games: FeedGame[] }) {
             const [winner, ...rest] = g.teams;
             const reacted = g.reactions.filter((r) => r.count > 0);
             return (
+              <View key={g.id} style={{ gap: 8 }}>
+              {recordsFor(g.id).map((r) => (
+                <Pressable
+                  key={`${r.kind}-${r.userId}`}
+                  onPress={() => router.push({ pathname: "/game/[id]", params: { id: g.id } })}
+                  style={({ pressed }) => [styles.card, styles.record, pressed && { opacity: 0.85 }]}
+                >
+                  <Text style={{ fontSize: 20 }}>🏆</Text>
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Txt v="bodySemi">{format(recordTitle[r.kind], { name: r.name ?? t.more.player, n: r.value })}</Txt>
+                    <Txt style={{ color: colors.muted, fontSize: 12 }}>
+                      {r.previous > 0 ? format(t.feed.recPrev, { name: r.previousName ?? t.more.player, n: r.previous }) : t.feed.recPrevNone}
+                    </Txt>
+                  </View>
+                  <Text style={styles.recordTag}>{t.feed.recordTag}</Text>
+                </Pressable>
+              ))}
               <Pressable
-                key={g.id}
                 onPress={() => router.push({ pathname: "/game/[id]", params: { id: g.id } })}
                 style={({ pressed }) => [styles.card, pressed && { opacity: 0.85 }]}
               >
@@ -71,6 +96,7 @@ export function Feed({ games }: { games: FeedGame[] }) {
                 </View>
                 {g.photoPath && <Image source={{ uri: apiUrl(g.photoPath), headers: authHeaders() }} style={styles.thumb} contentFit="cover" />}
               </Pressable>
+              </View>
             );
           })}
         </View>
@@ -100,6 +126,8 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     overflow: "hidden",
   },
+  record: { borderColor: "rgba(255,182,39,0.35)" },
+  recordTag: { fontFamily: fonts.headBold, fontSize: 11, letterSpacing: 1.2, color: colors.gold },
   meta: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 2 },
   metaText: { fontSize: 12, color: colors.muted, fontFamily: fonts.bodySemi },
   thumb: { width: 64, height: 64, borderRadius: radius.md, backgroundColor: colors.raised },
