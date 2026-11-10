@@ -133,6 +133,9 @@ const BOX_MIN = 2;
 const BOX_STEADY = 2;
 /** A cap left its box and nothing landed for this long = a miss (ms). */
 const MISS_MS = 2000;
+/** Clearing the mat for a new round ends at the latest when the mat lay
+ * still this long (a shadow can look like a cap left behind forever). */
+const CLEAR_MAX = 10000;
 
 /** Cells (indexes into `tiny`) inside each shooting box. */
 function boxCells(fix: ZoneFix): number[][] {
@@ -212,6 +215,7 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
     // A new round started: wait until the mat is clear before judging throws.
     clearing: false,
     clearLeft: -1,
+    clearSince: 0,
     lastArmed: null as boolean | null,
     fix: {} as ZoneFix,
     // Shooting boxes: cells per box, the empty mat in cells, which hold a cap
@@ -409,6 +413,7 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
           const left = detect(S.empty, S.empty, S.still).present.length;
           S.clearing = left > 0;
           S.clearLeft = left;
+          S.clearSince = Date.now();
           note(left > 0 ? format(L.evClearing, { n: left }) : L.evNewRound, left > 0 ? "warn" : "good");
         }
         S.rebase = false;
@@ -431,7 +436,12 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
           if (++S.boxRun[i] < BOX_STEADY) return;
           S.boxRun[i] = 0;
           S.boxes![i] = full;
-          if (!full && !S.clearing && (mine === null || mine === i)) {
+          if (!full && (mine === null || mine === i)) {
+            if (S.clearing) {
+              // Someone throws: the mat is ready, whatever still looks like a cap.
+              S.clearing = false;
+              note(L.evClearThrow, "good");
+            }
             S.left = { i, t: Date.now() };
             note(format(L.evBoxLeft, { box: boxName(i) }));
           }
@@ -441,6 +451,13 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
       if (diff < MIN_CELLS) {
         // Still, and nothing on the mat changed (a hand passed by)…
         S.calm = 0;
+        if (S.clearing && Date.now() - S.clearSince > CLEAR_MAX) {
+          // The mat has been lying still a while: take it as ready.
+          S.clearing = false;
+          S.base = small;
+          S.still = warp(f, S.corners);
+          note(format(L.evClearTimeout, { n: S.clearLeft }), "good");
+        }
         if (S.left && Date.now() - S.left.t > MISS_MS && !S.clearing) {
           // …but a cap left its box a while ago and landed nowhere: a miss.
           S.left = null;
@@ -483,6 +500,7 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
             return;
           }
           S.still = cur;
+          if (S.clearing) S.clearSince = Date.now();
           if (S.clearing) {
             // Caps being taken off for the new round: never a throw.
             if (!r.present.length) {
@@ -523,7 +541,11 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
       const full = shareRef.current && session.current ? warpedToJpeg(warpFull(f, S.corners), FULL_W, FULL_H, 0.85) : null;
       setThrows((ts) => [{ n, spots, gone, corrected: false, img }, ...ts]);
       setAsk({ n, left: CONFIRM_S });
-      if (session.current) addCameraThrowAction(session.current, { n, spots, gone, image: img, full, detector: DETECTOR }).catch(() => {});
+      if (session.current)
+        addCameraThrowAction(session.current, { n, spots, gone, image: img, full, detector: DETECTOR }).catch(() =>
+          // Not stored (offline, or the database isn't migrated): say so instead of failing silently.
+          note(format(L.evPostFail, { n }), "warn"),
+        );
       return n;
     }
     return () => window.clearInterval(id);
