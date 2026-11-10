@@ -8,12 +8,13 @@
  * regular polling doubles as its heartbeat: a session counts as live while
  * it's open and the camera checked in recently.
  *
- * Data: camera_session, camera_throw (spots in mat units, 824 × 265).
+ * Data: camera_session, camera_throw (spots in mat units, 824 × 265),
+ * camera_game (the linked mat logger's game, so the camera can show it).
  */
 import { put } from "@vercel/blob";
 import { and, desc, eq, gt } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { cameraSessions, cameraThrows, groupMembers, users } from "@/lib/db/schema";
+import { cameraGames, cameraSessions, cameraThrows, groupMembers, users } from "@/lib/db/schema";
 
 /** A camera that hasn't checked in for this long is gone. */
 const STALE_MS = 2 * 60 * 1000;
@@ -49,6 +50,8 @@ export type CameraState = {
   armed: boolean;
   armVersion: number;
   throws: CameraThrow[];
+  /** The linked mat logger's game (lib/camera-log.ts CameraGame), if any. */
+  game: unknown;
 };
 
 const isMember = async (userId: string, groupId: string) =>
@@ -138,6 +141,7 @@ export async function getCameraState(userId: string, sessionId: string): Promise
     db.query.users.findFirst({ where: eq(users.id, s.userId), columns: { name: true } }),
     s.loggerId ? db.query.users.findFirst({ where: eq(users.id, s.loggerId), columns: { id: true, name: true } }) : Promise.resolve(undefined),
   ]);
+  const game = s.loggerId ? await getCameraGame(sessionId) : null;
   return {
     id: s.id,
     groupId: s.groupId,
@@ -151,6 +155,7 @@ export async function getCameraState(userId: string, sessionId: string): Promise
     logger: logger ? { id: logger.id, name: logger.name ?? "?" } : null,
     armed: s.armed,
     armVersion: s.armVersion,
+    game,
     throws: rows.map((r) => ({
       id: r.id,
       n: r.n,
@@ -262,4 +267,25 @@ export async function getLiveCameras(groupId: string): Promise<{ id: string; nam
     .where(and(eq(cameraSessions.groupId, groupId), eq(cameraSessions.live, true), gt(cameraSessions.updatedAt, new Date(Date.now() - STALE_MS))))
     .orderBy(desc(cameraSessions.createdAt));
   return rows.map((r) => ({ id: r.id, name: r.name ?? "?", calibrating: r.phase !== "watching" }));
+}
+
+/** The game of the linked logger; null when there is none (or the table isn't
+ * migrated yet — the camera then just works without it). */
+async function getCameraGame(sessionId: string): Promise<unknown> {
+  try {
+    const [row] = await db.select({ state: cameraGames.state }).from(cameraGames).where(eq(cameraGames.sessionId, sessionId)).limit(1);
+    return row?.state ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** The linked logger shares its game with the camera. */
+export async function setCameraGame(userId: string, sessionId: string, state: unknown) {
+  const s = await db.query.cameraSessions.findFirst({ where: and(eq(cameraSessions.id, sessionId), eq(cameraSessions.loggerId, userId)), columns: { id: true } });
+  if (!s) throw new Error("Not your game");
+  await db
+    .insert(cameraGames)
+    .values({ sessionId, state, updatedAt: new Date() })
+    .onConflictDoUpdate({ target: cameraGames.sessionId, set: { state, updatedAt: new Date() } });
 }

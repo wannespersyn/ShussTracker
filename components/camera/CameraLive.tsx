@@ -14,6 +14,12 @@
  *    tap on "Wrong" lets them point at the real spot on the mat (or say
  *    there was no cap). Corrections are kept with the throw, so they can
  *    later become training data.
+ * Next to the throws, a log shows what the code sees and decides (paused,
+ * new round, mat being cleared, light changed, each judged throw) and, with
+ * a linked mat logger, what the game made of it, plus stats (CameraLog).
+ * After a new round starts, the camera first waits until the mat is clear
+ * (only the shooting boxes may hold caps); caps disappearing while the mat
+ * is cleared are never a throw.
  * The session is shared with a crew: every judged throw (spot + a small
  * top-down picture) is posted, crew members follow and correct it from
  * their own phone (CameraViewer, linked from the crew page), and their
@@ -26,6 +32,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { DETECTOR, FULL_H, FULL_W, WH, WW, align, detect, findField, warp, warpFull, type Frame, type Pt } from "@/lib/camera";
 import { CornerEditor, Overlay, defaultCorners, type Photo } from "@/components/camera/CameraLab";
 import { SpotsEditor, spotsLabel, warpedToJpeg, type Spot } from "@/components/camera/MatPick";
+import { CameraLog, useGameText, type CamEvent } from "@/components/camera/CameraLog";
+import { asCameraGame, gameEvents, type CameraGame } from "@/lib/camera-log";
 import {
   addCameraThrowAction,
   correctCameraThrowByNAction,
@@ -60,7 +68,9 @@ const SETTLE = 3;
 const CONFIRM_S = 6;
 
 type Phase = "start" | "calibrate" | "live";
-type Status = "waiting" | "moving" | "looking" | "paused";
+type Status = "waiting" | "moving" | "looking" | "paused" | "clearing";
+/** Camera events kept for the log. */
+const MAX_EVENTS = 150;
 type Throw = { n: number; spots: Spot[]; gone: Spot[]; corrected: boolean; img: string | null };
 /** How often the session is synced with the crew (ms). */
 const SYNC = 1500;
@@ -119,6 +129,17 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
   const [sessionId, setSessionId] = useState<string | null>(null);
   const session = useRef<string | null>(null);
   const [loggerName, setLoggerName] = useState<string | null>(null);
+  const [game, setGame] = useState<CameraGame | null>(null);
+  const gameRef = useRef<CameraGame | null>(null);
+  // When each line of the game was first seen here (for the log's order).
+  const seenRef = useRef<Record<string, number>>({});
+  const [seenAt, setSeenAt] = useState<Record<string, number>>({});
+  const [events, setEvents] = useState<CamEvent[]>([]);
+  const evNo = useRef(0);
+  /** Add a line to the log (skipped when it repeats the last line). */
+  const note = useCallback((text: string, tone?: CamEvent["tone"]) => {
+    setEvents((es) => (es[0]?.text === text ? es : [{ key: `c${++evNo.current}`, t: Date.now(), text, tone }, ...es].slice(0, MAX_EVENTS)));
+  }, []);
   // Snapshot version on the server, and the last "new snapshot" request seen.
   const snapVersion = useRef(0);
   const handledRequest = useRef(0);
@@ -139,6 +160,10 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
     armed: false,
     armVersion: 0,
     rebase: false,
+    // A new round started: wait until the mat is clear before judging throws.
+    clearing: false,
+    clearLeft: -1,
+    lastArmed: null as boolean | null,
     calm: 0,
     busy: false,
     n: 0,
@@ -241,7 +266,8 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
       const full = warpedToJpeg(warpFull(frame, c), FULL_W, FULL_H, 0.85);
       if (full) setCameraEmptyAction(session.current, full).catch(() => {});
     }
-    Object.assign(live.current, { corners: c, empty, still: empty, prevTiny: null, base: null, calm: 0, busy: false });
+    Object.assign(live.current, { corners: c, empty, still: empty, prevTiny: null, base: null, calm: 0, busy: false, clearing: false, clearLeft: -1 });
+    note(L.evStart, "good");
     setCorners(c);
     setAsk(null);
     setFixing(null);
@@ -266,14 +292,30 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
       S.prevTiny = small;
       if (S.gated && !S.armed) {
         // No throw expected (round over, mat being cleared): ignore it all.
+        if (S.lastArmed !== false) note(L.evPaused, "muted");
+        S.lastArmed = false;
         setStatus("paused");
         return;
       }
+      if (S.gated && S.lastArmed !== true) {
+        S.lastArmed = true;
+        const g = gameRef.current;
+        const who = g?.st.thrower ? g.names[g.st.thrower] : null;
+        note(who ? format(L.evArmedName, { name: who }) : L.evArmed);
+      }
+      const idle = () => setStatus(S.clearing ? "clearing" : "waiting");
       if (!S.base || S.rebase) {
         S.base = small;
-        if (S.rebase) S.still = warp(f, S.corners);
+        if (S.rebase) {
+          // New round: start from the mat as it is now, but only once it's clear.
+          S.still = warp(f, S.corners);
+          const left = detect(S.empty, S.empty, S.still).present.length;
+          S.clearing = left > 0;
+          S.clearLeft = left;
+          note(left > 0 ? format(L.evClearing, { n: left }) : L.evNewRound, left > 0 ? "warn" : "good");
+        }
         S.rebase = false;
-        setStatus("waiting");
+        idle();
         return;
       }
       if (prev && changed(small, prev, MOTION_CELL) >= MIN_CELLS) {
@@ -285,12 +327,13 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
       if (diff < MIN_CELLS) {
         // Still, and nothing on the mat changed (a hand passed by).
         S.calm = 0;
-        setStatus("waiting");
+        idle();
         return;
       }
       if (diff > LIGHT_SHARE * CELLS) {
         S.base = small;
         S.calm = 0;
+        note(L.evLight, "muted");
         return;
       }
       if (++S.calm < SETTLE) return;
@@ -305,7 +348,26 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
           S.corners = align(f, S.corners, S.empty!);
           const cur = warp(f, S.corners);
           const r = detect(S.empty!, S.still!, cur);
+          if (r.occluded) {
+            // A hand or arm resting on the mat: judge again once it's gone.
+            note(L.evHand, "muted");
+            return;
+          }
           S.still = cur;
+          if (S.clearing) {
+            // Caps being taken off for the new round: never a throw.
+            if (!r.present.length) {
+              S.clearing = false;
+              note(L.evCleared, "good");
+            } else if (r.present.length !== S.clearLeft) note(format(L.evClearing, { n: r.present.length }), "warn");
+            S.clearLeft = r.present.length;
+            return;
+          }
+          if (!r.landed.length && !r.present.length && r.gone.length >= 2) {
+            // Several caps gone and the mat is empty again: it was cleared.
+            note(L.evCleared, "good");
+            return;
+          }
           const n = ++S.n;
           const spots = r.landed.map((b) => ({ x: b.x, y: b.y }));
           const gone = r.gone.map((b) => ({ x: b.x, y: b.y }));
@@ -314,13 +376,22 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
           setThrows((ts) => [{ n, spots, gone, corrected: false, img }, ...ts]);
           setAsk({ n, left: CONFIRM_S });
           if (session.current) addCameraThrowAction(session.current, { n, spots, gone, image: img, full, detector: DETECTOR }).catch(() => {});
+          note(
+            spots.length
+              ? format(L.evThrow, { n, where: spotsLabel(spots, C, L), gone: gone.length })
+              : gone.length
+                ? format(L.evThrowGone, { n, gone: gone.length })
+                : format(L.evThrowNone, { n }),
+          );
         } finally {
           S.busy = false;
-          setStatus("waiting");
+          idle();
         }
       }, 30);
     }, TICK);
     return () => window.clearInterval(id);
+    // note/format only read the dictionaries.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
   // Countdown on the question; at zero it counts as right.
@@ -361,6 +432,19 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
             S.rebase = true;
           }
           setLoggerName(st.logger?.name ?? null);
+          const g = st.logger ? asCameraGame(st.game) : null;
+          gameRef.current = g;
+          setGame(g);
+          if (g) {
+            const now = Date.now();
+            let added = false;
+            gameEvents(g).forEach((e, i) => {
+              if (seenRef.current[e.key] !== undefined) return;
+              seenRef.current[e.key] = now + i / 1000;
+              added = true;
+            });
+            if (added) setSeenAt({ ...seenRef.current });
+          }
           const remote = new Map(st.throws.filter((th) => th.corrected).map((th) => [th.n, th.spots]));
           if (!remote.size) return;
           setThrows((ts) => ts.map((th) => (remote.has(th.n) && !th.corrected ? { ...th, spots: remote.get(th.n) ?? [], corrected: true } : th)));
@@ -374,6 +458,27 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
   }, [sessionId]);
 
   const spotText = (sp: Spot[]) => spotsLabel(sp, C, L);
+  const G = useGameText(game);
+  /** What became of a camera throw: the logger's view when linked, else what the camera found. */
+  function throwText(th: Throw): string {
+    if (game) {
+      const idx = game.links[String(th.n)];
+      const rec = idx !== undefined ? game.st.throws[idx] : undefined;
+      if (rec) {
+        const mine = rec.moves.find((m) => m.isThrownCap);
+        const knocked = rec.moves.filter((m) => !m.isThrownCap).length;
+        const base = `${G.name(rec.slot)}: ${G.spot(rec.firstSpot ?? "none", rec.missed ? null : (mine?.to.countsFor ?? null))}`;
+        return knocked ? `${base} · ${format(L.thrKnocked, { n: knocked })}` : base;
+      }
+      if (game.pending?.n === th.n) {
+        const who = game.st.thrower ? G.name(game.st.thrower) : "?";
+        return game.pending.touched ? format(L.thrFixing, { name: who }) : !game.pending.found ? format(L.thrNoneLogger, { name: who }) : format(L.thrPending, { name: who, s: game.pending.left });
+      }
+      if (th.n <= game.seen) return L.thrUnused;
+    }
+    if (th.spots.length) return spotText(th.spots);
+    return th.gone.length ? format(L.thrGoneOnly, { n: th.gone.length }) : L.thrNone;
+  }
 
 
   const kicker = "font-heading font-bold text-[12px] tracking-[0.14em] text-gold";
@@ -415,10 +520,10 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
             role="status"
             className={cn(
               "absolute top-2.5 left-2.5 px-3 py-1.5 rounded-pill font-heading font-bold text-xs tracking-[0.08em]",
-              status === "moving" ? "bg-amber text-ink" : status === "looking" ? "bg-cream text-ink" : "bg-black/60 text-cream",
+              status === "moving" ? "bg-amber text-ink" : status === "looking" ? "bg-cream text-ink" : status === "clearing" ? "bg-red text-cream" : "bg-black/60 text-cream",
             )}
           >
-            {status === "moving" ? L.moving : status === "looking" ? L.looking : status === "paused" ? L.paused : L.waiting}
+            {status === "moving" ? L.moving : status === "looking" ? L.looking : status === "paused" ? L.paused : status === "clearing" ? L.clearing : L.waiting}
           </span>
         )}
       </div>
@@ -510,7 +615,7 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
       {phase === "live" && !fixingThrow && asked && (
         <section className="flex flex-col gap-3 p-4 rounded-[18px] bg-surface-deep border border-gold/50" aria-live="polite">
           <span className={kicker}>{format(L.throwN, { n: asked.n })}</span>
-          <p className="font-display font-extrabold text-2xl leading-tight">{asked.spots.length ? format(asked.spots.length > 1 ? L.capsIn : L.capIn, { where: spotText(asked.spots) }) : L.noCapQ}</p>
+          <p className="font-display font-extrabold text-2xl leading-tight">{asked.spots.length ? format(asked.spots.length > 1 ? L.capsIn : L.capIn, { where: spotText(asked.spots) }) : asked.gone.length ? format(L.noCapGoneQ, { n: asked.gone.length }) : L.noCapQ}</p>
           <div className="grid grid-cols-2 gap-2">
             <button type="button" onClick={() => setAsk(null)} className="h-12 rounded-[14px] bg-mint text-ink font-heading font-extrabold text-base tracking-[0.06em]">
               ✓ {format(L.right, { s: ask!.left })}
@@ -528,6 +633,8 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
         </p>
       )}
 
+      {phase === "live" && <CameraLog game={game} seenAt={seenAt} events={events} />}
+
       {phase === "live" && throws.length > 0 && (
         <section className="flex flex-col gap-1.5">
           <span className={kicker}>{L.history}</span>
@@ -539,7 +646,7 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
               className="flex items-center gap-3 px-3.5 py-2.5 rounded-[14px] bg-surface-deep border border-line text-left"
             >
               <span className="font-heading font-extrabold text-sm text-gold w-14">{format(C.throwShort, { n: th.n })}</span>
-              <span className="flex-1 min-w-0 truncate font-body text-sm">{spotText(th.spots)}</span>
+              <span className="flex-1 min-w-0 truncate font-body text-sm">{throwText(th)}</span>
               {th.corrected && <span className="font-heading font-bold text-[11px] tracking-[0.08em] text-muted">{L.fixed}</span>}
             </button>
           ))}

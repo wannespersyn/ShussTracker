@@ -2,7 +2,8 @@
  * Camera live — server actions
  *
  * Start/stop a live camera session in a crew, post a judged throw, poll the
- * session (camera and viewers), correct a throw, fetch a throw's picture.
+ * session (camera and viewers), correct a throw, fetch a throw's picture,
+ * share the linked mat logger's game with the camera.
  */
 "use server";
 
@@ -25,6 +26,7 @@ import {
   getCameraState,
   getCameraThrowImage,
   getLiveCameras,
+  setCameraGame,
   startCameraSession,
 } from "@/lib/db/camera";
 
@@ -124,4 +126,12 @@ export async function getLiveCamerasAction(groupId: string) {
   const userId = await requireUserId();
   await requireGroupMember(userId, groupId);
   return getLiveCameras(groupId);
+}
+
+/** The linked mat logger shares its game (lib/camera-log.ts CameraGame). */
+export async function setCameraGameAction(sessionId: string, game: unknown) {
+  const userId = await requireUserId();
+  const size = JSON.stringify(game ?? null).length;
+  if (!game || typeof game !== "object" || size > 400_000) throw new Error("Bad game");
+  await setCameraGame(userId, sessionId, game);
 }

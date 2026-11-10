@@ -774,3 +774,14 @@ export const cameraThrows = pgTable(
   },
   (t) => [unique("camera_throw_session_n").on(t.sessionId, t.n)],
 );
+
+// The game a mat logger is playing with a linked camera: the logger's state
+// (lib/mat.ts MatState, player names, which camera throw became which mat
+// throw), so the camera phone can show what the game made of every throw.
+export const cameraGames = pgTable("camera_game", {
+  sessionId: uuid("session_id")
+    .primaryKey()
+    .references(() => cameraSessions.id, { onDelete: "cascade" }),
+  state: jsonb("state").notNull(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});

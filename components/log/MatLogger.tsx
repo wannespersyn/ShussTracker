@@ -10,7 +10,8 @@
  * rounds) and starts fresh each round; every throw it sees moves the caps
  * here (placeFromCamera) and is confirmed after a short countdown, or by
  * "Throw done" after you fixed it by hand. The confirmed mat goes back to
- * the camera session as a training label.
+ * the camera session as a training label. The game itself is shared with
+ * the camera too (camera_game), so the camera phone can show its log/stats.
  */
 "use client";
 
@@ -21,7 +22,8 @@ import { format } from "@/lib/i18n";
 import type { Duo } from "@/lib/teams";
 import { BetaPill } from "@/components/beta/BetaUi";
 import { MamaShot } from "@/components/beta/MamaShot";
-import { armCameraAction, getCameraStateAction, getLiveCamerasAction, labelCameraThrowAction, linkCameraLoggerAction, unlinkCameraLoggerAction } from "@/app/(app)/camera/actions";
+import { armCameraAction, getCameraStateAction, getLiveCamerasAction, labelCameraThrowAction, linkCameraLoggerAction, setCameraGameAction, unlinkCameraLoggerAction } from "@/app/(app)/camera/actions";
+import type { CameraGame } from "@/lib/camera-log";
 import {
   BOTTLES, CORNERS, FIELD_OUTLINE, MAMAS, ZONES,
   dropCap, drunk, finishThrow, fromField, placeFromCamera, toField, knockedMamas, mamaTeam, playJoker, newMatState, nextRound, placeA1, spotOf, teamOfSlot, toGameLog, turnInfo, zoneTeam,
@@ -84,6 +86,8 @@ export function MatLogger({
   const [camPending, setCamPending] = useState<{ n: number; left: number; touched: boolean; found: boolean } | null>(null);
   const camSeen = useRef<number | null>(null);
   const armedRound = useRef<number | null>(null);
+  /** Camera throw number → index in st.throws it became (shared with the camera). */
+  const camLinks = useRef<Record<string, number>>({});
   const stRef = useRef(st);
   const camPendingRef = useRef(camPending);
   useEffect(() => {
@@ -106,8 +110,10 @@ export function MatLogger({
     const pend = camPending;
     if (cam && pend) setCamPending(null);
     apply((d) => {
+      const idx = d.throws.length;
       const ok = finishThrow(d, miss);
       if (ok && cam && pend) {
+        camLinks.current[pend.n] = idx;
         const label = d.caps.filter((c) => !c.waiting).map((c) => ({ ...toField(c), owner: c.owner, no: c.no }));
         labelCameraThrowAction(cam.id, pend.n, label, pend.touched && how === "confirmed" ? "corrected" : how).catch(() => {});
       }
@@ -170,6 +176,26 @@ export function MatLogger({
     return () => window.clearInterval(id);
   }, [cam]);
 
+  // Share the game with the camera, so it can show what became of its throws.
+  useEffect(() => {
+    if (!cam) return;
+    const id = window.setTimeout(() => {
+      const links = Object.fromEntries(Object.entries(camLinks.current).filter(([, i]) => i < st.throws.length));
+      const game: CameraGame = {
+        v: 1,
+        st,
+        names: Object.fromEntries(st.order.map((s) => [s, nameOf(s)])),
+        links,
+        seen: camSeen.current ?? 0,
+        pending: camPending,
+      };
+      setCameraGameAction(cam.id, game).catch(() => {});
+    }, 400);
+    return () => window.clearTimeout(id);
+    // nameOf only reads names and slots.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cam, st, camPending, slots, names]);
+
   // Countdown: an untouched camera throw counts as right.
   useEffect(() => {
     if (!camPending || camPending.touched || !camPending.found) return;
@@ -189,6 +215,7 @@ export function MatLogger({
     await linkCameraLoggerAction(c.id);
     camSeen.current = null;
     armedRound.current = null;
+    camLinks.current = {};
     setCam(c);
     setDialog(null);
   }
