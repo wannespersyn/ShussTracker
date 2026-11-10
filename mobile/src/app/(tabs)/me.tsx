@@ -17,7 +17,7 @@ import { api, apiUrl } from "@/api/client";
 import { useAuth } from "@/auth/AuthProvider";
 import type { PlayerProfile } from "@/api/types";
 import { useCrew } from "@/lib/crew";
-import { LOCALES, useT, type Locale } from "@/lib/i18n";
+import { format, LOCALES, useT, type Locale } from "@/lib/i18n";
 import { useQuery } from "@/lib/useQuery";
 import { Avatar, Button, Card, Kicker, Segmented, Txt } from "@/components/ui";
 import { LinkRow } from "@/components/Header";
@@ -82,6 +82,12 @@ export default function MeTab() {
               onPress={() => router.push({ pathname: "/recap/[crewId]", params: { crewId: crew.id } })}
             />
           )}
+          {me?.beta.features.wrapped && <LinkRow label="Shussapp Wrapped" sub={t.beta.wrapped.bannerBody} onPress={() => router.push("/wrapped")} />}
+          <LinkRow
+            label={t.beta.title}
+            sub={me?.beta.optIn ? t.beta.joinOn : me && me.beta.newCount > 0 ? `${t.beta.settingsRowSub} · ${format(t.beta.newCount, { n: me.beta.newCount })}` : t.beta.settingsRowSub}
+            onPress={() => router.push("/beta")}
+          />
           <LinkRow label={t.settings.help} onPress={() => router.push("/feedback")} />
           <LinkRow label={t.app.anotherCrew} onPress={() => router.push("/crews/new")} />
         </View>

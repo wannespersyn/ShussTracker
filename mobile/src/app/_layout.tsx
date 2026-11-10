@@ -66,6 +66,11 @@ function RootStack() {
         <Stack.Screen name="americano/[id]/manage" />
         <Stack.Screen name="americano/[id]/tv" options={{ presentation: "fullScreenModal" }} />
         <Stack.Screen name="americano/[id]/game/[slotId]" />
+        <Stack.Screen name="beta/index" />
+        <Stack.Screen name="beta/[feature]" />
+        <Stack.Screen name="beta/feedback" options={{ presentation: "modal" }} />
+        <Stack.Screen name="beta/stop" options={{ presentation: "modal" }} />
+        <Stack.Screen name="wrapped" options={{ presentation: "fullScreenModal" }} />
       </Stack.Protected>
       <Stack.Protected guard={status === "signedOut"}>
         <Stack.Screen name="sign-in" />
