@@ -811,6 +811,8 @@ export const en = {
     cancel: "Cancel",
     paused: "WAITING FOR THE LOGGER",
     linked: "Linked to {name}'s mat logger: only throws in turn are counted.",
+    trainTitle: "Help the camera get better",
+    trainSub: "Keeps a picture of the mat seen from above after each throw (just the mat — no room, no faces) to train the camera. Only used for that.",
   },
   sb: {
     title: "STATS",

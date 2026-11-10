@@ -169,6 +169,13 @@
       "when": 1794259804712,
       "tag": "0023_camera_logger_link",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1794302734979,
+      "tag": "0024_camera_training_images",
+      "breakpoints": true
     }
   ]
 }

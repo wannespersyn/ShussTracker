@@ -502,18 +502,31 @@ function largest(m: Uint8Array, w: number, h: number): number[] | null {
  * Each pixel averages a small grid of photo samples, so fine print (the
  * logo, "DRINKING SINCE") doesn't turn into flickering noise. */
 export function warp(frame: Frame, corners: Pt[], fast = false): Float32Array {
+  return warpTo(frame, corners, WW, WH, fast);
+}
+
+/** The full-size top-down mat (one pixel per mat unit, 824 × 265): what is
+ * stored as training data. */
+export const FULL_W = MAT_W;
+export const FULL_H = MAT_H;
+export function warpFull(frame: Frame, corners: Pt[]): Float32Array {
+  return warpTo(frame, corners, FULL_W, FULL_H, false);
+}
+
+function warpTo(frame: Frame, corners: Pt[], W: number, H: number, fast: boolean): Float32Array {
   const toPhoto = homography(MAT_CORNERS, corners);
-  const out = new Float32Array(WW * WH * 3);
-  const span = Math.hypot(corners[1].x - corners[0].x, corners[1].y - corners[0].y) / WW;
+  const out = new Float32Array(W * H * 3);
+  const scale = W / MAT_W;
+  const span = Math.hypot(corners[1].x - corners[0].x, corners[1].y - corners[0].y) / W;
   const k = fast ? 1 : Math.min(4, Math.max(1, Math.round(span)));
-  for (let y = 0; y < WH; y++)
-    for (let x = 0; x < WW; x++) {
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++) {
       let r = 0;
       let g = 0;
       let b = 0;
       for (let sy = 0; sy < k; sy++)
         for (let sx = 0; sx < k; sx++) {
-          const p = apply(toPhoto, { x: (x + (sx + 0.5) / k) / SCALE, y: (y + (sy + 0.5) / k) / SCALE });
+          const p = apply(toPhoto, { x: (x + (sx + 0.5) / k) / scale, y: (y + (sy + 0.5) / k) / scale });
           const px = Math.min(frame.w - 1, Math.max(0, Math.round(p.x)));
           const py = Math.min(frame.h - 1, Math.max(0, Math.round(p.y)));
           const i = (py * frame.w + px) * 4;
@@ -521,7 +534,7 @@ export function warp(frame: Frame, corners: Pt[], fast = false): Float32Array {
           g += frame.data[i + 1];
           b += frame.data[i + 2];
         }
-      const o = (y * WW + x) * 3;
+      const o = (y * W + x) * 3;
       const n = k * k;
       out[o] = r / n;
       out[o + 1] = g / n;
@@ -792,6 +805,8 @@ const at = (s: Float32Array, b: Blob) => s[Math.min(WH - 1, Math.floor(b.y * SCA
 
 /** A patch this big that changed is a hand or arm, not a cap (mat units²). */
 export const HAND_MIN = 9000;
+/** Version of this detector, stored with every throw it judged. */
+export const DETECTOR = "cv-2026.11";
 
 /** Compares the current photo with the empty mat and the previous photo
  * (all three already warped with `warp`). `minDiff` is the sensitivity

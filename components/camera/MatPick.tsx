@@ -69,7 +69,7 @@ export function MatPick({ src, spots, gone = [], label, onTap }: Readonly<{ src:
 }
 
 /** A warped top-down frame (lib/camera) as a small JPEG data URL. */
-export function warpedToJpeg(warped: Float32Array, w: number, h: number): string | null {
+export function warpedToJpeg(warped: Float32Array, w: number, h: number, quality = 0.72): string | null {
   const c = document.createElement("canvas");
   c.width = w;
   c.height = h;
@@ -83,7 +83,7 @@ export function warpedToJpeg(warped: Float32Array, w: number, h: number): string
     img.data[p * 4 + 3] = 255;
   }
   ctx.putImageData(img, 0, 0);
-  const url = c.toDataURL("image/jpeg", 0.72);
+  const url = c.toDataURL("image/jpeg", quality);
   c.width = 0;
   c.height = 0;
   return url;

@@ -23,7 +23,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { WH, WW, align, detect, findField, warp, type Frame, type Pt } from "@/lib/camera";
+import { DETECTOR, FULL_H, FULL_W, WH, WW, align, detect, findField, warp, warpFull, type Frame, type Pt } from "@/lib/camera";
 import { CornerEditor, Overlay, defaultCorners, type Photo } from "@/components/camera/CameraLab";
 import { SpotsEditor, spotsLabel, warpedToJpeg, type Spot } from "@/components/camera/MatPick";
 import {
@@ -32,6 +32,7 @@ import {
   endCameraSessionAction,
   getCameraStateAction,
   setCameraCornersAction,
+  setCameraEmptyAction,
   setCameraSnapshotAction,
   startCameraSessionAction,
 } from "@/app/(app)/camera/actions";
@@ -112,6 +113,9 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
   const [ask, setAsk] = useState<{ n: number; left: number } | null>(null);
   const [fixing, setFixing] = useState<number | null>(null);
   const [crewId, setCrewId] = useState(initialCrewId ?? crews[0]?.id ?? "");
+  // Keep top-down pictures of the mat for training (asked at the start).
+  const [share, setShare] = useState(true);
+  const shareRef = useRef(true);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const session = useRef<string | null>(null);
   const [loggerName, setLoggerName] = useState<string | null>(null);
@@ -195,7 +199,8 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
     }
     if (crewId) {
       try {
-        const id = await startCameraSessionAction(crewId);
+        shareRef.current = share;
+        const id = await startCameraSessionAction(crewId, share);
         session.current = id;
         setSessionId(id);
       } catch {
@@ -232,6 +237,10 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
     const frame = snapRef.current;
     if (!frame) return;
     const empty = warp(frame, c);
+    if (session.current && shareRef.current) {
+      const full = warpedToJpeg(warpFull(frame, c), FULL_W, FULL_H, 0.85);
+      if (full) setCameraEmptyAction(session.current, full).catch(() => {});
+    }
     Object.assign(live.current, { corners: c, empty, still: empty, prevTiny: null, base: null, calm: 0, busy: false });
     setCorners(c);
     setAsk(null);
@@ -301,9 +310,10 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
           const spots = r.landed.map((b) => ({ x: b.x, y: b.y }));
           const gone = r.gone.map((b) => ({ x: b.x, y: b.y }));
           const img = warpedToJpeg(cur, WW, WH);
+          const full = shareRef.current && session.current ? warpedToJpeg(warpFull(f, S.corners), FULL_W, FULL_H, 0.85) : null;
           setThrows((ts) => [{ n, spots, gone, corrected: false, img }, ...ts]);
           setAsk({ n, left: CONFIRM_S });
-          if (session.current) addCameraThrowAction(session.current, { n, spots, gone, image: img }).catch(() => {});
+          if (session.current) addCameraThrowAction(session.current, { n, spots, gone, image: img, full, detector: DETECTOR }).catch(() => {});
         } finally {
           S.busy = false;
           setStatus("waiting");
@@ -438,6 +448,13 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
                 ))}
               </div>
               <p className="font-body text-[13px] text-muted">{L.shareSub}</p>
+              <label className="flex items-start gap-3 p-3 rounded-[14px] bg-surface-deep border border-line cursor-pointer">
+                <input type="checkbox" checked={share} onChange={(e) => setShare(e.target.checked)} className="mt-1 w-5 h-5 accent-[var(--color-amber)]" />
+                <span className="flex flex-col gap-0.5">
+                  <span className="font-heading font-bold text-sm">{L.trainTitle}</span>
+                  <span className="font-body text-[13px] text-muted">{L.trainSub}</span>
+                </span>
+              </label>
             </div>
           )}
           <button type="button" onClick={start} className={primary}>

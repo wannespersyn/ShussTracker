@@ -19,6 +19,7 @@ import {
   getCameraSnapshot,
   requestCameraSnapshot,
   setCameraCorners,
+  setCameraEmpty,
   setCameraSnapshot,
   endCameraSession,
   getCameraState,
@@ -32,17 +33,24 @@ const spotsOk = (s: Spot[]) =>
   Array.isArray(s) && s.length <= 12 && s.every((p) => p && Number.isFinite(p.x) && Number.isFinite(p.y) && Math.abs(p.x) < 2000 && Math.abs(p.y) < 2000);
 const clean = (s: Spot[]) => s.map((p) => ({ x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10 }));
 
-export async function startCameraSessionAction(groupId: string) {
+export async function startCameraSessionAction(groupId: string, share = false) {
   const userId = await requireUserId();
   if (!(await hasBeta(userId, "camera"))) throw new Error("Camera beta is off");
-  return startCameraSession(userId, groupId);
+  return startCameraSession(userId, groupId, share === true);
+}
+
+export async function setCameraEmptyAction(sessionId: string, full: string) {
+  await setCameraEmpty(await requireUserId(), sessionId, full);
 }
 
 export async function endCameraSessionAction(sessionId: string) {
   await endCameraSession(await requireUserId(), sessionId);
 }
 
-export async function addCameraThrowAction(sessionId: string, t: { n: number; spots: Spot[]; gone: Spot[]; image: string | null }) {
+export async function addCameraThrowAction(
+  sessionId: string,
+  t: { n: number; spots: Spot[]; gone: Spot[]; image: string | null; full?: string | null; detector?: string },
+) {
   const userId = await requireUserId();
   if (!Number.isInteger(t.n) || t.n < 1 || !spotsOk(t.spots) || !spotsOk(t.gone)) throw new Error("Bad throw");
   await addCameraThrow(userId, sessionId, { ...t, spots: clean(t.spots), gone: clean(t.gone) });

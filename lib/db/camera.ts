@@ -10,6 +10,7 @@
  *
  * Data: camera_session, camera_throw (spots in mat units, 824 × 265).
  */
+import { put } from "@vercel/blob";
 import { and, desc, eq, gt } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { cameraSessions, cameraThrows, groupMembers, users } from "@/lib/db/schema";
@@ -59,11 +60,25 @@ async function sessionFor(userId: string, sessionId: string) {
   return s;
 }
 
-/** Opens a session in a crew (closing the camera's earlier ones). */
-export async function startCameraSession(userId: string, groupId: string): Promise<string> {
+/** A JPEG data URL → Blob (public, unguessable name). Null when it isn't one
+ * or Blob isn't configured. */
+async function storeJpeg(path: string, dataUrl: string | null | undefined): Promise<string | null> {
+  if (!dataUrl?.startsWith("data:image/jpeg;base64,") || dataUrl.length > 1_500_000 || !process.env.BLOB_READ_WRITE_TOKEN) return null;
+  try {
+    const body = Buffer.from(dataUrl.slice("data:image/jpeg;base64,".length), "base64");
+    const blob = await put(path, body, { access: "public", contentType: "image/jpeg", addRandomSuffix: true });
+    return blob.url;
+  } catch {
+    return null;
+  }
+}
+
+/** Opens a session in a crew (closing the camera's earlier ones). `share`:
+ * the owner agreed to keep top-down pictures of the mat for training. */
+export async function startCameraSession(userId: string, groupId: string, share = false): Promise<string> {
   if (!(await isMember(userId, groupId))) throw new Error("Not a member of this crew");
   await db.update(cameraSessions).set({ live: false }).where(and(eq(cameraSessions.userId, userId), eq(cameraSessions.live, true)));
-  const [row] = await db.insert(cameraSessions).values({ groupId, userId }).returning();
+  const [row] = await db.insert(cameraSessions).values({ groupId, userId, shareImages: share }).returning();
   return row.id;
 }
 
@@ -72,13 +87,18 @@ export async function endCameraSession(userId: string, sessionId: string) {
 }
 
 /** The camera posts a judged throw. */
-export async function addCameraThrow(userId: string, sessionId: string, t: { n: number; spots: Spot[]; gone: Spot[]; image: string | null }) {
+export async function addCameraThrow(
+  userId: string,
+  sessionId: string,
+  t: { n: number; spots: Spot[]; gone: Spot[]; image: string | null; full?: string | null; detector?: string },
+) {
   const s = await db.query.cameraSessions.findFirst({ where: and(eq(cameraSessions.id, sessionId), eq(cameraSessions.userId, userId)) });
   if (!s) throw new Error("Not your camera");
+  const imageUrl = s.shareImages ? await storeJpeg(`camera/${sessionId}/throw-${t.n}.jpg`, t.full) : null;
   const image = t.image && t.image.startsWith("data:image/jpeg;base64,") && t.image.length < 120_000 ? t.image : null;
   await db
     .insert(cameraThrows)
-    .values({ sessionId, n: t.n, found: t.spots, spots: t.spots, gone: t.gone, image })
+    .values({ sessionId, n: t.n, found: t.spots, spots: t.spots, gone: t.gone, image, imageUrl, detector: t.detector?.slice(0, 40) ?? null })
     .onConflictDoNothing();
   await db.update(cameraSessions).set({ updatedAt: new Date() }).where(eq(cameraSessions.id, sessionId));
 }
@@ -172,6 +192,14 @@ export async function setCameraCorners(userId: string, sessionId: string, versio
   const s = await sessionFor(userId, sessionId);
   if (s.snapVersion !== version || !s.snapW || !s.snapH || !cornersOk(corners, s.snapW, s.snapH)) throw new Error("Outdated snapshot");
   await db.update(cameraSessions).set({ corners, phase: "watching" }).where(eq(cameraSessions.id, sessionId));
+}
+
+/** The camera stores its full-size empty mat (the training reference). */
+export async function setCameraEmpty(userId: string, sessionId: string, full: string) {
+  const s = await db.query.cameraSessions.findFirst({ where: and(eq(cameraSessions.id, sessionId), eq(cameraSessions.userId, userId)) });
+  if (!s || !s.shareImages) return;
+  const url = await storeJpeg(`camera/${sessionId}/empty-v${s.snapVersion}.jpg`, full);
+  if (url) await db.update(cameraSessions).set({ emptyUrl: url }).where(eq(cameraSessions.id, sessionId));
 }
 
 /** A mat logger takes the camera for its game (it becomes training data). */

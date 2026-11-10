@@ -810,6 +810,8 @@ export const nl: Dictionary = {
     cancel: "Annuleren",
     paused: "WACHT OP DE LOGGER",
     linked: "Gekoppeld aan de mat-logger van {name}: enkel worpen op beurt tellen.",
+    trainTitle: "Help de camera beter worden",
+    trainSub: "Bewaart na elke worp een foto van de mat van bovenaf (enkel de mat — geen kamer, geen gezichten) om de camera te trainen. Wordt enkel daarvoor gebruikt.",
   },
   sb: {
     title: "STATS",

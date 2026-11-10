@@ -735,6 +735,10 @@ export const cameraSessions = pgTable("camera_session", {
   // clearing it for a new round).
   armed: boolean("armed").notNull().default(false),
   armVersion: integer("arm_version").notNull().default(0),
+  // The camera's owner agreed to keep top-down pictures of the mat for
+  // training (Vercel Blob); the empty mat as the reference picture.
+  shareImages: boolean("share_images").notNull().default(false),
+  emptyUrl: text("empty_url"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -755,6 +759,10 @@ export const cameraThrows = pgTable(
     // Where caps were knocked away from.
     gone: jsonb("gone").$type<{ x: number; y: number }[]>().notNull().default([]),
     correctedBy: uuid("corrected_by").references(() => users.id, { onDelete: "set null" }),
+    // Full-size top-down picture after the throw (824 × 265 JPEG in Blob,
+    // only when shared) and the detector that judged it.
+    imageUrl: text("image_url"),
+    detector: text("detector"),
     // Training label: every cap on the mat after the throw (field units,
     // with owner slot), as confirmed in the mat logger, and how sure it is:
     // "corrected" (moved by hand), "confirmed" (tapped done), "auto".
