@@ -183,6 +183,7 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
   const [loggerName, setLoggerName] = useState<string | null>(null);
   const [game, setGame] = useState<CameraGame | null>(null);
   const gameRef = useRef<CameraGame | null>(null);
+  const gameAt = useRef(0);
   // When each line of the game was first seen here (for the log's order).
   const seenRef = useRef<Record<string, number>>({});
   const [seenAt, setSeenAt] = useState<Record<string, number>>({});
@@ -579,7 +580,7 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
   useEffect(() => {
     if (!sessionId) return;
     const id = window.setInterval(() => {
-      getCameraStateAction(sessionId)
+      getCameraStateAction(sessionId, gameAt.current)
         .then((st) => {
           // Zone nudges set on another phone or laptop.
           if (st.zoneFix && st.zoneFix.version > fixVersion.current) {
@@ -604,9 +605,13 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
             S.rebase = true;
           }
           setLoggerName(st.logger?.name ?? null);
-          const g = st.logger ? asCameraGame(st.game) : null;
-          gameRef.current = g;
-          setGame(g);
+          // The game only comes along when it changed (undefined = keep ours).
+          const g = !st.logger ? null : st.game === undefined ? gameRef.current : asCameraGame(st.game);
+          gameAt.current = st.logger ? st.gameAt : 0;
+          if (g !== gameRef.current) {
+            gameRef.current = g;
+            setGame(g);
+          }
           if (g && stampEvents(g, seenRef.current)) setSeenAt({ ...seenRef.current });
           // Throws added on another phone (a "miss"): keep the numbering in step and list them.
           const newest = st.throws[0]?.n ?? 0;

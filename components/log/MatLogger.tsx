@@ -152,7 +152,7 @@ export function MatLogger({
   useEffect(() => {
     if (!cam) return;
     const id = window.setInterval(() => {
-      getCameraStateAction(cam.id)
+      getCameraStateAction(cam.id, null)
         .then((cs) => {
           const newest = cs.throws[0]?.n ?? 0;
           if (camSeen.current === null) {

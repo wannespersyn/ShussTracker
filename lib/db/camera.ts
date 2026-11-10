@@ -53,8 +53,11 @@ export type CameraState = {
   armed: boolean;
   armVersion: number;
   throws: CameraThrow[];
-  /** The linked mat logger's game (lib/camera-log.ts CameraGame), if any. */
+  /** The linked mat logger's game (lib/camera-log.ts CameraGame), null if
+   * none; undefined = unchanged since the caller's `gameSince` (keep yours). */
   game: unknown;
+  /** When that game last changed (pass it back as `gameSince`). */
+  gameAt: number;
   /** Per-zone nudges (lib/camera.ts ZoneFix) and their version, if any. */
   zoneFix: { fix: Record<string, { dx: number; dy: number; s?: number }>; version: number } | null;
 };
@@ -63,7 +66,7 @@ const isMember = async (userId: string, groupId: string) =>
   !!(await db.query.groupMembers.findFirst({ where: and(eq(groupMembers.groupId, groupId), eq(groupMembers.userId, userId)), columns: { userId: true } }));
 
 async function sessionFor(userId: string, sessionId: string) {
-  const s = await db.query.cameraSessions.findFirst({ where: eq(cameraSessions.id, sessionId) });
+  const s = await db.query.cameraSessions.findFirst({ where: eq(cameraSessions.id, sessionId), columns: { snapshot: false } });
   if (!s || !(await isMember(userId, s.groupId))) throw new Error("Not found");
   return s;
 }
@@ -100,7 +103,7 @@ export async function addCameraThrow(
   sessionId: string,
   t: { n: number; spots: Spot[]; gone: Spot[]; image: string | null; full?: string | null; detector?: string },
 ) {
-  const s = await db.query.cameraSessions.findFirst({ where: and(eq(cameraSessions.id, sessionId), eq(cameraSessions.userId, userId)) });
+  const s = await db.query.cameraSessions.findFirst({ where: and(eq(cameraSessions.id, sessionId), eq(cameraSessions.userId, userId)), columns: { snapshot: false } });
   if (!s) throw new Error("Not your camera");
   const imageUrl = s.shareImages ? await storeJpeg(`camera/${sessionId}/throw-${t.n}.jpg`, t.full) : null;
   const image = t.image && t.image.startsWith("data:image/jpeg;base64,") && t.image.length < 120_000 ? t.image : null;
@@ -133,7 +136,9 @@ export async function correctCameraThrowByN(userId: string, sessionId: string, n
 
 /** The session with its throws (no pictures); a poll by the camera itself
  * also counts as its heartbeat. */
-export async function getCameraState(userId: string, sessionId: string): Promise<CameraState> {
+/** `gameSince`: time of the game the caller already has (the game is only
+ * sent when newer); null = the caller doesn't need the game (the logger). */
+export async function getCameraState(userId: string, sessionId: string, gameSince: number | null = 0): Promise<CameraState> {
   const s = await sessionFor(userId, sessionId);
   if (s.userId === userId && s.live) await db.update(cameraSessions).set({ updatedAt: new Date() }).where(eq(cameraSessions.id, sessionId));
   const [rows, cam, logger] = await Promise.all([
@@ -146,7 +151,13 @@ export async function getCameraState(userId: string, sessionId: string): Promise
     db.query.users.findFirst({ where: eq(users.id, s.userId), columns: { name: true } }),
     s.loggerId ? db.query.users.findFirst({ where: eq(users.id, s.loggerId), columns: { id: true, name: true } }) : Promise.resolve(undefined),
   ]);
-  const [game, zoneFix, checked] = await Promise.all([s.loggerId ? getCameraGame(sessionId) : Promise.resolve(null), getCameraZoneFix(sessionId), getCheckedThrows(sessionId)]);
+  const [g, zoneFix, checked] = await Promise.all([
+    s.loggerId && gameSince !== null ? getCameraGame(sessionId, gameSince) : Promise.resolve(null),
+    getCameraZoneFix(sessionId),
+    getCheckedThrows(sessionId),
+  ]);
+  const game = g ? g.state : null;
+  const gameAt = g?.at ?? 0;
   return {
     id: s.id,
     groupId: s.groupId,
@@ -161,6 +172,7 @@ export async function getCameraState(userId: string, sessionId: string): Promise
     armed: s.armed,
     armVersion: s.armVersion,
     game,
+    gameAt,
     zoneFix,
     throws: rows.map((r) => ({
       id: r.id,
@@ -181,7 +193,7 @@ const cornersOk = (c: unknown, w: number, h: number): c is { x: number; y: numbe
 /** The camera uploads a new empty-mat snapshot with its own guess of the
  * corners; the session goes (back) to calibrating. Returns the version. */
 export async function setCameraSnapshot(userId: string, sessionId: string, snap: { image: string; w: number; h: number; corners: { x: number; y: number }[] }) {
-  const s = await db.query.cameraSessions.findFirst({ where: and(eq(cameraSessions.id, sessionId), eq(cameraSessions.userId, userId)) });
+  const s = await db.query.cameraSessions.findFirst({ where: and(eq(cameraSessions.id, sessionId), eq(cameraSessions.userId, userId)), columns: { snapshot: false } });
   if (!s) throw new Error("Not your camera");
   if (!snap.image.startsWith("data:image/jpeg;base64,") || snap.image.length > 900_000 || !cornersOk(snap.corners, snap.w, snap.h)) throw new Error("Bad snapshot");
   const version = s.snapVersion + 1;
@@ -208,7 +220,7 @@ export async function setCameraCorners(userId: string, sessionId: string, versio
 
 /** The camera stores its full-size empty mat (the training reference). */
 export async function setCameraEmpty(userId: string, sessionId: string, full: string) {
-  const s = await db.query.cameraSessions.findFirst({ where: and(eq(cameraSessions.id, sessionId), eq(cameraSessions.userId, userId)) });
+  const s = await db.query.cameraSessions.findFirst({ where: and(eq(cameraSessions.id, sessionId), eq(cameraSessions.userId, userId)), columns: { snapshot: false } });
   if (!s || !s.shareImages) return;
   const url = await storeJpeg(`camera/${sessionId}/empty-v${s.snapVersion}.jpg`, full);
   if (url) await db.update(cameraSessions).set({ emptyUrl: url }).where(eq(cameraSessions.id, sessionId));
@@ -230,7 +242,7 @@ export async function unlinkCameraLogger(userId: string, sessionId: string) {
 /** The logger arms (a throw is expected) or disarms the camera; `fresh`
  * also tells it to start from the mat as it is now. */
 export async function armCamera(userId: string, sessionId: string, armed: boolean, fresh: boolean) {
-  const s = await db.query.cameraSessions.findFirst({ where: and(eq(cameraSessions.id, sessionId), eq(cameraSessions.loggerId, userId)) });
+  const s = await db.query.cameraSessions.findFirst({ where: and(eq(cameraSessions.id, sessionId), eq(cameraSessions.loggerId, userId)), columns: { snapshot: false } });
   if (!s) throw new Error("Not your game");
   await db
     .update(cameraSessions)
@@ -253,8 +265,10 @@ export async function labelCameraThrow(
 
 /** The current empty-mat snapshot. */
 export async function getCameraSnapshot(userId: string, sessionId: string): Promise<string | null> {
-  const s = await sessionFor(userId, sessionId);
-  return s.snapshot;
+  await sessionFor(userId, sessionId);
+  // The snapshot is big (a JPEG): only read here, never with the session row.
+  const [row] = await db.select({ snapshot: cameraSessions.snapshot }).from(cameraSessions).where(eq(cameraSessions.id, sessionId)).limit(1);
+  return row?.snapshot ?? null;
 }
 
 /** One throw's picture (fetched only when someone looks at it). */
@@ -278,10 +292,15 @@ export async function getLiveCameras(groupId: string): Promise<{ id: string; nam
 
 /** The game of the linked logger; null when there is none (or the table isn't
  * migrated yet — the camera then just works without it). */
-async function getCameraGame(sessionId: string): Promise<unknown> {
+async function getCameraGame(sessionId: string, since: number): Promise<{ state: unknown; at: number } | null> {
   try {
+    // Only send the game when it changed since the caller's copy (it can be tens of kB).
+    const [meta] = await db.select({ at: cameraGames.updatedAt }).from(cameraGames).where(eq(cameraGames.sessionId, sessionId)).limit(1);
+    if (!meta) return null;
+    const at = meta.at.getTime();
+    if (at <= since) return { state: undefined, at };
     const [row] = await db.select({ state: cameraGames.state }).from(cameraGames).where(eq(cameraGames.sessionId, sessionId)).limit(1);
-    return row?.state ?? null;
+    return { state: row?.state ?? null, at };
   } catch {
     return null;
   }

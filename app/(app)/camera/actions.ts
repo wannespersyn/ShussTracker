@@ -66,8 +66,9 @@ export async function correctCameraThrowAction(throwId: string, spots: Spot[]) {
   await correctCameraThrow(await requireUserId(), throwId, clean(spots));
 }
 
-export async function getCameraStateAction(sessionId: string) {
-  return getCameraState(await requireUserId(), sessionId);
+/** `gameSince`: time of the game you already have (null: you don't need it). */
+export async function getCameraStateAction(sessionId: string, gameSince: number | null = 0) {
+  return getCameraState(await requireUserId(), sessionId, gameSince === null ? null : Number(gameSince) || 0);
 }
 
 export async function getCameraThrowImageAction(throwId: string) {

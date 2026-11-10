@@ -75,6 +75,7 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
   // When each game line was first seen here (the log's order).
   const seenRef = useRef<Record<string, number>>({});
   const [seenAt, setSeenAt] = useState<Record<string, number>>({});
+  const gameAt = useRef(initial.gameAt);
   const game = state.logger ? asCameraGame(state.game) : null;
   const boxLabels = boxLabelsOf(game);
 
@@ -92,14 +93,16 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
   useEffect(() => {
     let last = initial.throws[0]?.n ?? 0;
     const id = window.setInterval(() => {
-      getCameraStateAction(initial.id)
+      getCameraStateAction(initial.id, gameAt.current)
         .then((st) => {
-          setState(st);
+          // The game only comes along when it changed: keep our copy otherwise.
+          gameAt.current = st.logger ? st.gameAt : 0;
+          setState((prev) => ({ ...st, game: st.game === undefined ? prev.game : st.game }));
           if (st.zoneFix && st.zoneFix.version > fixVersion.current) {
             fixVersion.current = st.zoneFix.version;
             setFixState(st.zoneFix.fix);
           }
-          const g = st.logger ? asCameraGame(st.game) : null;
+          const g = st.logger && st.game !== undefined ? asCameraGame(st.game) : null;
           if (g && stampEvents(g, seenRef.current)) setSeenAt({ ...seenRef.current });
           const newest = st.throws[0];
           if (newest && newest.n > last) {
@@ -124,8 +127,11 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
   // Load the snapshot when a new one comes in, starting from the camera's guess
   // (also while watching: the zones are fine-tuned on it).
   const version = state.snap?.version ?? 0;
+  // The snapshot is big: fetch each version once (not again on every poll while it loads).
+  const loadingSnap = useRef(0);
   useEffect(() => {
-    if (!version || snap?.version === version) return;
+    if (!version || snap?.version === version || loadingSnap.current === version) return;
+    loadingSnap.current = version;
     getCameraSnapshotAction(initial.id)
       .then((url) => {
         if (!url) return;
