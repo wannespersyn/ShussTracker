@@ -176,3 +176,17 @@ export function gameStats(g: CameraGame): { players: PlayerStats[]; teams: TeamS
   }
   return { players: [...players.values()], teams, rounds: st.results.length, throws };
 }
+
+/** Give every game line not seen before the current time (the log's order);
+ * mutates `seen`, returns whether anything was added. Call it when a poll
+ * comes in, not while rendering. */
+export function stampEvents(g: CameraGame, seen: Record<string, number>): boolean {
+  const now = Date.now();
+  let added = false;
+  gameEvents(g).forEach((e, i) => {
+    if (seen[e.key] !== undefined) return;
+    seen[e.key] = now + i / 1000;
+    added = true;
+  });
+  return added;
+}

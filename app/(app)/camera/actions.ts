@@ -3,7 +3,7 @@
  *
  * Start/stop a live camera session in a crew, post a judged throw, poll the
  * session (camera and viewers), correct a throw, fetch a throw's picture,
- * share the linked mat logger's game with the camera.
+ * share the linked mat logger's game with the camera, set the zone nudges.
  */
 "use server";
 
@@ -27,6 +27,7 @@ import {
   getCameraThrowImage,
   getLiveCameras,
   setCameraGame,
+  setCameraZoneFix,
   startCameraSession,
 } from "@/lib/db/camera";
 
@@ -134,4 +135,17 @@ export async function setCameraGameAction(sessionId: string, game: unknown) {
   const size = JSON.stringify(game ?? null).length;
   if (!game || typeof game !== "object" || size > 400_000) throw new Error("Bad game");
   await setCameraGame(userId, sessionId, game);
+}
+
+const FIX_IDS = new Set(["L1", "L2", "L3", "R1", "R2", "R3", "ML", "MR"]);
+/** Per-zone nudges (lib/camera.ts ZoneFix), from the camera or another phone. */
+export async function setCameraZoneFixAction(sessionId: string, fix: Record<string, { dx: number; dy: number }>) {
+  const userId = await requireUserId();
+  const ok =
+    fix &&
+    typeof fix === "object" &&
+    Object.entries(fix).every(([k, d]) => FIX_IDS.has(k) && d && Number.isFinite(d.dx) && Number.isFinite(d.dy) && Math.abs(d.dx) < 120 && Math.abs(d.dy) < 120);
+  if (!ok) throw new Error("Bad zone fix");
+  const clean = Object.fromEntries(Object.entries(fix).map(([k, d]) => [k, { dx: Math.round(d.dx * 10) / 10, dy: Math.round(d.dy * 10) / 10 }]));
+  return setCameraZoneFix(userId, sessionId, clean);
 }

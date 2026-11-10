@@ -183,6 +183,13 @@
       "when": 1794320375114,
       "tag": "0025_camera_game",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1794322525309,
+      "tag": "0026_camera_zone_fix",
+      "breakpoints": true
     }
   ]
 }

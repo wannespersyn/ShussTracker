@@ -785,3 +785,15 @@ export const cameraGames = pgTable("camera_game", {
   state: jsonb("state").notNull(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
+
+// Per-zone nudges on top of the corners (lib/camera.ts ZoneFix, mat units),
+// set on the camera itself or from another phone/laptop in the crew; the
+// version bumps on every change so the camera picks it up.
+export const cameraZoneFixes = pgTable("camera_zone_fix", {
+  sessionId: uuid("session_id")
+    .primaryKey()
+    .references(() => cameraSessions.id, { onDelete: "cascade" }),
+  fix: jsonb("fix").$type<Record<string, { dx: number; dy: number }>>().notNull(),
+  version: integer("version").notNull().default(1),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});

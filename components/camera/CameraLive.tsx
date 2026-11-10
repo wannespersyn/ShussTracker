@@ -37,7 +37,7 @@ import { ZoneEditor } from "@/components/camera/ZoneEditor";
 import { CornerEditor, Overlay, defaultCorners, type Photo } from "@/components/camera/CameraLab";
 import { SpotsEditor, spotsLabel, warpedToJpeg, type Spot } from "@/components/camera/MatPick";
 import { CameraLog, useGameText, type CamEvent } from "@/components/camera/CameraLog";
-import { asCameraGame, gameEvents, type CameraGame } from "@/lib/camera-log";
+import { asCameraGame, stampEvents, type CameraGame } from "@/lib/camera-log";
 import {
   addCameraThrowAction,
   correctCameraThrowByNAction,
@@ -46,6 +46,7 @@ import {
   setCameraCornersAction,
   setCameraEmptyAction,
   setCameraSnapshotAction,
+  setCameraZoneFixAction,
   startCameraSessionAction,
 } from "@/app/(app)/camera/actions";
 import { cn } from "@/lib/cn";
@@ -186,7 +187,21 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
     n: 0,
   });
 
-  function setFix(f: ZoneFix) {
+  // Zone nudges are shared with the crew: version of the last one seen here.
+  const fixVersion = useRef(0);
+  const fixPush = useRef<number | null>(null);
+  function pushFix(f: ZoneFix) {
+    if (!session.current) return;
+    const sid = session.current;
+    if (fixPush.current) window.clearTimeout(fixPush.current);
+    fixPush.current = window.setTimeout(() => {
+      setCameraZoneFixAction(sid, f)
+        .then((v) => (fixVersion.current = Math.max(fixVersion.current, v)))
+        .catch(() => {});
+    }, 400);
+  }
+  /** `push`: changed on this phone (share it); false: it came from another phone. */
+  function setFix(f: ZoneFix, push = true) {
     setFixState(f);
     live.current.fix = f;
     try {
@@ -194,6 +209,7 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
     } catch {
       /* private mode */
     }
+    if (push) pushFix(f);
   }
   useEffect(() => {
     live.current.fix = fix;
@@ -260,6 +276,8 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
         const id = await startCameraSessionAction(crewId, share);
         session.current = id;
         setSessionId(id);
+        // Share the nudges this phone already has, so other phones start from them.
+        if (Object.keys(live.current.fix).length) pushFix(live.current.fix);
       } catch {
         setError(L.shareError);
       }
@@ -448,6 +466,12 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
     const id = window.setInterval(() => {
       getCameraStateAction(sessionId)
         .then((st) => {
+          // Zone nudges set on another phone or laptop.
+          if (st.zoneFix && st.zoneFix.version > fixVersion.current) {
+            fixVersion.current = st.zoneFix.version;
+            setFix(st.zoneFix.fix, false);
+            note(L.evZonesRemote);
+          }
           if (st.snapRequest > handledRequest.current) {
             handledRequest.current = st.snapRequest;
             void freeze();
@@ -468,16 +492,7 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
           const g = st.logger ? asCameraGame(st.game) : null;
           gameRef.current = g;
           setGame(g);
-          if (g) {
-            const now = Date.now();
-            let added = false;
-            gameEvents(g).forEach((e, i) => {
-              if (seenRef.current[e.key] !== undefined) return;
-              seenRef.current[e.key] = now + i / 1000;
-              added = true;
-            });
-            if (added) setSeenAt({ ...seenRef.current });
-          }
+          if (g && stampEvents(g, seenRef.current)) setSeenAt({ ...seenRef.current });
           const remote = new Map(st.throws.filter((th) => th.corrected).map((th) => [th.n, th.spots]));
           if (!remote.size) return;
           setThrows((ts) => ts.map((th) => (remote.has(th.n) && !th.corrected ? { ...th, spots: remote.get(th.n) ?? [], corrected: true } : th)));
@@ -625,6 +640,7 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
             {Object.keys(fix).length > 0 && <span className="font-body text-xs text-mint">{format(L.zonesCount, { n: Object.keys(fix).length })}</span>}
             <span className={cn("ml-auto text-muted transition-transform", zonesOpen && "rotate-180")}>▾</span>
           </button>
+          {sessionId && <p className="font-body text-[13px] leading-normal text-gold -mt-2">{L.zonesRemoteHint}</p>}
           {zonesOpen && <ZoneEditor photo={snap} corners={corners} fix={fix} onChange={setFix} />}
           <button type="button" onClick={go} className={primary}>
             {L.go}

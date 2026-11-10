@@ -9,12 +9,13 @@
  * it's open and the camera checked in recently.
  *
  * Data: camera_session, camera_throw (spots in mat units, 824 × 265),
- * camera_game (the linked mat logger's game, so the camera can show it).
+ * camera_game (the linked mat logger's game, so the camera can show it),
+ * camera_zone_fix (per-zone nudges, set on the camera or from another phone).
  */
 import { put } from "@vercel/blob";
-import { and, desc, eq, gt } from "drizzle-orm";
+import { and, desc, eq, gt, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { cameraGames, cameraSessions, cameraThrows, groupMembers, users } from "@/lib/db/schema";
+import { cameraGames, cameraSessions, cameraThrows, cameraZoneFixes, groupMembers, users } from "@/lib/db/schema";
 
 /** A camera that hasn't checked in for this long is gone. */
 const STALE_MS = 2 * 60 * 1000;
@@ -52,6 +53,8 @@ export type CameraState = {
   throws: CameraThrow[];
   /** The linked mat logger's game (lib/camera-log.ts CameraGame), if any. */
   game: unknown;
+  /** Per-zone nudges (lib/camera.ts ZoneFix) and their version, if any. */
+  zoneFix: { fix: Record<string, { dx: number; dy: number }>; version: number } | null;
 };
 
 const isMember = async (userId: string, groupId: string) =>
@@ -141,7 +144,7 @@ export async function getCameraState(userId: string, sessionId: string): Promise
     db.query.users.findFirst({ where: eq(users.id, s.userId), columns: { name: true } }),
     s.loggerId ? db.query.users.findFirst({ where: eq(users.id, s.loggerId), columns: { id: true, name: true } }) : Promise.resolve(undefined),
   ]);
-  const game = s.loggerId ? await getCameraGame(sessionId) : null;
+  const [game, zoneFix] = await Promise.all([s.loggerId ? getCameraGame(sessionId) : Promise.resolve(null), getCameraZoneFix(sessionId)]);
   return {
     id: s.id,
     groupId: s.groupId,
@@ -156,6 +159,7 @@ export async function getCameraState(userId: string, sessionId: string): Promise
     armed: s.armed,
     armVersion: s.armVersion,
     game,
+    zoneFix,
     throws: rows.map((r) => ({
       id: r.id,
       n: r.n,
@@ -288,4 +292,26 @@ export async function setCameraGame(userId: string, sessionId: string, state: un
     .insert(cameraGames)
     .values({ sessionId, state, updatedAt: new Date() })
     .onConflictDoUpdate({ target: cameraGames.sessionId, set: { state, updatedAt: new Date() } });
+}
+
+/** The zone nudges of a session; null when none were set (or the table isn't
+ * migrated yet). */
+async function getCameraZoneFix(sessionId: string) {
+  try {
+    const [row] = await db.select({ fix: cameraZoneFixes.fix, version: cameraZoneFixes.version }).from(cameraZoneFixes).where(eq(cameraZoneFixes.sessionId, sessionId)).limit(1);
+    return row ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Anyone in the crew (the camera too) sets the zone nudges; returns the new version. */
+export async function setCameraZoneFix(userId: string, sessionId: string, fix: Record<string, { dx: number; dy: number }>): Promise<number> {
+  await sessionFor(userId, sessionId);
+  const [row] = await db
+    .insert(cameraZoneFixes)
+    .values({ sessionId, fix, version: 1, updatedAt: new Date() })
+    .onConflictDoUpdate({ target: cameraZoneFixes.sessionId, set: { fix, version: sql`${cameraZoneFixes.version} + 1`, updatedAt: new Date() } })
+    .returning();
+  return row.version;
 }

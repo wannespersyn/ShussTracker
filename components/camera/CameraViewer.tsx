@@ -7,15 +7,21 @@
  * the newest throw
  * with its top-down picture and "Cap in zone X?", a tap on "Wrong" to point
  * at the real spot (or say there was no cap), and the list of throws (tap
- * one to fix it later). Polls the session every 2 s; pictures are fetched
- * only for the throw being looked at.
+ * one to fix it later). Fine-tune the zones one by one (ZoneEditor) from
+ * here at any time — the camera hangs above the mat, nobody can reach its
+ * screen — and follow the linked mat logger's game (CameraLog: log + stats).
+ * Polls the session every 2 s; pictures are fetched only for the throw being
+ * looked at.
  */
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import type { Pt } from "@/lib/camera";
+import { useEffect, useRef, useState } from "react";
+import type { Pt, ZoneFix } from "@/lib/camera";
 import { CornerEditor } from "@/components/camera/CameraLab";
+import { ZoneEditor } from "@/components/camera/ZoneEditor";
+import { CameraLog } from "@/components/camera/CameraLog";
+import { asCameraGame, stampEvents } from "@/lib/camera-log";
 import type { CameraState } from "@/lib/db/camera";
 import { MatPick, SpotsEditor, spotsLabel, type Spot } from "@/components/camera/MatPick";
 import {
@@ -25,6 +31,7 @@ import {
   getCameraThrowImageAction,
   requestCameraSnapshotAction,
   setCameraCornersAction,
+  setCameraZoneFixAction,
 } from "@/app/(app)/camera/actions";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/client";
@@ -45,6 +52,25 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
   const [snap, setSnap] = useState<{ version: number; url: string } | null>(null);
   const [corners, setCorners] = useState<Pt[] | null>(null);
   const [sent, setSent] = useState<"none" | "corners" | "photo">("none");
+  // Zone nudges: shared with the camera through the session (versioned).
+  const [fix, setFixState] = useState<ZoneFix>(initial.zoneFix?.fix ?? {});
+  const fixVersion = useRef(initial.zoneFix?.version ?? 0);
+  const fixPush = useRef<number | null>(null);
+  const [zonesOpen, setZonesOpen] = useState(false);
+  // When each game line was first seen here (the log's order).
+  const seenRef = useRef<Record<string, number>>({});
+  const [seenAt, setSeenAt] = useState<Record<string, number>>({});
+  const game = state.logger ? asCameraGame(state.game) : null;
+
+  function setFix(f: ZoneFix) {
+    setFixState(f);
+    if (fixPush.current) window.clearTimeout(fixPush.current);
+    fixPush.current = window.setTimeout(() => {
+      setCameraZoneFixAction(initial.id, f)
+        .then((v) => (fixVersion.current = Math.max(fixVersion.current, v)))
+        .catch(() => {});
+    }, 400);
+  }
 
   // Follow the session; jump to a new throw when it comes in.
   useEffect(() => {
@@ -53,6 +79,12 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
       getCameraStateAction(initial.id)
         .then((st) => {
           setState(st);
+          if (st.zoneFix && st.zoneFix.version > fixVersion.current) {
+            fixVersion.current = st.zoneFix.version;
+            setFixState(st.zoneFix.fix);
+          }
+          const g = st.logger ? asCameraGame(st.game) : null;
+          if (g && stampEvents(g, seenRef.current)) setSeenAt({ ...seenRef.current });
           const newest = st.throws[0];
           if (newest && newest.n > last) {
             last = newest.n;
@@ -73,8 +105,9 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
       .catch(() => {});
   }, [open, images]);
 
-  // Load the snapshot when a new one comes in, starting from the camera's guess.
-  const version = state.phase === "calibrating" ? (state.snap?.version ?? 0) : 0;
+  // Load the snapshot when a new one comes in, starting from the camera's guess
+  // (also while watching: the zones are fine-tuned on it).
+  const version = state.snap?.version ?? 0;
   useEffect(() => {
     if (!version || snap?.version === version) return;
     getCameraSnapshotAction(initial.id)
@@ -124,7 +157,7 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
           ) : (
             <>
               <p className="font-body text-[15px] leading-normal text-soft">{C.step2Auto}</p>
-              <CornerEditor photo={{ url: snap.url, frame: { w: state.snap.w, h: state.snap.h, data: new Uint8ClampedArray(0) } }} corners={corners} onChange={setCorners} labels={C} />
+              <CornerEditor photo={{ url: snap.url, frame: { w: state.snap.w, h: state.snap.h, data: new Uint8ClampedArray(0) } }} corners={corners} onChange={setCorners} labels={C} fix={fix} />
               <button
                 type="button"
                 disabled={sent !== "none"}
@@ -149,6 +182,27 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
           >
             {L.again}
           </button>
+        </section>
+      )}
+
+      {state.live && snap && state.snap && (state.phase === "watching" ? state.corners : corners) && (
+        <section className="flex flex-col gap-3">
+          <button type="button" aria-expanded={zonesOpen} onClick={() => setZonesOpen((o) => !o)} className="flex items-center gap-2 text-left py-1">
+            <span className={kicker}>{L.zonesTitle}</span>
+            {Object.keys(fix).length > 0 && <span className="font-body text-xs text-mint">{format(L.zonesCount, { n: Object.keys(fix).length })}</span>}
+            <span className={cn("ml-auto text-muted transition-transform", zonesOpen && "rotate-180")}>▾</span>
+          </button>
+          {zonesOpen && (
+            <>
+              <p className="font-body text-[13px] leading-normal text-gold -mt-2">{L.zonesRemoteLive}</p>
+              <ZoneEditor
+                photo={{ url: snap.url, frame: { w: state.snap.w, h: state.snap.h, data: new Uint8ClampedArray(0) } }}
+                corners={(state.phase === "watching" ? state.corners : corners)!}
+                fix={fix}
+                onChange={setFix}
+              />
+            </>
+          )}
         </section>
       )}
 
@@ -184,6 +238,8 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
           )}
         </section>
       )}
+
+      {state.phase === "watching" && <CameraLog game={game} seenAt={seenAt} events={[]} />}
 
       {state.throws.length > 0 && (
         <section className="flex flex-col gap-1.5">
