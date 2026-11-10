@@ -820,6 +820,8 @@ export const en = {
     zonesCount: "{n} adjusted",
     zoneReset: "RESET",
     zonesResetAll: "Reset all zones",
+    missBtn: "MISS — CAP WENT OFF THE MAT",
+    missSent: "MISS SENT TO THE LOGGER",
     evPostFail: "Throw {n} could not be saved — the logger and other phones won't get it (offline? database not migrated?)",
     evClearThrow: "A cap left its box — the mat counts as ready",
     evClearTimeout: "The mat lies still — counts as ready ({n} spot(s) still look like a cap: shadow?)",

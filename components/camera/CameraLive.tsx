@@ -608,6 +608,15 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
           gameRef.current = g;
           setGame(g);
           if (g && stampEvents(g, seenRef.current)) setSeenAt({ ...seenRef.current });
+          // Throws added on another phone (a "miss"): keep the numbering in step and list them.
+          const newest = st.throws[0]?.n ?? 0;
+          if (newest > live.current.n) live.current.n = newest;
+          const extra = st.throws.filter((th) => th.n > 0);
+          setThrows((ts) => {
+            const have = new Set(ts.map((x) => x.n));
+            const add = extra.filter((th) => !have.has(th.n)).map((th) => ({ n: th.n, spots: th.spots, gone: th.gone, corrected: th.corrected, checked: th.checked, img: null }));
+            return add.length ? [...add, ...ts].sort((a, b) => b.n - a.n) : ts;
+          });
           const remote = new Map(st.throws.filter((th) => th.corrected).map((th) => [th.n, th.spots]));
           const ok = new Set(st.throws.filter((th) => th.checked).map((th) => th.n));
           if (!remote.size && !ok.size) return;

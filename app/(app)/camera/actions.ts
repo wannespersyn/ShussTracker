@@ -29,6 +29,7 @@ import {
   setCameraGame,
   setCameraZoneFix,
   checkCameraThrow,
+  addCameraMiss,
   startCameraSession,
 } from "@/lib/db/camera";
 
@@ -157,4 +158,9 @@ export async function setCameraZoneFixAction(sessionId: string, fix: Record<stri
 export async function checkCameraThrowAction(sessionId: string, n: number) {
   if (!Number.isInteger(n) || n < 1) throw new Error("Bad throw");
   await checkCameraThrow(await requireUserId(), sessionId, n);
+}
+
+/** "Miss": the throw went off the mat and the camera didn't see it. */
+export async function addCameraMissAction(sessionId: string) {
+  return addCameraMiss(await requireUserId(), sessionId);
 }

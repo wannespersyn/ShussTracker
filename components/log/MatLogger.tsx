@@ -10,7 +10,9 @@
  * rounds) and starts fresh each round; every throw it sees moves the caps
  * here (placeFromCamera) and is confirmed after a short countdown, or by
  * "Throw done" after you fixed it by hand. An empty camera throw (the cap
- * left its shooting box and landed nowhere) is proposed as a miss. The confirmed mat goes back to
+ * left its shooting box and landed nowhere, or a "miss" from another phone)
+ * is proposed as a miss, and so is a throw whose cap the camera can't find
+ * on the mat: a camera throw never leaves the game waiting. The confirmed mat goes back to
  * the camera session as a training label. The game itself is shared with
  * the camera too (camera_game), so the camera phone can show its log/stats.
  */
@@ -175,7 +177,9 @@ export function MatLogger({
           const found = placeFromCamera(d, next.spots.map(fromField), next.gone.map(fromField));
           setHistory((h) => [...h, cur]);
           setSt(d);
-          setCamPending({ n: next.n, left: CAM_CONFIRM, touched: false, found });
+          // Thrower's cap not found on the mat (only caps knocked away, or it landed
+          // where the camera can't see): propose a miss, so the game never stalls.
+          setCamPending({ n: next.n, left: CAM_CONFIRM, touched: false, found: true, miss: !found });
         })
         .catch(() => {});
     }, CAM_POLL);

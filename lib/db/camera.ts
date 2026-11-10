@@ -340,3 +340,15 @@ export async function checkCameraThrow(userId: string, sessionId: string, n: num
     .set({ checkedBy: userId })
     .where(and(eq(cameraThrows.sessionId, sessionId), eq(cameraThrows.n, n)));
 }
+
+/** Anyone in the crew says the last throw went off the mat (the camera
+ * didn't see it): an empty throw, which the mat logger takes as a miss.
+ * Numbered after the newest; the camera follows the numbering. */
+export async function addCameraMiss(userId: string, sessionId: string): Promise<number> {
+  await sessionFor(userId, sessionId);
+  const [last] = await db.select({ n: cameraThrows.n }).from(cameraThrows).where(eq(cameraThrows.sessionId, sessionId)).orderBy(desc(cameraThrows.n)).limit(1);
+  const n = (last?.n ?? 0) + 1;
+  await db.insert(cameraThrows).values({ sessionId, n, found: [], spots: [], gone: [], detector: "manual-miss" }).onConflictDoNothing();
+  await db.update(cameraSessions).set({ updatedAt: new Date() }).where(eq(cameraSessions.id, sessionId));
+  return n;
+}

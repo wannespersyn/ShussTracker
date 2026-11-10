@@ -819,6 +819,8 @@ export const nl: Dictionary = {
     zonesCount: "{n} bijgesteld",
     zoneReset: "RESET",
     zonesResetAll: "Alle vakken resetten",
+    missBtn: "MIS — DOP NAAST DE MAT",
+    missSent: "MIS DOORGEGEVEN AAN DE LOGGER",
     evPostFail: "Worp {n} kon niet opgeslagen worden — de logger en andere gsm's krijgen hem niet (offline? database niet gemigreerd?)",
     evClearThrow: "Dop vertrokken uit een vak — de mat telt als klaar",
     evClearTimeout: "De mat ligt stil — telt als klaar ({n} plek(ken) lijken nog op een dop: schaduw?)",

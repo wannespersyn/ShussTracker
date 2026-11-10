@@ -4,7 +4,7 @@
  * Follow a crew member's live camera from your own phone (or laptop). While
  * the camera is calibrating, set its corners here on its empty-mat snapshot
  * (so nobody has to touch the camera) or ask it for a new snapshot. Then:
- * the newest throw
+ * a MISS button for a throw that went off the mat unseen; the newest throw
  * with its top-down picture and "Cap in zone X?", a tap on "Wrong" to point
  * at the real spot (or say there was no cap), and the list of throws (tap
  * one to fix it later). Fine-tune the zones one by one (ZoneEditor) from
@@ -34,6 +34,7 @@ import {
   setCameraCornersAction,
   setCameraZoneFixAction,
   checkCameraThrowAction,
+  addCameraMissAction,
 } from "@/app/(app)/camera/actions";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/client";
@@ -51,6 +52,14 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
   // Throws ticked ✓ here (shown right away; the server has them on the next poll).
   const [okd, setOkd] = useState<Set<string>>(new Set());
   const [onlyTodo, setOnlyTodo] = useState(false);
+  // "Miss" just sent (the button rests a moment so it isn't sent twice).
+  const [missSent, setMissSent] = useState(false);
+  function miss() {
+    setMissSent(true);
+    addCameraMissAction(initial.id)
+      .catch(() => {})
+      .finally(() => window.setTimeout(() => setMissSent(false), 2500));
+  }
   // Turn the mat pictures the way you sit (kept on this phone).
   const [rot, turn] = useMatRotation();
   const [images, setImages] = useState<Record<string, string | null>>({});
@@ -264,6 +273,17 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
             </>
           )}
         </section>
+      )}
+
+      {state.live && state.phase === "watching" && (
+        <button
+          type="button"
+          onClick={miss}
+          disabled={missSent}
+          className="h-14 rounded-[16px] bg-surface-deep border border-red/50 text-red-pale font-heading font-extrabold text-lg tracking-[0.06em] disabled:opacity-50"
+        >
+          {missSent ? L.missSent : L.missBtn}
+        </button>
       )}
 
       {state.phase === "watching" && <CameraLog game={game} seenAt={seenAt} events={[]} />}
