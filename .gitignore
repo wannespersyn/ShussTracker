@@ -43,3 +43,10 @@ db-export/
 .claude-tmp/
 
 
+
+# mobile app (code lives on the app branches): dependencies and generated files
+/mobile/node_modules/
+/mobile/.expo/
+/mobile/ios/
+/mobile/android/
+/mobile/expo-env.d.ts
