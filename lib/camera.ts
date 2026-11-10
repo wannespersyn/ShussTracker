@@ -14,14 +14,16 @@
  *  5. average that over cap-sized squares, so a cap counts both as a solid
  *     disk (on black) and as just a dark rim (on white); peaks that appeared
  *     since the previous photo = caps that landed, peaks that vanished =
- *     caps shot away, a huge changed area = a hand.
+ *     caps shot away, a huge changed area = a hand;
+ *  6. optional per-zone nudges (ZoneFix) on top of the corners: a found
+ *     cap is moved back onto the real print (`unfix`).
  *
  * Data: raw RGBA pixels in, mat coordinates (lib/mat.ts) out. Pure JS.
  * Notes: tuned on real photos of the Leberschuss mat (black field, white
  * zones, silver caps) in a lit room.
  */
 
-import { FIELD_MAMAS, FIELD_ZONES } from "@/lib/mat-geometry";
+import { FIELD_CUT, FIELD_MAMAS, FIELD_ZONES } from "@/lib/mat-geometry";
 
 export const MAT_W = 824;
 export const MAT_H = 265;
@@ -854,4 +856,57 @@ export function spotAt(p: Pt): { id: string; v: number | "mama" | null } {
   for (const z of REAL_ZONES) if (inPoly(p.x, p.y, z.pts)) return { id: z.id, v: z.v };
   if (p.x < 0 || p.x > MAT_W || p.y < 0 || p.y > MAT_H) return { id: "off", v: null };
   return { id: "none", v: null };
+}
+
+/* ---------- per-zone fine-tuning ---------- */
+
+/** Nudges per zone/mama after the corners (mat units): the print never lies
+ * exactly where 4 corners put it (a mat that isn't flat, a wide-angle lens).
+ * Keys: "L3".."R3", "ML", "MR". */
+export type ZoneFix = Record<string, { dx: number; dy: number }>;
+export const FIX_IDS: string[] = [...REAL_ZONES.map((z) => z.id), ...REAL_MAMAS.map((m) => m.id)];
+
+/** The outline of a zone or mama (mat units), with its nudge applied. */
+export function fixedShape(id: string, fix?: ZoneFix | null): [number, number][] {
+  const d = fix?.[id] ?? { dx: 0, dy: 0 };
+  const z = REAL_ZONES.find((x) => x.id === id);
+  const m = REAL_MAMAS.find((x) => x.id === id);
+  const pts: [number, number][] = z ? z.pts : m ? [[m.x, m.y], [m.x + m.w, m.y], [m.x + m.w, m.y + m.h], [m.x, m.y + m.h]] : [];
+  return pts.map(([x, y]) => [x + d.dx, y + d.dy]);
+}
+
+const centre = (pts: [number, number][]): Pt => ({ x: pts.reduce((s, p) => s + p[0], 0) / pts.length, y: pts.reduce((s, p) => s + p[1], 0) / pts.length });
+
+/** A point seen on the camera (mat units after the corners) → where it lies
+ * on the real print. Inside a nudged zone it moves exactly with that zone;
+ * elsewhere the nudges fade out with distance (every zone, nudged or not,
+ * pulls), so caps between zones move smoothly. */
+export function unfix(p: Pt, fix?: ZoneFix | null): Pt {
+  if (!fix || !Object.values(fix).some((d) => d.dx || d.dy)) return p;
+  for (const id of FIX_IDS) {
+    const d = fix[id];
+    if (d && (d.dx || d.dy) && inPoly(p.x, p.y, fixedShape(id, fix))) return { x: p.x - d.dx, y: p.y - d.dy };
+  }
+  let w = 0;
+  let ox = 0;
+  let oy = 0;
+  for (const id of FIX_IDS) {
+    const d = fix[id] ?? { dx: 0, dy: 0 };
+    const c = centre(fixedShape(id, fix));
+    const k = 1 / ((p.x - c.x) ** 2 + (p.y - c.y) ** 2 + 400);
+    w += k;
+    ox += k * d.dx;
+    oy += k * d.dy;
+  }
+  return { x: p.x - ox / w, y: p.y - oy / w };
+}
+
+/** The shooting boxes: the cut-off corners of the field (mat units). */
+export function shootingBoxes(cut = FIELD_CUT): [number, number][][] {
+  return [
+    [[0, 0], [cut, 0], [0, cut]],
+    [[MAT_W, 0], [MAT_W - cut, 0], [MAT_W, cut]],
+    [[MAT_W, MAT_H], [MAT_W - cut, MAT_H], [MAT_W, MAT_H - cut]],
+    [[0, MAT_H], [cut, MAT_H], [0, MAT_H - cut]],
+  ];
 }

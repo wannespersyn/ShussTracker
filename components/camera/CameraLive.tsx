@@ -14,6 +14,9 @@
  *    tap on "Wrong" lets them point at the real spot on the mat (or say
  *    there was no cap). Corrections are kept with the throw, so they can
  *    later become training data.
+ * Calibration: the 4 corners (tips of the shooting boxes; tap the photo or
+ * nudge), then optionally each zone and mama on its own (ZoneEditor); the
+ * zone nudges are kept on this phone and applied to every cap found.
  * Next to the throws, a log shows what the code sees and decides (paused,
  * new round, mat being cleared, light changed, each judged throw) and, with
  * a linked mat logger, what the game made of it, plus stats (CameraLog).
@@ -29,7 +32,8 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { DETECTOR, FULL_H, FULL_W, WH, WW, align, detect, findField, warp, warpFull, type Frame, type Pt } from "@/lib/camera";
+import { DETECTOR, FULL_H, FULL_W, WH, WW, align, detect, findField, unfix, warp, warpFull, type Frame, type Pt, type ZoneFix } from "@/lib/camera";
+import { ZoneEditor } from "@/components/camera/ZoneEditor";
 import { CornerEditor, Overlay, defaultCorners, type Photo } from "@/components/camera/CameraLab";
 import { SpotsEditor, spotsLabel, warpedToJpeg, type Spot } from "@/components/camera/MatPick";
 import { CameraLog, useGameText, type CamEvent } from "@/components/camera/CameraLog";
@@ -69,6 +73,16 @@ const CONFIRM_S = 6;
 
 type Phase = "start" | "calibrate" | "live";
 type Status = "waiting" | "moving" | "looking" | "paused" | "clearing";
+/** Zone nudges are kept per phone (the camera stays in the same place). */
+const FIX_KEY = "shuss.camera.zoneFix";
+function loadFix(): ZoneFix {
+  try {
+    const v = JSON.parse(localStorage.getItem(FIX_KEY) ?? "{}");
+    return v && typeof v === "object" ? v : {};
+  } catch {
+    return {};
+  }
+}
 /** Camera events kept for the log. */
 const MAX_EVENTS = 150;
 type Throw = { n: number; spots: Spot[]; gone: Spot[]; corrected: boolean; img: string | null };
@@ -118,6 +132,8 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
   const [error, setError] = useState<string | null>(null);
   const [snap, setSnap] = useState<Photo | null>(null);
   const [corners, setCorners] = useState<Pt[]>([]);
+  const [fix, setFixState] = useState<ZoneFix>(() => (typeof window === "undefined" ? {} : loadFix()));
+  const [zonesOpen, setZonesOpen] = useState(false);
   const [status, setStatus] = useState<Status>("waiting");
   const [throws, setThrows] = useState<Throw[]>([]);
   const [ask, setAsk] = useState<{ n: number; left: number } | null>(null);
@@ -164,10 +180,26 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
     clearing: false,
     clearLeft: -1,
     lastArmed: null as boolean | null,
+    fix: {} as ZoneFix,
     calm: 0,
     busy: false,
     n: 0,
   });
+
+  function setFix(f: ZoneFix) {
+    setFixState(f);
+    live.current.fix = f;
+    try {
+      localStorage.setItem(FIX_KEY, JSON.stringify(f));
+    } catch {
+      /* private mode */
+    }
+  }
+  useEffect(() => {
+    live.current.fix = fix;
+    // only on mount: later changes go through setFix
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const stop = useCallback(() => {
     stream.current?.getTracks().forEach((tr) => tr.stop());
@@ -369,8 +401,9 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
             return;
           }
           const n = ++S.n;
-          const spots = r.landed.map((b) => ({ x: b.x, y: b.y }));
-          const gone = r.gone.map((b) => ({ x: b.x, y: b.y }));
+          // Back onto the real print with the per-zone nudges.
+          const spots = r.landed.map((b) => unfix({ x: b.x, y: b.y }, S.fix));
+          const gone = r.gone.map((b) => unfix({ x: b.x, y: b.y }, S.fix));
           const img = warpedToJpeg(cur, WW, WH);
           const full = shareRef.current && session.current ? warpedToJpeg(warpFull(f, S.corners), FULL_W, FULL_H, 0.85) : null;
           setThrows((ts) => [{ n, spots, gone, corrected: false, img }, ...ts]);
@@ -586,7 +619,13 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
           <span className={kicker}>{C.step2}</span>
           <p className="font-body text-[15px] leading-normal text-soft">{C.step2Auto}</p>
           {sessionId && <p className="font-body text-[13px] leading-normal text-gold">{L.remoteCal}</p>}
-          <CornerEditor photo={snap} corners={corners} onChange={setCorners} labels={C} />
+          <CornerEditor photo={snap} corners={corners} onChange={setCorners} labels={C} fix={fix} />
+          <button type="button" aria-expanded={zonesOpen} onClick={() => setZonesOpen((o) => !o)} className="flex items-center gap-2 text-left py-1">
+            <span className={kicker}>{L.zonesTitle}</span>
+            {Object.keys(fix).length > 0 && <span className="font-body text-xs text-mint">{format(L.zonesCount, { n: Object.keys(fix).length })}</span>}
+            <span className={cn("ml-auto text-muted transition-transform", zonesOpen && "rotate-180")}>▾</span>
+          </button>
+          {zonesOpen && <ZoneEditor photo={snap} corners={corners} fix={fix} onChange={setFix} />}
           <button type="button" onClick={go} className={primary}>
             {L.go}
           </button>
@@ -653,13 +692,13 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
         </section>
       )}
 
-      {phase === "live" && snap && <MiniOverlay photo={snap} corners={corners} label={L.calibration} />}
+      {phase === "live" && snap && <MiniOverlay photo={snap} corners={corners} fix={fix} label={L.calibration} />}
     </div>
   );
 }
 
 /** Small reminder of the calibration (zones over the empty-mat frame). */
-function MiniOverlay({ photo, corners, label }: Readonly<{ photo: Photo; corners: Pt[]; label: string }>) {
+function MiniOverlay({ photo, corners, fix, label }: Readonly<{ photo: Photo; corners: Pt[]; fix: ZoneFix; label: string }>) {
   if (!corners.length) return null;
   return (
     <details className="font-body text-xs text-muted">
@@ -668,7 +707,7 @@ function MiniOverlay({ photo, corners, label }: Readonly<{ photo: Photo; corners
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={photo.url} alt="" className="w-full h-auto rounded-[12px]" />
         <svg viewBox={`0 0 ${photo.frame.w} ${photo.frame.h}`} className="absolute inset-0 w-full h-full" aria-hidden="true">
-          <Overlay corners={corners} w={photo.frame.w} />
+          <Overlay corners={corners} w={photo.frame.w} fix={fix} />
         </svg>
       </div>
     </details>

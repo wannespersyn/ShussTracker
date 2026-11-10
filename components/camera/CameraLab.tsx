@@ -4,7 +4,9 @@
  * Beta test of shot tracking with the camera, one step per screen:
  *  1. photo of the empty mat;
  *  2. check the corners: the app's guess (or a default) as four handles to
- *     drag, with the zones drawn over the photo so you see if it fits;
+ *     drag, or tap the photo to put the selected corner there (the corners
+ *     are the tips of the white shooting boxes), with the zones and boxes
+ *     drawn over the photo so you see if it fits;
  *  3. photo after a throw → review it on the photo itself (caps that landed,
  *     caps that got shot away) → keep it or take it again.
  * Photos stay on the phone unless downloaded.
@@ -15,7 +17,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { MAT_H, MAT_W, REAL_MAMAS, REAL_ZONES, WH, WW, align, detect, findField, spotAt, toPhoto, warp, type Blob, type Detection, type Frame, type Pt } from "@/lib/camera";
+import { MAT_H, MAT_W, REAL_MAMAS, REAL_ZONES, WH, WW, align, detect, findField, fixedShape, shootingBoxes, spotAt, toPhoto, warp, type Blob, type Detection, type Frame, type Pt, type ZoneFix } from "@/lib/camera";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/client";
 import { format, type Dictionary } from "@/lib/i18n";
@@ -310,7 +312,7 @@ export function CameraLab() {
 /** Corner fine-tuning: pick a corner, see it magnified, nudge it with the
  * arrows (or drag it), tick it off. The zones are drawn over the photo so
  * you can see when everything lines up. */
-export function CornerEditor({ photo, corners, onChange, labels }: Readonly<{ photo: Photo; corners: Pt[]; onChange: (c: Pt[]) => void; labels: Dictionary["cam"] }>) {
+export function CornerEditor({ photo, corners, onChange, labels, fix }: Readonly<{ photo: Photo; corners: Pt[]; onChange: (c: Pt[]) => void; labels: Dictionary["cam"]; fix?: ZoneFix | null }>) {
   const svg = useRef<SVGSVGElement>(null);
   const [sel, setSel] = useState(0);
   const [drag, setDrag] = useState(false);
@@ -344,14 +346,22 @@ export function CornerEditor({ photo, corners, onChange, labels }: Readonly<{ ph
           ref={svg}
           viewBox={`0 0 ${w} ${h}`}
           className="absolute inset-0 w-full h-full touch-none"
+          onPointerDown={(e) => {
+            // A tap on the photo (not on a corner) puts the selected corner there.
+            if ((e.target as Element).closest("[data-corner]")) return;
+            const p = at(e);
+            onChange(corners.map((q, i) => (i === sel ? p : q)));
+            tick();
+          }}
           onPointerMove={(e) => drag && onChange(corners.map((p, i) => (i === sel ? at(e) : p)))}
           onPointerUp={() => setDrag(false)}
           onPointerCancel={() => setDrag(false)}
         >
-          <Overlay corners={corners} w={w} />
+          <Overlay corners={corners} w={w} fix={fix} />
           {corners.map((p, i) => (
             <g
               key={i}
+              data-corner={i}
               onPointerDown={(e) => {
                 svg.current?.setPointerCapture(e.pointerId);
                 setSel(i);
@@ -371,7 +381,7 @@ export function CornerEditor({ photo, corners, onChange, labels }: Readonly<{ ph
       <div className="grid grid-cols-[1fr_auto] gap-3 items-center">
         <svg viewBox={`${c.x - zoom / 2} ${c.y - zoom / 2} ${zoom} ${zoom}`} className="w-full aspect-square rounded-[14px] border border-line-strong bg-black" aria-label={format(labels.cornerN, { n: sel + 1 })}>
           <image href={photo.url} x={0} y={0} width={w} height={h} />
-          <Overlay corners={corners} w={zoom * 2} />
+          <Overlay corners={corners} w={zoom * 2} fix={fix} />
           <line x1={c.x - zoom} x2={c.x + zoom} y1={c.y} y2={c.y} stroke="#ffb627" strokeWidth={zoom / 150} />
           <line x1={c.x} x2={c.x} y1={c.y - zoom} y2={c.y + zoom} stroke="#ffb627" strokeWidth={zoom / 150} />
         </svg>
@@ -390,6 +400,7 @@ export function CornerEditor({ photo, corners, onChange, labels }: Readonly<{ ph
         </div>
       </div>
 
+      <p className="font-body text-[13px] text-muted -mt-1">{format(labels.tapCorner, { n: sel + 1 })}</p>
       <div role="group" aria-label={labels.step2} className="grid grid-cols-4 gap-1.5">
         {[0, 1, 2, 3].map((i) => (
           <button
@@ -408,7 +419,7 @@ export function CornerEditor({ photo, corners, onChange, labels }: Readonly<{ ph
 }
 
 /** The mat's zones, mamas and outline projected onto the photo. */
-export function Overlay({ corners, w }: Readonly<{ corners: Pt[]; w: number }>) {
+export function Overlay({ corners, w, fix, focus }: Readonly<{ corners: Pt[]; w: number; fix?: ZoneFix | null; focus?: string | null }>) {
   const P = (x: number, y: number) => {
     const p = toPhoto(corners, { x, y });
     return `${p.x},${p.y}`;
@@ -417,11 +428,14 @@ export function Overlay({ corners, w }: Readonly<{ corners: Pt[]; w: number }>) 
   return (
     <g pointerEvents="none">
       <polygon points={[P(0, 0), P(MAT_W, 0), P(MAT_W, MAT_H), P(0, MAT_H)].join(" ")} fill="none" stroke="#ffb627" strokeWidth={sw * 1.4} />
+      {shootingBoxes().map((b, i) => (
+        <polygon key={`b${i}`} points={b.map(([x, y]) => P(x, y)).join(" ")} fill="rgba(255,255,255,0.18)" stroke="#fff" strokeWidth={sw} />
+      ))}
       {REAL_ZONES.map((z) => (
-        <polygon key={z.id} points={z.pts.map(([x, y]) => P(x, y)).join(" ")} fill="rgba(79,209,255,0.12)" stroke="#4fd1ff" strokeWidth={sw} />
+        <polygon key={z.id} points={fixedShape(z.id, fix).map(([x, y]) => P(x, y)).join(" ")} fill="rgba(79,209,255,0.12)" stroke={focus === z.id ? "#ffb627" : "#4fd1ff"} strokeWidth={focus === z.id ? sw * 2 : sw} />
       ))}
       {REAL_MAMAS.map((m) => (
-        <polygon key={m.id} points={[P(m.x, m.y), P(m.x + m.w, m.y), P(m.x + m.w, m.y + m.h), P(m.x, m.y + m.h)].join(" ")} fill="rgba(255,107,91,0.2)" stroke="#ff6b5b" strokeWidth={sw} />
+        <polygon key={m.id} points={fixedShape(m.id, fix).map(([x, y]) => P(x, y)).join(" ")} fill="rgba(255,107,91,0.2)" stroke={focus === m.id ? "#ffb627" : "#ff6b5b"} strokeWidth={focus === m.id ? sw * 2 : sw} />
       ))}
     </g>
   );
