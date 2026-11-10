@@ -60,6 +60,12 @@ function RootStack() {
         <Stack.Screen name="vs/[a]/[b]" />
         <Stack.Screen name="stats" />
         <Stack.Screen name="feedback" />
+        <Stack.Screen name="crews/[id]/tournaments" />
+        <Stack.Screen name="americano/new" />
+        <Stack.Screen name="americano/[id]/index" />
+        <Stack.Screen name="americano/[id]/manage" />
+        <Stack.Screen name="americano/[id]/tv" options={{ presentation: "fullScreenModal" }} />
+        <Stack.Screen name="americano/[id]/game/[slotId]" />
       </Stack.Protected>
       <Stack.Protected guard={status === "signedOut"}>
         <Stack.Screen name="sign-in" />
