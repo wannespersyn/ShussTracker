@@ -56,7 +56,7 @@ export class ApiError extends Error {
 /** Headers for requests the app makes outside `api()`, e.g. <Image> sources. */
 export const authHeaders = (): Record<string, string> => (token ? { authorization: `Bearer ${token}` } : {});
 
-type Options = { method?: "GET" | "POST" | "PATCH" | "DELETE"; body?: unknown };
+type Options = { method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"; body?: unknown };
 
 /** Calls `/api/v1{path}`. Resolves with the parsed JSON (undefined for 204). */
 export async function api<T>(path: string, { method = "GET", body }: Options = {}): Promise<T> {

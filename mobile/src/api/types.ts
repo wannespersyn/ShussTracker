@@ -188,21 +188,6 @@ export type PlayerProfile = {
   opponents: { userId: string; name: string; timesPlayed: number }[];
 };
 
-export type StatsFieldCounts = { far: number; mid: number; near: number; risk: number; miss: number };
-export type StatsGame = {
-  id: string;
-  crewId: string | null;
-  matType: "2" | "4" | "8";
-  playedAt: string;
-  teams: { userIds: string[]; won: boolean; points: number; shots: Record<string, StatsFieldCounts> }[];
-};
-export type StatsData = {
-  people: { id: string; name: string }[];
-  crews: { id: string; name: string; memberCount: number }[];
-  games: StatsGame[];
-  hasZoneData: boolean;
-};
-
 export type HeadToHead = {
   a: { id: string; name: string | null; stats: PlayerInsight | null };
   b: { id: string; name: string | null; stats: PlayerInsight | null };
