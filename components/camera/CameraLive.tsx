@@ -40,7 +40,7 @@ import { ZoneEditor } from "@/components/camera/ZoneEditor";
 import { CornerEditor, Overlay, defaultCorners, type Photo } from "@/components/camera/CameraLab";
 import { SpotsEditor, spotsLabel, warpedToJpeg, type Spot } from "@/components/camera/MatPick";
 import { CameraLog, useGameText, type CamEvent } from "@/components/camera/CameraLog";
-import { asCameraGame, stampEvents, type CameraGame } from "@/lib/camera-log";
+import { asCameraGame, boxLabelsOf, stampEvents, type CameraGame } from "@/lib/camera-log";
 import {
   addCameraThrowAction,
   correctCameraThrowByNAction,
@@ -589,11 +589,7 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
 
   const spotText = (sp: Spot[]) => spotsLabel(sp, C, L);
   /** Who throws from each shooting box (A1, B2…), from the linked game. */
-  const boxLabels: (string | null)[] = [null, null, null, null];
-  if (game) for (const s of game.st.order) {
-    const corner = game.st.corner[s];
-    if (corner) boxLabels[BOX_OF_CORNER[corner]] = s.toUpperCase();
-  }
+  const boxLabels = boxLabelsOf(game);
   /** "box A1" in the log, or the corner number without a game. */
   function boxName(i: number) {
     return gameRef.current ? (gameRef.current.st.order.find((s) => gameRef.current?.st.corner[s] && BOX_OF_CORNER[gameRef.current.st.corner[s]!] === i)?.toUpperCase() ?? String(i + 1)) : String(i + 1);
@@ -762,6 +758,7 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
             onSave={(sp) => correct(fixingThrow.n, sp)}
             onClose={() => setFixing(null)}
             fix={fix}
+            boxLabels={boxLabels}
           />
         </section>
       )}

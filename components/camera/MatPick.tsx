@@ -37,7 +37,8 @@ export function MatPick({
   label,
   onTap,
   fix,
-}: Readonly<{ src: string | null; spots: Spot[]; gone?: Spot[]; label: string; onTap?: (p: Spot) => void; fix?: ZoneFix | null }>) {
+  boxLabels,
+}: Readonly<{ src: string | null; spots: Spot[]; gone?: Spot[]; label: string; onTap?: (p: Spot) => void; fix?: ZoneFix | null; boxLabels?: (string | null)[] }>) {
   function tap(e: ReactMouseEvent<HTMLButtonElement>) {
     const b = e.currentTarget.getBoundingClientRect();
     // Tapped on the picture → the spot on the real print.
@@ -54,7 +55,26 @@ export function MatPick({
       )}
       <svg viewBox={`0 0 ${MAT_W} ${MAT_H}`} className="absolute inset-0 w-full h-full pointer-events-none" aria-hidden="true">
         {shootingBoxes(fix).map((b, i) => (
-          <polygon key={`b${i}`} points={b.map(([x, y]) => `${x},${y}`).join(" ")} fill="rgba(255,255,255,0.1)" stroke="#ffffff" strokeOpacity={0.6} strokeWidth={1.5} />
+          <g key={`b${i}`}>
+            <polygon points={b.map(([x, y]) => `${x},${y}`).join(" ")} fill="rgba(255,255,255,0.1)" stroke="#ffffff" strokeOpacity={0.6} strokeWidth={1.5} />
+            {boxLabels?.[i] && (
+              // Who throws from this box, a bit inside it towards the tip.
+              <text
+                x={(b[0][0] * 2 + b[1][0] + b.at(-1)![0]) / 4}
+                y={(b[0][1] * 2 + b[1][1] + b.at(-1)![1]) / 4}
+                textAnchor="middle"
+                dominantBaseline="central"
+                fontSize={20}
+                fontWeight={800}
+                fill="#ffb627"
+                stroke="#000"
+                strokeWidth={4}
+                paintOrder="stroke"
+              >
+                {boxLabels[i]}
+              </text>
+            )}
+          </g>
         ))}
         {zoneOutlines(fix).map((z) => (
           <polygon
@@ -116,7 +136,18 @@ export function SpotsEditor({
   onSave,
   onClose,
   fix,
-}: Readonly<{ src: string | null; initial: Spot[]; gone: Spot[]; C: Dictionary["cam"]; L: Dictionary["camLive"]; onSave: (s: Spot[]) => void; onClose: () => void; fix?: ZoneFix | null }>) {
+  boxLabels,
+}: Readonly<{
+  src: string | null;
+  initial: Spot[];
+  gone: Spot[];
+  C: Dictionary["cam"];
+  L: Dictionary["camLive"];
+  onSave: (s: Spot[]) => void;
+  onClose: () => void;
+  fix?: ZoneFix | null;
+  boxLabels?: (string | null)[];
+}>) {
   const [draft, setDraft] = useState(initial);
   const toggle = (p: Spot) =>
     setDraft((d) => {
@@ -127,7 +158,7 @@ export function SpotsEditor({
   return (
     <div className="flex flex-col gap-3">
       <p className="font-body text-[15px] leading-normal text-soft">{L.whereSub}</p>
-      <MatPick src={src} spots={draft} gone={gone} label={L.whereSub} onTap={toggle} fix={fix} />
+      <MatPick src={src} spots={draft} gone={gone} label={L.whereSub} onTap={toggle} fix={fix} boxLabels={boxLabels} />
       <p className="font-display font-extrabold text-xl leading-tight">{spotsLabel(draft, C, L)}</p>
       <button type="button" onClick={() => onSave(draft)} className="h-14 rounded-[16px] bg-amber text-ink font-heading font-extrabold text-lg tracking-[0.06em]">
         {L.save}

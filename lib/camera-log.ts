@@ -13,6 +13,7 @@
  */
 
 import { ZONES, drunk, knockedMamas, teamOfSlot, type MatState, type Slot } from "@/lib/mat";
+import { BOX_OF_CORNER } from "@/lib/camera";
 
 export type CameraGame = {
   v: 1;
@@ -191,4 +192,15 @@ export function stampEvents(g: CameraGame, seen: Record<string, number>): boolea
     added = true;
   });
   return added;
+}
+
+/** Who throws from each shooting box (A1, B2…), in lib/camera.ts box order. */
+export function boxLabelsOf(g: CameraGame | null): (string | null)[] {
+  const out: (string | null)[] = [null, null, null, null];
+  if (g)
+    for (const s of g.st.order) {
+      const corner = g.st.corner[s];
+      if (corner) out[BOX_OF_CORNER[corner]] = s.toUpperCase();
+    }
+  return out;
 }

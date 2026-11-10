@@ -21,7 +21,7 @@ import type { Pt, ZoneFix } from "@/lib/camera";
 import { CornerEditor } from "@/components/camera/CameraLab";
 import { ZoneEditor } from "@/components/camera/ZoneEditor";
 import { CameraLog } from "@/components/camera/CameraLog";
-import { asCameraGame, stampEvents } from "@/lib/camera-log";
+import { asCameraGame, boxLabelsOf, stampEvents } from "@/lib/camera-log";
 import type { CameraState } from "@/lib/db/camera";
 import { MatPick, SpotsEditor, spotsLabel, type Spot } from "@/components/camera/MatPick";
 import {
@@ -61,6 +61,7 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
   const seenRef = useRef<Record<string, number>>({});
   const [seenAt, setSeenAt] = useState<Record<string, number>>({});
   const game = state.logger ? asCameraGame(state.game) : null;
+  const boxLabels = boxLabelsOf(game);
 
   function setFix(f: ZoneFix) {
     setFixState(f);
@@ -199,6 +200,7 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
                 photo={{ url: snap.url, frame: { w: state.snap.w, h: state.snap.h, data: new Uint8ClampedArray(0) } }}
                 corners={(state.phase === "watching" ? state.corners : corners)!}
                 fix={fix}
+                boxLabels={boxLabels}
                 onChange={setFix}
               />
             </>
@@ -213,10 +215,10 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
         <section className="flex flex-col gap-3" aria-live="polite">
           <span className={kicker}>{format(L.throwN, { n: th.n })}</span>
           {fixing ? (
-            <SpotsEditor key={th.id} src={images[th.id] ?? null} initial={th.spots} gone={th.gone} C={C} L={L} onSave={(sp) => correct(th.id, sp)} onClose={() => setFixing(false)} fix={fix} />
+            <SpotsEditor key={th.id} src={images[th.id] ?? null} initial={th.spots} gone={th.gone} C={C} L={L} onSave={(sp) => correct(th.id, sp)} onClose={() => setFixing(false)} fix={fix} boxLabels={boxLabels} />
           ) : (
             <>
-              <MatPick src={images[th.id] ?? null} spots={th.spots} gone={th.gone} label={spotText(th.spots)} fix={fix} />
+              <MatPick src={images[th.id] ?? null} spots={th.spots} gone={th.gone} label={spotText(th.spots)} fix={fix} boxLabels={boxLabels} />
               <p className="font-display font-extrabold text-2xl leading-tight">
                 {th.corrected ? spotText(th.spots) : th.spots.length ? format(th.spots.length > 1 ? L.capsIn : L.capIn, { where: spotText(th.spots) }) : L.noCapQ}
               </p>

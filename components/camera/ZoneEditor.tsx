@@ -24,7 +24,13 @@ import { format } from "@/lib/i18n";
 const STEP = { fine: 1.5, coarse: 6 };
 const SIZE = { fine: 0.02, coarse: 0.08 };
 
-export function ZoneEditor({ photo, corners, fix, onChange }: Readonly<{ photo: Photo; corners: Pt[]; fix: ZoneFix; onChange: (f: ZoneFix) => void }>) {
+export function ZoneEditor({
+  photo,
+  corners,
+  fix,
+  onChange,
+  boxLabels,
+}: Readonly<{ photo: Photo; corners: Pt[]; fix: ZoneFix; onChange: (f: ZoneFix) => void; boxLabels?: (string | null)[] }>) {
   const { t } = useT();
   const C = t.cam;
   const L = t.camLive;
@@ -100,7 +106,7 @@ export function ZoneEditor({ photo, corners, fix, onChange }: Readonly<{ photo: 
       <div className="grid grid-cols-[1fr_auto] gap-3 items-center">
         <svg viewBox={`${c.x - span / 2} ${c.y - span / 2} ${span} ${span}`} className="w-full aspect-square rounded-[14px] border border-line-strong bg-black" aria-label={label(sel)}>
           <image href={photo.url} x={0} y={0} width={w} height={h} />
-          <Overlay corners={corners} w={span * 1.5} fix={fix} focus={sel} />
+          <Overlay corners={corners} w={span * 1.5} fix={fix} focus={sel} boxLabels={boxLabels} />
         </svg>
         <div className={cn("grid grid-cols-3 gap-1.5 w-44", boxes && "opacity-30 pointer-events-none")} aria-hidden={boxes}>
           <span />
