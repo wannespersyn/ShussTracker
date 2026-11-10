@@ -42,6 +42,10 @@ export const GET = api<Ctx>(async (req, { params }) => {
   return {
     player: { ...player, isSelf: viewerId === userId },
     crew: shared ? { id: shared.id, name: shared.name, rankedPlayers: insights!.players.filter((p) => p.games > 0).length } : null,
+    crewStreakRecord: (() => {
+      const holder = insights?.players.reduce<(typeof insights.players)[number] | null>((best, p) => (!best || p.bestWinStreak > best.bestWinStreak ? p : best), null);
+      return holder && holder.bestWinStreak > 0 ? { n: holder.bestWinStreak, userId: holder.userId, name: holder.name } : null;
+    })(),
     stats,
     achievements,
     nemesis,

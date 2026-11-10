@@ -46,7 +46,9 @@ export function FingerPicker({ onClose, onDone, doneLabel }: { onClose: () => vo
   const colorOf = useRef(new Map<string, string>());
   const next = useRef(0);
   const live = useRef<Finger[]>([]);
-  live.current = fingers;
+  useEffect(() => {
+    live.current = fingers;
+  });
   const key = fingers.map((f) => f.id).join(",");
 
   useEffect(() => {
@@ -242,17 +244,21 @@ export function CapToss({ teamA, teamB, onClose, onDone }: { teamA: string; team
 export function Countdown({ label, onDone }: { label: string; onDone: () => void }) {
   const { t } = useT();
   const [n, setN] = useState(3);
+  const done = useRef(onDone);
+  useEffect(() => {
+    done.current = onDone;
+  });
   useEffect(() => {
     if (n < 0) {
-      onDone();
+      done.current();
       return;
     }
     const id = setTimeout(() => setN((x) => x - 1), n === 0 ? 900 : 800);
     if (n === 0) buzz();
     return () => clearTimeout(id);
-  }, [n, onDone]);
+  }, [n]);
   return (
-    <Stage onClose={onDone} closeLabel={t.beta.start.close}>
+    <Stage onClose={() => done.current()} closeLabel={t.beta.start.close}>
       <Text style={styles.hint}>{label}</Text>
       <Animated.Text key={n} entering={ZoomIn.springify().damping(8)} style={[styles.count, n === 0 && { color: colors.gold, fontSize: 110 }]}>
         {n > 0 ? String(n) : t.beta.start.go}

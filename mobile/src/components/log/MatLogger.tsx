@@ -12,7 +12,7 @@
  * Notes: no camera linking in the app; the help sheet is shown until
  * "don't show again".
  */
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Modal, PanResponder, Pressable, ScrollView, StyleSheet, Text, View, type GestureResponderEvent, type LayoutChangeEvent } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle, G, Polygon, Rect, Text as SvgText } from "react-native-svg";
@@ -89,12 +89,12 @@ export function MatLogger({
   const [mama, setMama] = useState<{ name: string; team: number; k: number } | null>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
 
-  useState(() => {
+  // Opens on the explainer unless the player chose "don't show again".
+  useEffect(() => {
     SecureStore.getItemAsync(HELP_KEY)
       .then((v) => v !== "1" && setDialog("help"))
       .catch(() => setDialog("help"));
-    return null;
-  });
+  }, []);
 
   const nameOf = (s: Slot) => names[slots[s] ?? ""] ?? s.toUpperCase();
   const teamName = (ti: number) =>
@@ -114,7 +114,7 @@ export function MatLogger({
       const ok = finishThrow(d, miss);
       const last = d.throws.filter((x) => x.kind !== "skipped").at(-1);
       if (ok && celebrate && last?.moves.some((m) => m.to.spot === "ML" || m.to.spot === "MR")) {
-        setMama({ name: nameOf(last.slot), team: teamOfSlot(last.slot), k: Date.now() });
+        setMama({ name: nameOf(last.slot), team: teamOfSlot(last.slot), k: d.throws.length });
       }
       return ok;
     });
@@ -211,9 +211,11 @@ export function MatLogger({
     return { x: sy, y: VB_W - sx };
   };
   const stRef = useRef(st);
-  stRef.current = st;
   const selRef = useRef(selected);
-  selRef.current = selected;
+  useEffect(() => {
+    stRef.current = st;
+    selRef.current = selected;
+  });
   const press = useRef<{ no: number | null; x0: number; y0: number; dx: number; dy: number; moved: boolean; before: MatState } | null>(null);
 
   const capAt = (p: { x: number; y: number }) => {
@@ -225,8 +227,10 @@ export function MatLogger({
     return best?.no ?? null;
   };
 
+  // The handlers only read the refs when a touch happens, never during render.
   const responder = useMemo(
     () =>
+      // eslint-disable-next-line react-hooks/refs
       PanResponder.create({
         onStartShouldSetPanResponder: () => stRef.current.phase === "throw",
         onMoveShouldSetPanResponder: () => stRef.current.phase === "throw",

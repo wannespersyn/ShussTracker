@@ -8,7 +8,7 @@
  *
  * Data: GET /api/v1/crews/{crewId} (insights.duos)
  */
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
@@ -37,10 +37,9 @@ export default function DuosTab() {
   const { crew, version } = useCrew();
   const q = useQuery<CrewDetail>(crew ? `/crews/${crew.id}` : null, version);
   const params = useLocalSearchParams<{ with?: string }>();
-  const [partnerId, setPartnerId] = useState<string | null>(params.with ?? null);
-  useEffect(() => {
-    if (params.with) setPartnerId(params.with);
-  }, [params.with]);
+  const [picked, setPartnerId] = useState<{ id: string; from: string | undefined } | null>(null);
+  // A new ?with= (from the crew board) wins over an earlier pick.
+  const partnerId = picked && picked.from === params.with ? picked.id : (params.with ?? null);
 
   if (!crew) return <NoCrew />;
   if (q.error && !q.data) return <ErrorState error={q.error} onRetry={q.reload} />;
@@ -169,7 +168,7 @@ export default function DuosTab() {
               const p = partnerOf(d);
               const active = d.key === duo?.key;
               return (
-                <Pressable key={d.key} onPress={() => setPartnerId(p.id)} style={[styles.partner, active && styles.partnerOn]}>
+                <Pressable key={d.key} onPress={() => setPartnerId({ id: p.id, from: params.with })} style={[styles.partner, active && styles.partnerOn]}>
                   <Avatar name={p.name} size={30} />
                   <View>
                     <Txt v="bodySemi" style={{ fontSize: 14 }}>

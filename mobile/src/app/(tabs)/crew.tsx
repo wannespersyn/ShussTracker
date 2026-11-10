@@ -134,6 +134,16 @@ export default function Crew() {
           ))}
         </View>
 
+        {section === "feed" && me?.beta.features.wrapped && (
+          <Pressable onPress={() => router.push({ pathname: "/wrapped", params: { crewId: crew.id } })} style={styles.wrapped}>
+            <Text style={{ fontSize: 26 }}>🎁</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.wrappedTitle}>{t.beta.wrapped.bannerTitle}</Text>
+              <Txt style={{ fontSize: 12, color: colors.ink }}>{t.beta.wrapped.bannerBody}</Txt>
+            </View>
+            <Text style={[styles.wrappedTitle, { fontSize: 14 }]}>{`${t.beta.wrapped.bannerCta} ›`}</Text>
+          </Pressable>
+        )}
         {section === "feed" &&
           (feed.error && !feed.data ? (
             <ErrorState error={feed.error} onRetry={feed.reload} />
@@ -278,6 +288,8 @@ const styles = StyleSheet.create({
   camera: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 16, backgroundColor: colors.deep, borderWidth: 1, borderColor: "rgba(255,107,91,0.5)" },
   cameraDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.red },
   cameraText: { flex: 1, fontFamily: fonts.headBold, fontSize: 14, letterSpacing: 0.8, color: colors.cream },
+  wrapped: { flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: 18, backgroundColor: colors.gold },
+  wrappedTitle: { fontFamily: fonts.headBold, fontSize: 16, letterSpacing: 0.8, color: colors.ink, textTransform: "uppercase" },
   all: { fontFamily: fonts.headBold, fontSize: 13, letterSpacing: 1.3, color: colors.gold },
   invite: { height: 32, paddingHorizontal: 12, borderRadius: 999, justifyContent: "center", backgroundColor: colors.gold },
   inviteText: { fontFamily: fonts.headBold, fontSize: 13, letterSpacing: 0.8, color: colors.ink, textTransform: "uppercase" },

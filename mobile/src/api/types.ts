@@ -182,6 +182,7 @@ export type Achievement = {
 export type PlayerProfile = {
   player: { id: string; name: string | null; image: string | null; isGuest: boolean; isSelf: boolean };
   crew: { id: string; name: string; rankedPlayers: number } | null;
+  crewStreakRecord: { n: number; userId: string; name: string } | null;
   stats: PlayerInsight | null;
   achievements: Achievement[];
   nemesis: { opponentId: string; opponentName: string; wins: number; losses: number } | null;

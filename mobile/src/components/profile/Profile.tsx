@@ -77,6 +77,26 @@ export function Profile({ data, viewerId }: { data: PlayerProfile; viewerId?: st
             <StatTile label={t.home.winPct} value={`${stats.winPct}%`} tone="gold" />
             <StatTile label={t.common.mama} value={stats.mama} tone="red" />
           </View>
+          {stats.bestWinStreak > 0 &&
+            (() => {
+              const rec = data.crewStreakRecord;
+              const holds = !!rec && stats.bestWinStreak >= rec.n;
+              return (
+                <Card style={[styles.between, holds && { borderColor: "rgba(255,122,47,0.6)" }]}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 12, flex: 1 }}>
+                    <Txt style={{ fontSize: 30 }}>🔥</Txt>
+                    <View style={{ flex: 1 }}>
+                      <Kicker>{t.profile.bestStreak}</Kicker>
+                      <Txt numberOfLines={1} style={{ color: colors.muted, fontSize: 12 }}>
+                        {(holds || !rec ? t.profile.streakRecord : format(t.profile.streakVsRecord, { n: rec.n, name: rec.name.split(" ")[0] })) +
+                          (stats.streak?.kind === "W" && stats.streak.n > 0 ? ` · ${format(t.profile.streakNow, { n: stats.streak.n })}` : "")}
+                      </Txt>
+                    </View>
+                  </View>
+                  <Txt style={{ fontFamily: fonts.display, fontSize: 40, color: "#ff7a2f" }}>{`${stats.bestWinStreak}W`}</Txt>
+                </Card>
+              );
+            })()}
           {history.length > 1 && (
             <Card style={{ gap: 8 }}>
               <View style={styles.between}>

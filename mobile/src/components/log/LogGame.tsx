@@ -37,6 +37,9 @@ type Mat = "2" | "4" | "8";
 type FieldHit = "1" | "2" | "3" | "mama" | "mama_out" | "miss";
 type Step = "players" | "teams" | "start" | "play" | "result";
 const needFor = (m: Mat) => (m === "8" ? 8 : m === "2" ? 2 : 4);
+let keySeq = 0;
+/** Fresh key to replay an animation. */
+const nextKey = () => ++keySeq;
 
 export type SaveResult = {
   matType: Mat;
@@ -168,7 +171,7 @@ export function LogGame({
     const next = mode === "balanced" ? balanceIntoDuos(pickedPlayers, ratings) : shuffleIntoDuos(pickedPlayers);
     setTeams(next);
     setSwapFrom(null);
-    if (beta?.start && next.length === 2) setDraw({ teams: next, mode, k: Date.now() });
+    if (beta?.start && next.length === 2) setDraw({ teams: next, mode, k: nextKey() });
   }
 
   function next() {
@@ -186,10 +189,10 @@ export function LogGame({
     if (i > 0) setStep(flow[i - 1]);
     else router.back();
   }
-  const started = useCallback(() => {
+  function started() {
     setStartOpen(null);
     setStep(playMat ? "play" : "result");
-  }, [playMat]);
+  }
   function start() {
     if (!beta?.start || startOpt === "none") {
       if (beta?.start && countdown) setStartOpen("count");
@@ -208,7 +211,7 @@ export function LogGame({
   function bump(playerId: string, delta: number) {
     setMamas((prev) => ({ ...prev, [playerId]: Math.max(0, (prev[playerId] ?? 0) + delta) }));
     if (delta > 0 && beta?.celebrations && teams) {
-      setMama({ name: name(playerId), team: Math.max(0, teams.findIndex((x) => x.players.some((p) => p.id === playerId))), k: Date.now() });
+      setMama({ name: name(playerId), team: Math.max(0, teams.findIndex((x) => x.players.some((p) => p.id === playerId))), k: nextKey() });
     }
   }
 
