@@ -213,10 +213,10 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
         <section className="flex flex-col gap-3" aria-live="polite">
           <span className={kicker}>{format(L.throwN, { n: th.n })}</span>
           {fixing ? (
-            <SpotsEditor key={th.id} src={images[th.id] ?? null} initial={th.spots} gone={th.gone} C={C} L={L} onSave={(sp) => correct(th.id, sp)} onClose={() => setFixing(false)} />
+            <SpotsEditor key={th.id} src={images[th.id] ?? null} initial={th.spots} gone={th.gone} C={C} L={L} onSave={(sp) => correct(th.id, sp)} onClose={() => setFixing(false)} fix={fix} />
           ) : (
             <>
-              <MatPick src={images[th.id] ?? null} spots={th.spots} gone={th.gone} label={spotText(th.spots)} />
+              <MatPick src={images[th.id] ?? null} spots={th.spots} gone={th.gone} label={spotText(th.spots)} fix={fix} />
               <p className="font-display font-extrabold text-2xl leading-tight">
                 {th.corrected ? spotText(th.spots) : th.spots.length ? format(th.spots.length > 1 ? L.capsIn : L.capIn, { where: spotText(th.spots) }) : L.noCapQ}
               </p>

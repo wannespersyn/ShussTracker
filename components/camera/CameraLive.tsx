@@ -761,6 +761,7 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
             L={L}
             onSave={(sp) => correct(fixingThrow.n, sp)}
             onClose={() => setFixing(null)}
+            fix={fix}
           />
         </section>
       )}

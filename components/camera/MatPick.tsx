@@ -6,11 +6,13 @@
  * were knocked away from dashed. Optionally tappable (mat units, 824 × 265).
  * SpotsEditor builds on it to fix a throw: tap to add a cap, tap a circle to
  * remove it, then save. spotsLabel turns spots into "R3 (3 pt) + L2 (2 pt)".
+ * With the zone fine-tuning (`fix`) the zones are drawn as calibrated, and
+ * the stored spots (on the real print) are drawn where the camera saw them.
  */
 "use client";
 
 import { useState, type MouseEvent as ReactMouseEvent } from "react";
-import { MAT_H, MAT_W, REAL_MAMAS, REAL_ZONES, spotAt } from "@/lib/camera";
+import { MAT_H, MAT_W, refix, shootingBoxes, spotAt, unfix, zoneOutlines, type ZoneFix } from "@/lib/camera";
 import { format, type Dictionary } from "@/lib/i18n";
 
 export type Spot = { x: number; y: number };
@@ -28,11 +30,20 @@ export function spotsLabel(spots: Spot[], C: Dictionary["cam"], L: Dictionary["c
     .join(" + ");
 }
 
-export function MatPick({ src, spots, gone = [], label, onTap }: Readonly<{ src: string | null; spots: Spot[]; gone?: Spot[]; label: string; onTap?: (p: Spot) => void }>) {
+export function MatPick({
+  src,
+  spots,
+  gone = [],
+  label,
+  onTap,
+  fix,
+}: Readonly<{ src: string | null; spots: Spot[]; gone?: Spot[]; label: string; onTap?: (p: Spot) => void; fix?: ZoneFix | null }>) {
   function tap(e: ReactMouseEvent<HTMLButtonElement>) {
     const b = e.currentTarget.getBoundingClientRect();
-    onTap?.({ x: ((e.clientX - b.left) / b.width) * MAT_W, y: ((e.clientY - b.top) / b.height) * MAT_H });
+    // Tapped on the picture → the spot on the real print.
+    onTap?.(unfix({ x: ((e.clientX - b.left) / b.width) * MAT_W, y: ((e.clientY - b.top) / b.height) * MAT_H }, fix));
   }
+  const pt = (p: Spot) => refix(p, fix);
   const body = (
     <>
       {src ? (
@@ -42,17 +53,23 @@ export function MatPick({ src, spots, gone = [], label, onTap }: Readonly<{ src:
         <div className="w-full rounded-[12px] border border-line bg-black" style={{ aspectRatio: `${MAT_W} / ${MAT_H}` }} />
       )}
       <svg viewBox={`0 0 ${MAT_W} ${MAT_H}`} className="absolute inset-0 w-full h-full pointer-events-none" aria-hidden="true">
-        {REAL_ZONES.map((z) => (
-          <polygon key={z.id} points={z.pts.map(([x, y]) => `${x},${y}`).join(" ")} fill="rgba(79,209,255,0.08)" stroke="#4fd1ff" strokeWidth={1.5} />
+        {shootingBoxes(fix).map((b, i) => (
+          <polygon key={`b${i}`} points={b.map(([x, y]) => `${x},${y}`).join(" ")} fill="rgba(255,255,255,0.1)" stroke="#ffffff" strokeOpacity={0.6} strokeWidth={1.5} />
         ))}
-        {REAL_MAMAS.map((m) => (
-          <rect key={m.id} x={m.x} y={m.y} width={m.w} height={m.h} fill="rgba(255,107,91,0.12)" stroke="#ff6b5b" strokeWidth={1.5} />
+        {zoneOutlines(fix).map((z) => (
+          <polygon
+            key={z.id}
+            points={z.pts.map(([x, y]) => `${x},${y}`).join(" ")}
+            fill={z.mama ? "rgba(255,107,91,0.12)" : "rgba(79,209,255,0.08)"}
+            stroke={z.mama ? "#ff6b5b" : "#4fd1ff"}
+            strokeWidth={1.5}
+          />
         ))}
         {gone.map((p, i) => (
-          <circle key={`g${i}`} cx={p.x} cy={p.y} r={20} fill="none" stroke="#ffffff" strokeOpacity={0.7} strokeWidth={3} strokeDasharray="6 5" />
+          <circle key={`g${i}`} cx={pt(p).x} cy={pt(p).y} r={20} fill="none" stroke="#ffffff" strokeOpacity={0.7} strokeWidth={3} strokeDasharray="6 5" />
         ))}
         {spots.map((p, i) => (
-          <circle key={`s${i}`} cx={p.x} cy={p.y} r={22} fill="none" stroke="#ffb627" strokeWidth={4} />
+          <circle key={`s${i}`} cx={pt(p).x} cy={pt(p).y} r={22} fill="none" stroke="#ffb627" strokeWidth={4} />
         ))}
       </svg>
     </>
@@ -98,7 +115,8 @@ export function SpotsEditor({
   L,
   onSave,
   onClose,
-}: Readonly<{ src: string | null; initial: Spot[]; gone: Spot[]; C: Dictionary["cam"]; L: Dictionary["camLive"]; onSave: (s: Spot[]) => void; onClose: () => void }>) {
+  fix,
+}: Readonly<{ src: string | null; initial: Spot[]; gone: Spot[]; C: Dictionary["cam"]; L: Dictionary["camLive"]; onSave: (s: Spot[]) => void; onClose: () => void; fix?: ZoneFix | null }>) {
   const [draft, setDraft] = useState(initial);
   const toggle = (p: Spot) =>
     setDraft((d) => {
@@ -109,7 +127,7 @@ export function SpotsEditor({
   return (
     <div className="flex flex-col gap-3">
       <p className="font-body text-[15px] leading-normal text-soft">{L.whereSub}</p>
-      <MatPick src={src} spots={draft} gone={gone} label={L.whereSub} onTap={toggle} />
+      <MatPick src={src} spots={draft} gone={gone} label={L.whereSub} onTap={toggle} fix={fix} />
       <p className="font-display font-extrabold text-xl leading-tight">{spotsLabel(draft, C, L)}</p>
       <button type="button" onClick={() => onSave(draft)} className="h-14 rounded-[16px] bg-amber text-ink font-heading font-extrabold text-lg tracking-[0.06em]">
         {L.save}
