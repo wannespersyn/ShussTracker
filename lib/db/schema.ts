@@ -793,7 +793,7 @@ export const cameraZoneFixes = pgTable("camera_zone_fix", {
   sessionId: uuid("session_id")
     .primaryKey()
     .references(() => cameraSessions.id, { onDelete: "cascade" }),
-  fix: jsonb("fix").$type<Record<string, { dx: number; dy: number }>>().notNull(),
+  fix: jsonb("fix").$type<Record<string, { dx: number; dy: number; s?: number }>>().notNull(),
   version: integer("version").notNull().default(1),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

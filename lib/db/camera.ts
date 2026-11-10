@@ -54,7 +54,7 @@ export type CameraState = {
   /** The linked mat logger's game (lib/camera-log.ts CameraGame), if any. */
   game: unknown;
   /** Per-zone nudges (lib/camera.ts ZoneFix) and their version, if any. */
-  zoneFix: { fix: Record<string, { dx: number; dy: number }>; version: number } | null;
+  zoneFix: { fix: Record<string, { dx: number; dy: number; s?: number }>; version: number } | null;
 };
 
 const isMember = async (userId: string, groupId: string) =>
@@ -306,7 +306,7 @@ async function getCameraZoneFix(sessionId: string) {
 }
 
 /** Anyone in the crew (the camera too) sets the zone nudges; returns the new version. */
-export async function setCameraZoneFix(userId: string, sessionId: string, fix: Record<string, { dx: number; dy: number }>): Promise<number> {
+export async function setCameraZoneFix(userId: string, sessionId: string, fix: Record<string, { dx: number; dy: number; s?: number }>): Promise<number> {
   await sessionFor(userId, sessionId);
   const [row] = await db
     .insert(cameraZoneFixes)

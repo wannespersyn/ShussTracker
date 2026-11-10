@@ -862,17 +862,26 @@ export function spotAt(p: Pt): { id: string; v: number | "mama" | null } {
 
 /** Nudges per zone/mama after the corners (mat units): the print never lies
  * exactly where 4 corners put it (a mat that isn't flat, a wide-angle lens).
+ * `s` = size (1 = as measured), around the shape's own centre.
  * Keys: "L3".."R3", "ML", "MR". */
-export type ZoneFix = Record<string, { dx: number; dy: number }>;
+export type ZoneFix = Record<string, { dx: number; dy: number; s?: number }>;
+const changed = (d?: { dx: number; dy: number; s?: number }) => Boolean(d && (d.dx || d.dy || (d.s !== undefined && d.s !== 1)));
+export const isFixed = changed;
 export const FIX_IDS: string[] = [...REAL_ZONES.map((z) => z.id), ...REAL_MAMAS.map((m) => m.id)];
 
 /** The outline of a zone or mama (mat units), with its nudge applied. */
 export function fixedShape(id: string, fix?: ZoneFix | null): [number, number][] {
   const d = fix?.[id] ?? { dx: 0, dy: 0 };
+  const pts = baseShape(id);
+  const c = centre(pts);
+  const s = d.s ?? 1;
+  return pts.map(([x, y]) => [c.x + (x - c.x) * s + d.dx, c.y + (y - c.y) * s + d.dy]);
+}
+
+function baseShape(id: string): [number, number][] {
   const z = REAL_ZONES.find((x) => x.id === id);
   const m = REAL_MAMAS.find((x) => x.id === id);
-  const pts: [number, number][] = z ? z.pts : m ? [[m.x, m.y], [m.x + m.w, m.y], [m.x + m.w, m.y + m.h], [m.x, m.y + m.h]] : [];
-  return pts.map(([x, y]) => [x + d.dx, y + d.dy]);
+  return z ? z.pts : m ? [[m.x, m.y], [m.x + m.w, m.y], [m.x + m.w, m.y + m.h], [m.x, m.y + m.h]] : [];
 }
 
 const centre = (pts: [number, number][]): Pt => ({ x: pts.reduce((s, p) => s + p[0], 0) / pts.length, y: pts.reduce((s, p) => s + p[1], 0) / pts.length });
@@ -882,10 +891,14 @@ const centre = (pts: [number, number][]): Pt => ({ x: pts.reduce((s, p) => s + p
  * elsewhere the nudges fade out with distance (every zone, nudged or not,
  * pulls), so caps between zones move smoothly. */
 export function unfix(p: Pt, fix?: ZoneFix | null): Pt {
-  if (!fix || !Object.values(fix).some((d) => d.dx || d.dy)) return p;
+  if (!fix || !Object.values(fix).some(changed)) return p;
   for (const id of FIX_IDS) {
     const d = fix[id];
-    if (d && (d.dx || d.dy) && inPoly(p.x, p.y, fixedShape(id, fix))) return { x: p.x - d.dx, y: p.y - d.dy };
+    if (!d || !changed(d) || !inPoly(p.x, p.y, fixedShape(id, fix))) continue;
+    // Undo the nudge and the size change: back to the same spot in the measured shape.
+    const c = centre(baseShape(id));
+    const s = d.s ?? 1;
+    return { x: c.x + (p.x - c.x - d.dx) / s, y: c.y + (p.y - c.y - d.dy) / s };
   }
   let w = 0;
   let ox = 0;
