@@ -2,8 +2,9 @@
  * /api/v1/games/[gameId]
  *
  * GET    → the game result screen: teams in finishing order with players,
- *          mama/shot counts and Elo change, the crew, comments, reaction
- *          tallies, photo and whether the viewer may delete it.
+ *          mama/shot/defense counts, kruip and Elo change, the crew,
+ *          comments, reaction tallies, photo, whether the viewer may delete
+ *          it or toggle kruip, and (celebrations beta) what to celebrate.
  * DELETE → deletes the game (logger, crew owner or admin; not tournament
  *          games) and refreshes the crew's stats.
  */
@@ -11,10 +12,12 @@ import { eq } from "drizzle-orm";
 import { ApiError, api, notFound } from "@/lib/api/http";
 import { requireApiUser } from "@/lib/api/session";
 import { db } from "@/lib/db";
-import { games, tournamentMatches } from "@/lib/db/schema";
+import { games, rotationGames, tournamentMatches } from "@/lib/db/schema";
 import { getGameActivity } from "@/lib/db/activity";
 import { getCrew, getCrewInsights } from "@/lib/db/crew-insights";
-import { canDeleteGame } from "@/lib/db/game-permissions";
+import { canDeleteGame, canEditKruip } from "@/lib/db/game-permissions";
+import { hasBeta } from "@/lib/db/beta";
+import { getCelebration } from "@/lib/db/celebrate";
 import { deleteGameAs, GameNotFoundError, requireGameAccess } from "@/lib/services/games";
 import { expireCrew } from "@/lib/cache-tags";
 import { photoSrc } from "@/lib/photo";
@@ -36,17 +39,21 @@ export const GET = api<Ctx>(async (req, { params }) => {
   const { gameId } = await params;
   const base = await access(gameId, userId);
 
-  const [game, activity, insights, crew, canDelete, match] = await Promise.all([
+  const [game, activity, insights, crew, canDelete, match, mayKruip, rotationSlot, celebrate] = await Promise.all([
     db.query.games.findFirst({
       where: eq(games.id, gameId),
-      with: { teams: { with: { players: { with: { user: { columns: { id: true, name: true, isGuest: true } }, shots: { columns: { fieldHit: true } } } } } } },
+      with: { teams: { with: { players: { with: { user: { columns: { id: true, name: true, isGuest: true } }, shots: { columns: { fieldHit: true, defense: true } } } } } } },
     }),
     getGameActivity(gameId, userId),
     base.groupId ? getCrewInsights(base.groupId) : null,
     base.groupId ? getCrew(base.groupId) : null,
     canDeleteGame(base, userId),
     db.query.tournamentMatches.findFirst({ where: eq(tournamentMatches.gameId, gameId), columns: { tournamentId: true } }),
+    canEditKruip(base, userId),
+    db.query.rotationGames.findFirst({ where: eq(rotationGames.gameId, gameId), columns: { rotationId: true } }),
+    hasBeta(userId, "celebrations"),
   ]);
+  const celebration = celebrate ? await getCelebration(gameId, userId) : [];
   if (!game) throw notFound();
   const elo = insights?.gameElo[gameId] ?? {};
 
@@ -59,26 +66,31 @@ export const GET = api<Ctx>(async (req, { params }) => {
       crew: crew ? { id: crew.id, name: crew.name } : null,
       photoPath: game.photoUrl ? photoSrc(game.id, game.photoUrl) : null,
       tournamentId: match?.tournamentId ?? null,
+      rotationId: rotationSlot?.rotationId ?? null,
       canDelete: canDelete && !match,
+      canEditKruip: mayKruip,
       teams: [...game.teams]
         .sort((a, b) => (a.finalRank ?? 99) - (b.finalRank ?? 99))
         .map((t) => ({
+          id: t.id,
           label: t.teamLabel,
           finalRank: t.finalRank,
+          kruip: t.kruip,
           players: t.players.map((p) => {
-            const count = (hit: string) => p.shots.filter((s) => s.fieldHit === hit).length;
+            const count = (hit: string) => p.shots.filter((s) => s.fieldHit === hit && !s.defense).length;
             return {
               id: p.user.id,
               name: p.user.name,
               isGuest: p.user.isGuest,
               eloDelta: elo[p.user.id] ?? null,
-              shots: { "1": count("1"), "2": count("2"), "3": count("3"), mama: count("mama"), miss: count("miss") },
+              shots: { "1": count("1"), "2": count("2"), "3": count("3"), mama: count("mama"), mamaOut: count("mama_out"), miss: count("miss"), defense: p.shots.filter((s) => s.defense).length },
             };
           }),
         })),
     },
     comments: activity.comments,
     reactions: activity.reactions,
+    celebration,
   };
 });
 

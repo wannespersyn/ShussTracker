@@ -2,7 +2,8 @@
  * GET /api/v1/crews/[crewId]
  *
  * Everything the crew screens need in one call: the crew, the full insights
- * (leaderboard, duos, sessions, Elo per game), its guests and tournaments.
+ * (leaderboard, duos, sessions, Elo per game), its guests, tournaments, the
+ * crew's events (brackets + Americano/Mexicano) and live beta cameras.
  * The invite code is only included for the owner. Members only.
  *
  * PATCH  → owner: `{ name }` renames the crew.
@@ -16,6 +17,8 @@ import { expireCrew } from "@/lib/cache-tags";
 import { getCrew, getCrewInsights } from "@/lib/db/crew-insights";
 import { getCrewGuests } from "@/lib/db/guests";
 import { getGroupTournaments } from "@/lib/db/tournaments";
+import { getCrewEvents } from "@/lib/db/crew-events";
+import { getLiveCameras } from "@/lib/db/camera";
 import { isPro } from "@/lib/plan";
 
 type Ctx = { params: Promise<{ crewId: string }> };
@@ -27,7 +30,13 @@ export const GET = api<Ctx>(async (req, { params }) => {
   const crew = await getCrew(crewId);
   if (!crew) throw notFound();
 
-  const [insights, guests, tournaments] = await Promise.all([getCrewInsights(crewId), getCrewGuests(crewId), getGroupTournaments(crewId)]);
+  const [insights, guests, tournaments, events, cameras] = await Promise.all([
+    getCrewInsights(crewId),
+    getCrewGuests(crewId),
+    getGroupTournaments(crewId),
+    getCrewEvents(crewId, { limit: 12 }),
+    getLiveCameras(crewId),
+  ]);
   const isOwner = crew.createdBy === userId;
   return {
     crew: {
@@ -42,6 +51,8 @@ export const GET = api<Ctx>(async (req, { params }) => {
     insights,
     guests,
     tournaments,
+    events,
+    cameras,
   };
 });
 
