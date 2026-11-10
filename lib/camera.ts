@@ -852,7 +852,7 @@ function inPoly(x: number, y: number, pts: [number, number][]) {
 
 /** Where a point lies on the mat: a zone ("L2", value 2), a mama, or nothing. */
 export function spotAt(p: Pt): { id: string; v: number | "mama" | null } {
-  for (const m of REAL_MAMAS) if (p.x >= m.x && p.x <= m.x + m.w && p.y >= m.y && p.y <= m.y + m.h) return { id: m.id, v: "mama" };
+  for (const m of REAL_MAMAS) if (inPoly(p.x, p.y, baseShape(m.id))) return { id: m.id, v: "mama" };
   for (const z of REAL_ZONES) if (inPoly(p.x, p.y, z.pts)) return { id: z.id, v: z.v };
   if (p.x < 0 || p.x > MAT_W || p.y < 0 || p.y > MAT_H) return { id: "off", v: null };
   return { id: "none", v: null };
@@ -887,8 +887,28 @@ export function fixedShape(id: string, fix?: ZoneFix | null): [number, number][]
 
 function baseShape(id: string): [number, number][] {
   const z = REAL_ZONES.find((x) => x.id === id);
+  if (z) return z.pts;
   const m = REAL_MAMAS.find((x) => x.id === id);
-  return z ? z.pts : m ? [[m.x, m.y], [m.x + m.w, m.y], [m.x + m.w, m.y + m.h], [m.x, m.y + m.h]] : [];
+  return m ? roundedRect(m.x, m.y, m.w, m.h, MAMA_R) : [];
+}
+
+/** The mamas are printed with rounded corners (mat units). */
+const MAMA_R = 14;
+/** A rectangle with rounded corners as a polygon (5 points per corner arc). */
+function roundedRect(x: number, y: number, w: number, h: number, r: number): [number, number][] {
+  const out: [number, number][] = [];
+  const arcs: [number, number, number][] = [
+    [x + w - r, y + r, -Math.PI / 2],
+    [x + w - r, y + h - r, 0],
+    [x + r, y + h - r, Math.PI / 2],
+    [x + r, y + r, Math.PI],
+  ];
+  for (const [cx, cy, a0] of arcs)
+    for (let k = 0; k <= 4; k++) {
+      const a = a0 + (k * Math.PI) / 2 / 4;
+      out.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]);
+    }
+  return out;
 }
 
 const centre = (pts: [number, number][]): Pt => ({ x: pts.reduce((s, p) => s + p[0], 0) / pts.length, y: pts.reduce((s, p) => s + p[1], 0) / pts.length });
@@ -937,22 +957,16 @@ export function unfix(p: Pt, fix?: ZoneFix | null): Pt {
   return q;
 }
 
-/** Shooting box size (mat units along each edge from the corner tip). The
- * field's corners are rounded, so a box is the white corner between the tip
- * and that curve. */
-export const BOX_R = 64;
+/** Shooting box size (mat units along each edge from the corner tip): the
+ * white triangle where the field's corner is cut off. */
+export const BOX_R = 52;
 
 /** The 4 shooting boxes (mat units), in MAT_CORNERS order: (0,0), (W,0),
  * (W,H), (0,H). Size from the "SB" fix. */
 export function shootingBoxes(fix?: ZoneFix | null): [number, number][][] {
   const R = BOX_R * (fix?.SB?.s ?? 1);
-  // Corner tip, along one edge, back along the rounded field corner, along the other edge.
-  const local: [number, number][] = [[0, 0], [R, 0]];
-  for (let k = 1; k < 8; k++) {
-    const a = -Math.PI / 2 - (k * Math.PI) / 2 / 8;
-    local.push([R + R * Math.cos(a), R + R * Math.sin(a)]);
-  }
-  local.push([0, R]);
+  // Corner tip, along one edge, straight across to the other edge.
+  const local: [number, number][] = [[0, 0], [R, 0], [0, R]];
   const at = (cx: number, cy: number) => local.map(([x, y]): [number, number] => [cx === 0 ? x : MAT_W - x, cy === 0 ? y : MAT_H - y]);
   return [at(0, 0), at(MAT_W, 0), at(MAT_W, MAT_H), at(0, MAT_H)];
 }
