@@ -176,6 +176,13 @@
       "when": 1794302734979,
       "tag": "0024_camera_training_images",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1794310000000,
+      "tag": "0025_app_push_tokens",
+      "breakpoints": true
     }
   ]
 }

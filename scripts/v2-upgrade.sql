@@ -9,6 +9,15 @@
 
 BEGIN;
 
+-- Production was set up with `drizzle-kit push`, so drizzle's bookkeeping
+-- table may not exist yet. Create it (same shape drizzle-kit uses).
+CREATE SCHEMA IF NOT EXISTS "drizzle";
+CREATE TABLE IF NOT EXISTS "drizzle"."__drizzle_migrations" (
+  "id" serial PRIMARY KEY,
+  "hash" text NOT NULL,
+  "created_at" bigint
+);
+
 -- 0007 game photo
 ALTER TABLE "game" ADD COLUMN IF NOT EXISTS "photo_url" text;
 
