@@ -166,7 +166,7 @@ export function CameraLog({ game, seenAt, events }: Readonly<{ game: CameraGame 
                   <Row label={L.stMiss} value={p.misses} />
                   <Row label={L.stHits} value={p.hits.join(" / ")} />
                   <Row label={L.stMama} value={p.mamasOut ? `${p.mamas} (+${p.mamasOut} ${L.stMamaOut})` : p.mamas} />
-                  <Row label={L.stOpp} value={p.forOpp} />
+                  <Row label={L.stOpp} value={p.scored} />
                   <Row label={L.stOwn} value={p.ownThrows ? `${p.ownThrows}× (${p.ownPoints})` : 0} warn={p.ownThrows > 0} />
                   <Row label={L.stKnocks} value={p.knocks} />
                   <Row label={L.stKnockedBy} value={p.knockedBy} />

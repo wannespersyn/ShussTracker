@@ -46,9 +46,9 @@ export type GameEvent =
       bonus: boolean;
       /** First landing of the thrown cap: "L3", "MR", "miss", "off", "none", "box:a1". */
       spot: string;
-      /** Team that drinks for it (zone/mama), null when it counts for nobody. */
+      /** Team it counts for (that team drinks — drinking is scoring: empty your pints first to win), null for nobody. */
       countsFor: number | null;
-      /** Landed in a zone that counts for the thrower's own team. */
+      /** Landed in a zone/mama that counts for the other team ("in eigen vak"). */
       own: boolean;
       /** Went into a mama and got shot out of it later that round. */
       mamaOut: boolean;
@@ -84,7 +84,7 @@ export function gameEvents(g: CameraGame): GameEvent[] {
         bonus: t.kind === "bonus",
         spot: t.firstSpot ?? "none",
         countsFor,
-        own: countsFor !== null && countsFor === teamOfSlot(t.slot) && !isMama(t.firstSpot),
+        own: countsFor !== null && countsFor !== teamOfSlot(t.slot),
         mamaOut: out.has(i),
         cam: camOf.get(i) ?? null,
       });
@@ -113,8 +113,9 @@ export type PlayerStats = {
   hits: [number, number, number];
   mamas: number;
   mamasOut: number;
-  /** Points thrown that the other team drinks / that your own team drinks. */
-  forOpp: number;
+  /** Points scored for your own team (your team drinks), and points thrown
+   * in your own zone (they count for the other team). */
+  scored: number;
   ownPoints: number;
   ownThrows: number;
   /** Other caps this player shot away, and own caps shot away by others. */
@@ -131,7 +132,7 @@ export function gameStats(g: CameraGame): { players: PlayerStats[]; teams: TeamS
   const players = new Map<Slot, PlayerStats>(
     st.order.map((s) => [
       s,
-      { slot: s, name: g.names[s] ?? s.toUpperCase(), team: teamOfSlot(s), throws: 0, misses: 0, hits: [0, 0, 0], mamas: 0, mamasOut: 0, forOpp: 0, ownPoints: 0, ownThrows: 0, knocks: 0, knockedBy: 0, skipped: 0 },
+      { slot: s, name: g.names[s] ?? s.toUpperCase(), team: teamOfSlot(s), throws: 0, misses: 0, hits: [0, 0, 0], mamas: 0, mamasOut: 0, scored: 0, ownPoints: 0, ownThrows: 0, knocks: 0, knockedBy: 0, skipped: 0 },
     ]),
   );
   let throws = 0;
@@ -151,11 +152,12 @@ export function gameStats(g: CameraGame): { players: PlayerStats[]; teams: TeamS
     if (t.missed || spot === "miss" || spot === "off") p.misses++;
     if (v) {
       p.hits[v - 1]++;
-      if (countsFor === p.team) {
+      if (countsFor === p.team) p.scored += v;
+      else {
         p.ownPoints += v;
         p.ownThrows++;
-      } else p.forOpp += v;
-    }
+      }
+    } else if (isMama(spot) && countsFor !== null && countsFor !== p.team) p.ownThrows++;
     if (isMama(spot)) {
       if (out.has(i)) p.mamasOut++;
       else p.mamas++;

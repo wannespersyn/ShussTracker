@@ -137,14 +137,14 @@ export async function setCameraGameAction(sessionId: string, game: unknown) {
   await setCameraGame(userId, sessionId, game);
 }
 
-const FIX_IDS = new Set(["L1", "L2", "L3", "R1", "R2", "R3", "ML", "MR"]);
+const FIX_IDS = new Set(["L1", "L2", "L3", "R1", "R2", "R3", "ML", "MR", "SB"]);
 /** Per-zone nudges (lib/camera.ts ZoneFix), from the camera or another phone. */
 export async function setCameraZoneFixAction(sessionId: string, fix: Record<string, { dx: number; dy: number; s?: number }>) {
   const userId = await requireUserId();
   const ok =
     fix &&
     typeof fix === "object" &&
-    Object.entries(fix).every(([k, d]) => FIX_IDS.has(k) && d && Number.isFinite(d.dx) && Number.isFinite(d.dy) && Math.abs(d.dx) < 120 && Math.abs(d.dy) < 120 && (d.s === undefined || (Number.isFinite(d.s) && d.s >= 0.5 && d.s <= 1.5)));
+    Object.entries(fix).every(([k, d]) => FIX_IDS.has(k) && d && Number.isFinite(d.dx) && Number.isFinite(d.dy) && Math.abs(d.dx) < 120 && Math.abs(d.dy) < 120 && (d.s === undefined || (Number.isFinite(d.s) && d.s >= 0.5 && d.s <= (k === "SB" ? 2.5 : 1.5))));
   if (!ok) throw new Error("Bad zone fix");
   const clean = Object.fromEntries(
     Object.entries(fix).map(([k, d]) => [k, { dx: Math.round(d.dx * 10) / 10, dy: Math.round(d.dy * 10) / 10, ...(d.s !== undefined ? { s: Math.round(d.s * 100) / 100 } : {}) }]),

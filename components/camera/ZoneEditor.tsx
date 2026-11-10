@@ -5,7 +5,8 @@
  * the whole print in place, but never perfectly everywhere (a mat that isn't
  * flat, a wide-angle lens); here you pick a zone or mama, see it magnified
  * over the empty-mat photo and nudge it with the arrows until it lies exactly
- * on the print, and make it smaller or bigger (around its own centre).
+ * on the print, and make it smaller or bigger (around its own centre). The
+ * shooting boxes (one size for all 4) only get bigger or smaller.
  * The arrows move it the way they point on the screen, however
  * the mat lies in the photo. The nudges (ZoneFix, mat units) are applied to
  * every cap the camera finds (lib/camera.ts unfix).
@@ -13,7 +14,7 @@
 "use client";
 
 import { useState } from "react";
-import { FIX_IDS, fixedShape, isFixed, toPhoto, type Pt, type ZoneFix } from "@/lib/camera";
+import { FIX_IDS, fixedShape, isFixed, sizeRange, toPhoto, type Pt, type ZoneFix } from "@/lib/camera";
 import { Overlay, type Photo } from "@/components/camera/CameraLab";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/client";
@@ -54,7 +55,8 @@ export function ZoneEditor({ photo, corners, fix, onChange }: Readonly<{ photo: 
   /** Smaller (-1) or bigger (+1), around the zone's own centre. */
   function resize(dir: number) {
     const cur = fix[sel] ?? { dx: 0, dy: 0 };
-    const s = Math.min(1.5, Math.max(0.5, Math.round(((cur.s ?? 1) + dir * (fine ? SIZE.fine : SIZE.coarse)) * 100) / 100));
+    const [lo, hi] = sizeRange(sel);
+    const s = Math.min(hi, Math.max(lo, Math.round(((cur.s ?? 1) + dir * (fine ? SIZE.fine : SIZE.coarse)) * 100) / 100));
     onChange({ ...fix, [sel]: { ...cur, s } });
   }
   const size = Math.round((fix[sel]?.s ?? 1) * 100);
@@ -69,7 +71,9 @@ export function ZoneEditor({ photo, corners, fix, onChange }: Readonly<{ photo: 
 
   // Zoom window: a bit more than the zone itself.
   const span = Math.max(...pts.map(([x, y]) => toPhoto(corners, { x, y })).flatMap((p) => [Math.abs(p.x - c.x), Math.abs(p.y - c.y)]), unit * 20) * 2.6;
-  const label = (id: string) => (id === "ML" || id === "MR" ? format(C.mama, { side: id === "ML" ? C.left : C.right }) : id);
+  const label = (id: string) => (id === "SB" ? L.zoneBoxes : id === "ML" || id === "MR" ? format(C.mama, { side: id === "ML" ? C.left : C.right }) : id);
+  // The 4 boxes share one size; moving them makes no sense (they're the corners).
+  const boxes = sel === "SB";
   const moved = (id: string) => isFixed(fix[id]);
   const arrow = "h-14 rounded-[14px] bg-surface-deep border border-line-strong text-cream text-2xl font-bold active:bg-surface-raised";
 
@@ -98,7 +102,7 @@ export function ZoneEditor({ photo, corners, fix, onChange }: Readonly<{ photo: 
           <image href={photo.url} x={0} y={0} width={w} height={h} />
           <Overlay corners={corners} w={span * 1.5} fix={fix} focus={sel} />
         </svg>
-        <div className="grid grid-cols-3 gap-1.5 w-44">
+        <div className={cn("grid grid-cols-3 gap-1.5 w-44", boxes && "opacity-30 pointer-events-none")} aria-hidden={boxes}>
           <span />
           <button type="button" onClick={() => move(0, -1)} aria-label={C.up} className={arrow}>↑</button>
           <span />

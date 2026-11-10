@@ -20,6 +20,9 @@
  * Next to the throws, a log shows what the code sees and decides (paused,
  * new round, mat being cleared, light changed, each judged throw) and, with
  * a linked mat logger, what the game made of it, plus stats (CameraLog).
+ * Misses: the shooting boxes are watched on their own (the cap waits there
+ * before it's thrown). When the thrower's box empties and nothing lands on
+ * the mat within ~2 s, the camera posts an empty throw = a miss.
  * After a new round starts, the camera first waits until the mat is clear
  * (only the shooting boxes may hold caps); caps disappearing while the mat
  * is cleared are never a throw.
@@ -32,7 +35,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { DETECTOR, FULL_H, FULL_W, WH, WW, align, detect, findField, unfix, warp, warpFull, type Frame, type Pt, type ZoneFix } from "@/lib/camera";
+import { BOX_OF_CORNER, DETECTOR, FULL_H, FULL_W, MAT_W, WH, WW, align, detect, findField, inBox, unfix, warp, warpFull, type Frame, type Pt, type ZoneFix } from "@/lib/camera";
 import { ZoneEditor } from "@/components/camera/ZoneEditor";
 import { CornerEditor, Overlay, defaultCorners, type Photo } from "@/components/camera/CameraLab";
 import { SpotsEditor, spotsLabel, warpedToJpeg, type Spot } from "@/components/camera/MatPick";
@@ -121,6 +124,31 @@ function changed(a: Float32Array, b: Float32Array, t: number): number {
   return n;
 }
 const CELLS = (Math.floor(WH / CELL) - 2) * (Math.floor(WW / CELL) - 2 * Math.round(Math.floor(WW / CELL) * 0.06));
+/** A shooting box holds a cap when this many of its cells differ from the empty mat. */
+const BOX_CELL = 20;
+const BOX_MIN = 2;
+/** Readings in a row before a box counts as filled or emptied (no flicker). */
+const BOX_STEADY = 2;
+/** A cap left its box and nothing landed for this long = a miss (ms). */
+const MISS_MS = 2000;
+
+/** Cells (indexes into `tiny`) inside each shooting box. */
+function boxCells(fix: ZoneFix): number[][] {
+  const tw = Math.floor(WW / CELL);
+  const th = Math.floor(WH / CELL);
+  const k = MAT_W / WW;
+  const out: number[][] = [[], [], [], []];
+  for (let y = 0; y < th; y++)
+    for (let x = 0; x < tw; x++) {
+      const p = { x: (x + 0.5) * CELL * k, y: (y + 0.5) * CELL * k };
+      for (let i = 0; i < 4; i++) if (inBox(p, i, fix)) out[i].push(y * tw + x);
+    }
+  return out;
+}
+/** Which shooting boxes hold a cap right now. */
+function boxesFull(small: Float32Array, empty: Float32Array, cells: number[][]): boolean[] {
+  return cells.map((cs) => cs.filter((c) => Math.abs(small[c] - empty[c]) > BOX_CELL).length >= BOX_MIN);
+}
 
 export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: string; name: string }[]; initialCrewId?: string }>) {
   const { t } = useT();
@@ -182,6 +210,13 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
     clearLeft: -1,
     lastArmed: null as boolean | null,
     fix: {} as ZoneFix,
+    // Shooting boxes: cells per box, the empty mat in cells, which hold a cap
+    // (steady readings), and the box a cap just left (a throw started).
+    boxCells: null as number[][] | null,
+    emptyTiny: null as Float32Array | null,
+    boxes: null as boolean[] | null,
+    boxRun: [0, 0, 0, 0],
+    left: null as { i: number; t: number } | null,
     calm: 0,
     busy: false,
     n: 0,
@@ -204,6 +239,7 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
   function setFix(f: ZoneFix, push = true) {
     setFixState(f);
     live.current.fix = f;
+    live.current.boxCells = null;
     try {
       localStorage.setItem(FIX_KEY, JSON.stringify(f));
     } catch {
@@ -316,7 +352,10 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
       const full = warpedToJpeg(warpFull(frame, c), FULL_W, FULL_H, 0.85);
       if (full) setCameraEmptyAction(session.current, full).catch(() => {});
     }
-    Object.assign(live.current, { corners: c, empty, still: empty, prevTiny: null, base: null, calm: 0, busy: false, clearing: false, clearLeft: -1 });
+    Object.assign(live.current, {
+      corners: c, empty, still: empty, prevTiny: null, base: null, calm: 0, busy: false, clearing: false, clearLeft: -1,
+      emptyTiny: tiny(empty), boxCells: null, boxes: null, boxRun: [0, 0, 0, 0], left: null,
+    });
     note(L.evStart, "good");
     setCorners(c);
     setAsk(null);
@@ -354,8 +393,12 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
         note(who ? format(L.evArmedName, { name: who }) : L.evArmed);
       }
       const idle = () => setStatus(S.clearing ? "clearing" : "waiting");
+      S.boxCells ??= boxCells(S.fix);
       if (!S.base || S.rebase) {
         S.base = small;
+        S.boxes = S.emptyTiny ? boxesFull(small, S.emptyTiny, S.boxCells) : null;
+        S.boxRun = [0, 0, 0, 0];
+        S.left = null;
         if (S.rebase) {
           // New round: start from the mat as it is now, but only once it's clear.
           S.still = warp(f, S.corners);
@@ -373,10 +416,42 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
         setStatus("moving");
         return;
       }
+      // Still: did a cap leave a shooting box? (the thrower's, when the game says who)
+      if (S.emptyTiny && S.boxes) {
+        const now = boxesFull(small, S.emptyTiny, S.boxCells);
+        const g = gameRef.current;
+        const corner = g?.st.thrower ? g.st.corner[g.st.thrower] : undefined;
+        const mine = corner ? BOX_OF_CORNER[corner] : null;
+        now.forEach((full, i) => {
+          if (full === S.boxes![i]) return void (S.boxRun[i] = 0);
+          if (++S.boxRun[i] < BOX_STEADY) return;
+          S.boxRun[i] = 0;
+          S.boxes![i] = full;
+          if (!full && !S.clearing && (mine === null || mine === i)) {
+            S.left = { i, t: Date.now() };
+            note(format(L.evBoxLeft, { box: boxName(i) }));
+          }
+        });
+      }
       const diff = changed(small, S.base, CHANGE_CELL);
       if (diff < MIN_CELLS) {
-        // Still, and nothing on the mat changed (a hand passed by).
+        // Still, and nothing on the mat changed (a hand passed by)…
         S.calm = 0;
+        if (S.left && Date.now() - S.left.t > MISS_MS && !S.clearing) {
+          // …but a cap left its box a while ago and landed nowhere: a miss.
+          S.left = null;
+          S.busy = true;
+          window.setTimeout(() => {
+            try {
+              post(f, warp(f, S.corners), [], []);
+              note(format(L.evMiss, { n: S.n }), "warn");
+            } finally {
+              S.busy = false;
+              idle();
+            }
+          }, 30);
+          return;
+        }
         idle();
         return;
       }
@@ -418,15 +493,11 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
             note(L.evCleared, "good");
             return;
           }
-          const n = ++S.n;
+          S.left = null;
           // Back onto the real print with the per-zone nudges.
           const spots = r.landed.map((b) => unfix({ x: b.x, y: b.y }, S.fix));
           const gone = r.gone.map((b) => unfix({ x: b.x, y: b.y }, S.fix));
-          const img = warpedToJpeg(cur, WW, WH);
-          const full = shareRef.current && session.current ? warpedToJpeg(warpFull(f, S.corners), FULL_W, FULL_H, 0.85) : null;
-          setThrows((ts) => [{ n, spots, gone, corrected: false, img }, ...ts]);
-          setAsk({ n, left: CONFIRM_S });
-          if (session.current) addCameraThrowAction(session.current, { n, spots, gone, image: img, full, detector: DETECTOR }).catch(() => {});
+          const n = post(f, cur, spots, gone);
           note(
             spots.length
               ? format(L.evThrow, { n, where: spotsLabel(spots, C, L), gone: gone.length })
@@ -440,6 +511,17 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
         }
       }, 30);
     }, TICK);
+    /** Post a judged throw (empty = a miss); returns its number. */
+    function post(f: Frame, cur: Float32Array, spots: Spot[], gone: Spot[]): number {
+      const S = live.current;
+      const n = ++S.n;
+      const img = warpedToJpeg(cur, WW, WH);
+      const full = shareRef.current && session.current ? warpedToJpeg(warpFull(f, S.corners), FULL_W, FULL_H, 0.85) : null;
+      setThrows((ts) => [{ n, spots, gone, corrected: false, img }, ...ts]);
+      setAsk({ n, left: CONFIRM_S });
+      if (session.current) addCameraThrowAction(session.current, { n, spots, gone, image: img, full, detector: DETECTOR }).catch(() => {});
+      return n;
+    }
     return () => window.clearInterval(id);
     // note/format only read the dictionaries.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -506,6 +588,16 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
   }, [sessionId]);
 
   const spotText = (sp: Spot[]) => spotsLabel(sp, C, L);
+  /** Who throws from each shooting box (A1, B2…), from the linked game. */
+  const boxLabels: (string | null)[] = [null, null, null, null];
+  if (game) for (const s of game.st.order) {
+    const corner = game.st.corner[s];
+    if (corner) boxLabels[BOX_OF_CORNER[corner]] = s.toUpperCase();
+  }
+  /** "box A1" in the log, or the corner number without a game. */
+  function boxName(i: number) {
+    return gameRef.current ? (gameRef.current.st.order.find((s) => gameRef.current?.st.corner[s] && BOX_OF_CORNER[gameRef.current.st.corner[s]!] === i)?.toUpperCase() ?? String(i + 1)) : String(i + 1);
+  }
   const G = useGameText(game);
   /** What became of a camera throw: the logger's view when linked, else what the camera found. */
   function throwText(th: Throw): string {
@@ -563,6 +655,12 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
       {/* The video stays mounted in every phase so the stream keeps running. */}
       <div className={cn("relative rounded-[16px] overflow-hidden bg-black", phase === "start" && "hidden", phase === "calibrate" && snap && "hidden")}>
         <video ref={video} playsInline muted autoPlay className="w-full h-auto block" />
+        {phase === "live" && snap && corners.length === 4 && (
+          // The calibration over the live picture, with who throws from which box.
+          <svg viewBox={`0 0 ${snap.frame.w} ${snap.frame.h}`} className="absolute inset-0 w-full h-full pointer-events-none" aria-hidden="true">
+            <Overlay corners={corners} w={snap.frame.w} fix={fix} boxLabels={boxLabels} />
+          </svg>
+        )}
         {phase === "live" && (
           <span
             role="status"
@@ -708,13 +806,13 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
         </section>
       )}
 
-      {phase === "live" && snap && <MiniOverlay photo={snap} corners={corners} fix={fix} label={L.calibration} />}
+      {phase === "live" && snap && <MiniOverlay photo={snap} corners={corners} fix={fix} boxLabels={boxLabels} label={L.calibration} />}
     </div>
   );
 }
 
 /** Small reminder of the calibration (zones over the empty-mat frame). */
-function MiniOverlay({ photo, corners, fix, label }: Readonly<{ photo: Photo; corners: Pt[]; fix: ZoneFix; label: string }>) {
+function MiniOverlay({ photo, corners, fix, boxLabels, label }: Readonly<{ photo: Photo; corners: Pt[]; fix: ZoneFix; boxLabels: (string | null)[]; label: string }>) {
   if (!corners.length) return null;
   return (
     <details className="font-body text-xs text-muted">
@@ -723,7 +821,7 @@ function MiniOverlay({ photo, corners, fix, label }: Readonly<{ photo: Photo; co
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={photo.url} alt="" className="w-full h-auto rounded-[12px]" />
         <svg viewBox={`0 0 ${photo.frame.w} ${photo.frame.h}`} className="absolute inset-0 w-full h-full" aria-hidden="true">
-          <Overlay corners={corners} w={photo.frame.w} fix={fix} />
+          <Overlay corners={corners} w={photo.frame.w} fix={fix} boxLabels={boxLabels} />
         </svg>
       </div>
     </details>

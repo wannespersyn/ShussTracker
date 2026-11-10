@@ -23,7 +23,7 @@
  * zones, silver caps) in a lit room.
  */
 
-import { FIELD_CUT, FIELD_MAMAS, FIELD_ZONES } from "@/lib/mat-geometry";
+import { FIELD_MAMAS, FIELD_ZONES } from "@/lib/mat-geometry";
 
 export const MAT_W = 824;
 export const MAT_H = 265;
@@ -863,14 +863,21 @@ export function spotAt(p: Pt): { id: string; v: number | "mama" | null } {
 /** Nudges per zone/mama after the corners (mat units): the print never lies
  * exactly where 4 corners put it (a mat that isn't flat, a wide-angle lens).
  * `s` = size (1 = as measured), around the shape's own centre.
- * Keys: "L3".."R3", "ML", "MR". */
+ * Keys: "L3".."R3", "ML", "MR", and "SB" = the size of the 4 shooting boxes. */
 export type ZoneFix = Record<string, { dx: number; dy: number; s?: number }>;
 const changed = (d?: { dx: number; dy: number; s?: number }) => Boolean(d && (d.dx || d.dy || (d.s !== undefined && d.s !== 1)));
 export const isFixed = changed;
-export const FIX_IDS: string[] = [...REAL_ZONES.map((z) => z.id), ...REAL_MAMAS.map((m) => m.id)];
+/** Shapes a cap can count in (zones and mamas). */
+const ZONE_IDS: string[] = [...REAL_ZONES.map((z) => z.id), ...REAL_MAMAS.map((m) => m.id)];
+/** Everything the zone editor can adjust. */
+export const FIX_IDS: string[] = [...ZONE_IDS, "SB"];
+/** Size range per key (the boxes were measured roughly, so they may grow more). */
+export const sizeRange = (id: string): [number, number] => (id === "SB" ? [0.5, 2.5] : [0.5, 1.5]);
 
-/** The outline of a zone or mama (mat units), with its nudge applied. */
+/** The outline of a zone or mama (mat units), with its nudge applied. "SB":
+ * the first shooting box. */
 export function fixedShape(id: string, fix?: ZoneFix | null): [number, number][] {
+  if (id === "SB") return shootingBoxes(fix)[0];
   const d = fix?.[id] ?? { dx: 0, dy: 0 };
   const pts = baseShape(id);
   const c = centre(pts);
@@ -887,15 +894,17 @@ function baseShape(id: string): [number, number][] {
 const centre = (pts: [number, number][]): Pt => ({ x: pts.reduce((s, p) => s + p[0], 0) / pts.length, y: pts.reduce((s, p) => s + p[1], 0) / pts.length });
 
 /** A point seen on the camera (mat units after the corners) → where it lies
- * on the real print. Inside a nudged zone it moves exactly with that zone;
- * elsewhere the nudges fade out with distance (every zone, nudged or not,
- * pulls), so caps between zones move smoothly. */
+ * on the real print, so the zone it counts in is the one you see on the
+ * calibration. Inside an adjusted zone it maps onto the same spot of the
+ * measured zone; outside every adjusted zone the nudges fade out with
+ * distance, and if that would still land it in a zone (a zone was made
+ * smaller, so this spot is no longer in it) it's pushed just outside. */
 export function unfix(p: Pt, fix?: ZoneFix | null): Pt {
-  if (!fix || !Object.values(fix).some(changed)) return p;
-  for (const id of FIX_IDS) {
-    const d = fix[id];
-    if (!d || !changed(d) || !inPoly(p.x, p.y, fixedShape(id, fix))) continue;
+  if (!fix || !ZONE_IDS.some((id) => changed(fix[id]))) return p;
+  for (const id of ZONE_IDS) {
+    if (!inPoly(p.x, p.y, fixedShape(id, fix))) continue;
     // Undo the nudge and the size change: back to the same spot in the measured shape.
+    const d = fix[id] ?? { dx: 0, dy: 0 };
     const c = centre(baseShape(id));
     const s = d.s ?? 1;
     return { x: c.x + (p.x - c.x - d.dx) / s, y: c.y + (p.y - c.y - d.dy) / s };
@@ -903,7 +912,7 @@ export function unfix(p: Pt, fix?: ZoneFix | null): Pt {
   let w = 0;
   let ox = 0;
   let oy = 0;
-  for (const id of FIX_IDS) {
+  for (const id of ZONE_IDS) {
     const d = fix[id] ?? { dx: 0, dy: 0 };
     const c = centre(fixedShape(id, fix));
     const k = 1 / ((p.x - c.x) ** 2 + (p.y - c.y) ** 2 + 400);
@@ -911,15 +920,45 @@ export function unfix(p: Pt, fix?: ZoneFix | null): Pt {
     ox += k * d.dx;
     oy += k * d.dy;
   }
-  return { x: p.x - ox / w, y: p.y - oy / w };
+  const q = { x: p.x - ox / w, y: p.y - oy / w };
+  // Not in any zone as calibrated → must not end up in one as measured.
+  const inside = ZONE_IDS.find((id) => inPoly(q.x, q.y, baseShape(id)));
+  if (!inside) return q;
+  const c = centre(baseShape(inside));
+  let ux = q.x - c.x;
+  let uy = q.y - c.y;
+  const len = Math.hypot(ux, uy) || 1;
+  ux /= len;
+  uy /= len;
+  for (let t = 1; t < 300; t++) {
+    const r = { x: q.x + ux * t, y: q.y + uy * t };
+    if (!ZONE_IDS.some((id) => inPoly(r.x, r.y, baseShape(id)))) return r;
+  }
+  return q;
 }
 
-/** The shooting boxes: the cut-off corners of the field (mat units). */
-export function shootingBoxes(cut = FIELD_CUT): [number, number][][] {
-  return [
-    [[0, 0], [cut, 0], [0, cut]],
-    [[MAT_W, 0], [MAT_W - cut, 0], [MAT_W, cut]],
-    [[MAT_W, MAT_H], [MAT_W - cut, MAT_H], [MAT_W, MAT_H - cut]],
-    [[0, MAT_H], [cut, MAT_H], [0, MAT_H - cut]],
-  ];
+/** Shooting box size (mat units along each edge from the corner tip). The
+ * field's corners are rounded, so a box is the white corner between the tip
+ * and that curve. */
+export const BOX_R = 64;
+
+/** The 4 shooting boxes (mat units), in MAT_CORNERS order: (0,0), (W,0),
+ * (W,H), (0,H). Size from the "SB" fix. */
+export function shootingBoxes(fix?: ZoneFix | null): [number, number][][] {
+  const R = BOX_R * (fix?.SB?.s ?? 1);
+  // Corner tip, along one edge, back along the rounded field corner, along the other edge.
+  const local: [number, number][] = [[0, 0], [R, 0]];
+  for (let k = 1; k < 8; k++) {
+    const a = -Math.PI / 2 - (k * Math.PI) / 2 / 8;
+    local.push([R + R * Math.cos(a), R + R * Math.sin(a)]);
+  }
+  local.push([0, R]);
+  const at = (cx: number, cy: number) => local.map(([x, y]): [number, number] => [cx === 0 ? x : MAT_W - x, cy === 0 ? y : MAT_H - y]);
+  return [at(0, 0), at(MAT_W, 0), at(MAT_W, MAT_H), at(0, MAT_H)];
 }
+
+/** Is a mat point in shooting box `i`? */
+export const inBox = (p: Pt, i: number, fix?: ZoneFix | null) => inPoly(p.x, p.y, shootingBoxes(fix)[i]);
+
+/** Index of the shooting box at each logger corner (lib/mat.ts Corner). */
+export const BOX_OF_CORNER: Record<"TL" | "TR" | "BL" | "BR", number> = { TR: 0, BR: 1, BL: 2, TL: 3 };

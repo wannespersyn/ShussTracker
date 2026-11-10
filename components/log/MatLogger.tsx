@@ -9,7 +9,8 @@
  * only while a throw is expected (never while the mat is cleared between
  * rounds) and starts fresh each round; every throw it sees moves the caps
  * here (placeFromCamera) and is confirmed after a short countdown, or by
- * "Throw done" after you fixed it by hand. The confirmed mat goes back to
+ * "Throw done" after you fixed it by hand. An empty camera throw (the cap
+ * left its shooting box and landed nowhere) is proposed as a miss. The confirmed mat goes back to
  * the camera session as a training label. The game itself is shared with
  * the camera too (camera_game), so the camera phone can show its log/stats.
  */
@@ -83,7 +84,7 @@ export function MatLogger({
   const [cam, setCam] = useState<{ id: string; name: string } | null>(null);
   const [cams, setCams] = useState<{ id: string; name: string; calibrating: boolean }[] | null>(null);
   /** A camera throw placed on the mat, waiting to be confirmed. */
-  const [camPending, setCamPending] = useState<{ n: number; left: number; touched: boolean; found: boolean } | null>(null);
+  const [camPending, setCamPending] = useState<{ n: number; left: number; touched: boolean; found: boolean; miss?: boolean } | null>(null);
   const camSeen = useRef<number | null>(null);
   const armedRound = useRef<number | null>(null);
   /** Camera throw number → index in st.throws it became (shared with the camera). */
@@ -165,6 +166,11 @@ export function MatLogger({
           if (!next) return;
           if (camPendingRef.current) return; // one at a time: confirm or fix the current one first
           camSeen.current = next.n;
+          if (!next.spots.length && !next.gone.length) {
+            // The cap left its box and landed nowhere: propose a miss.
+            setCamPending({ n: next.n, left: CAM_CONFIRM, touched: false, found: true, miss: true });
+            return;
+          }
           const d = structuredClone(cur);
           const found = placeFromCamera(d, next.spots.map(fromField), next.gone.map(fromField));
           setHistory((h) => [...h, cur]);
@@ -200,7 +206,7 @@ export function MatLogger({
   useEffect(() => {
     if (!camPending || camPending.touched || !camPending.found) return;
     const id = window.setTimeout(() => {
-      if (camPending.left <= 1) throwDoneRef.current(false, "auto");
+      if (camPending.left <= 1) throwDoneRef.current(camPending.miss === true, "auto");
       else setCamPending((p) => (p && p.n === camPending.n ? { ...p, left: p.left - 1 } : p));
     }, 1000);
     return () => window.clearTimeout(id);
@@ -479,7 +485,7 @@ export function MatLogger({
             <div role="status" className="flex items-center gap-2 px-3 py-2 rounded-[12px] bg-red/10 border border-red/40 font-body text-[13px]">
               <span aria-hidden="true">📹</span>
               <span className="flex-1 min-w-0">
-                {!camPending.found ? M.camNone : camPending.touched ? M.camFixing : format(M.camAuto, { s: camPending.left })}
+                {!camPending.found ? M.camNone : camPending.touched ? M.camFixing : format(camPending.miss ? M.camMiss : M.camAuto, { s: camPending.left })}
               </span>
               {camPending.found && !camPending.touched && (
                 <button type="button" onClick={() => setCamPending({ ...camPending, touched: true })} className="h-8 px-3 rounded-pill bg-surface-raised border border-line font-heading font-bold text-xs">

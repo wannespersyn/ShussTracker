@@ -419,7 +419,7 @@ export function CornerEditor({ photo, corners, onChange, labels, fix }: Readonly
 }
 
 /** The mat's zones, mamas and outline projected onto the photo. */
-export function Overlay({ corners, w, fix, focus }: Readonly<{ corners: Pt[]; w: number; fix?: ZoneFix | null; focus?: string | null }>) {
+export function Overlay({ corners, w, fix, focus, boxLabels }: Readonly<{ corners: Pt[]; w: number; fix?: ZoneFix | null; focus?: string | null; boxLabels?: (string | null)[] }>) {
   const P = (x: number, y: number) => {
     const p = toPhoto(corners, { x, y });
     return `${p.x},${p.y}`;
@@ -428,9 +428,20 @@ export function Overlay({ corners, w, fix, focus }: Readonly<{ corners: Pt[]; w:
   return (
     <g pointerEvents="none">
       <polygon points={[P(0, 0), P(MAT_W, 0), P(MAT_W, MAT_H), P(0, MAT_H)].join(" ")} fill="none" stroke="#ffb627" strokeWidth={sw * 1.4} />
-      {shootingBoxes().map((b, i) => (
-        <polygon key={`b${i}`} points={b.map(([x, y]) => P(x, y)).join(" ")} fill="rgba(255,255,255,0.18)" stroke="#fff" strokeWidth={sw} />
-      ))}
+      {shootingBoxes(fix).map((b, i) => {
+        // Label (A1, B2…) a bit inside the box, towards the corner tip.
+        const c = toPhoto(corners, { x: (b[0][0] * 2 + b[1][0] + b.at(-1)![0]) / 4, y: (b[0][1] * 2 + b[1][1] + b.at(-1)![1]) / 4 });
+        return (
+          <g key={`b${i}`}>
+            <polygon points={b.map(([x, y]) => P(x, y)).join(" ")} fill="rgba(255,255,255,0.18)" stroke={focus === "SB" ? "#ffb627" : "#fff"} strokeWidth={focus === "SB" ? sw * 2 : sw} />
+            {boxLabels?.[i] && (
+              <text x={c.x} y={c.y} textAnchor="middle" dominantBaseline="central" fontSize={sw * 14} fontWeight={800} fill="#ffb627" stroke="#000" strokeWidth={sw * 1.5} paintOrder="stroke">
+                {boxLabels[i]}
+              </text>
+            )}
+          </g>
+        );
+      })}
       {REAL_ZONES.map((z) => (
         <polygon key={z.id} points={fixedShape(z.id, fix).map(([x, y]) => P(x, y)).join(" ")} fill="rgba(79,209,255,0.12)" stroke={focus === z.id ? "#ffb627" : "#4fd1ff"} strokeWidth={focus === z.id ? sw * 2 : sw} />
       ))}
