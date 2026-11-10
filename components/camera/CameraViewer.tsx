@@ -20,6 +20,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Pt, ZoneFix } from "@/lib/camera";
 import { CornerEditor } from "@/components/camera/CameraLab";
 import { ZoneEditor } from "@/components/camera/ZoneEditor";
+import { RotateButton, useMatRotation } from "@/components/camera/rotation";
 import { CameraLog } from "@/components/camera/CameraLog";
 import { asCameraGame, boxLabelsOf, stampEvents } from "@/lib/camera-log";
 import type { CameraState } from "@/lib/db/camera";
@@ -50,6 +51,8 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
   // Throws ticked ✓ here (shown right away; the server has them on the next poll).
   const [okd, setOkd] = useState<Set<string>>(new Set());
   const [onlyTodo, setOnlyTodo] = useState(false);
+  // Turn the mat pictures the way you sit (kept on this phone).
+  const [rot, turn] = useMatRotation();
   const [images, setImages] = useState<Record<string, string | null>>({});
   // Calibration: the snapshot (per version) and the corners being set.
   const [snap, setSnap] = useState<{ version: number; url: string } | null>(null);
@@ -165,6 +168,7 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
           <span className="font-heading font-bold text-[12px] tracking-[0.14em] text-muted truncate">{crewName.toUpperCase()}</span>
           <h1 className="font-display font-extrabold text-[28px] leading-none uppercase truncate">{format(L.viewTitle, { name: state.cameraName })}</h1>
         </span>
+        <RotateButton onClick={turn} label={L.rotate} />
         <span className={cn("px-3 py-1.5 rounded-pill font-heading font-bold text-xs tracking-[0.08em]", state.live ? "bg-red text-cream" : "bg-chip text-muted")}>
           {state.live ? L.liveBadge : L.stopped}
         </span>
@@ -178,7 +182,7 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
           ) : (
             <>
               <p className="font-body text-[15px] leading-normal text-soft">{C.step2Auto}</p>
-              <CornerEditor photo={{ url: snap.url, frame: { w: state.snap.w, h: state.snap.h, data: new Uint8ClampedArray(0) } }} corners={corners} onChange={setCorners} labels={C} fix={fix} />
+              <CornerEditor photo={{ url: snap.url, frame: { w: state.snap.w, h: state.snap.h, data: new Uint8ClampedArray(0) } }} corners={corners} onChange={setCorners} labels={C} fix={fix} rot={rot} />
               <button
                 type="button"
                 disabled={sent !== "none"}
@@ -221,6 +225,7 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
                 corners={(state.phase === "watching" ? state.corners : corners)!}
                 fix={fix}
                 boxLabels={boxLabels}
+                rot={rot}
                 onChange={setFix}
               />
             </>
@@ -235,10 +240,10 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
         <section className="flex flex-col gap-3" aria-live="polite">
           <span className={kicker}>{format(L.throwN, { n: th.n })}</span>
           {fixing ? (
-            <SpotsEditor key={th.id} src={images[th.id] ?? null} initial={th.spots} gone={th.gone} C={C} L={L} onSave={(sp) => correct(th.id, sp)} onClose={() => setFixing(false)} fix={fix} boxLabels={boxLabels} />
+            <SpotsEditor key={th.id} src={images[th.id] ?? null} initial={th.spots} gone={th.gone} C={C} L={L} onSave={(sp) => correct(th.id, sp)} onClose={() => setFixing(false)} fix={fix} boxLabels={boxLabels} rot={rot} />
           ) : (
             <>
-              <MatPick src={images[th.id] ?? null} spots={th.spots} gone={th.gone} label={spotText(th.spots)} fix={fix} boxLabels={boxLabels} />
+              <MatPick src={images[th.id] ?? null} spots={th.spots} gone={th.gone} label={spotText(th.spots)} fix={fix} boxLabels={boxLabels} rot={rot} />
               <p className="font-display font-extrabold text-2xl leading-tight">
                 {th.corrected ? spotText(th.spots) : th.spots.length ? format(th.spots.length > 1 ? L.capsIn : L.capIn, { where: spotText(th.spots) }) : L.noCapQ}
               </p>

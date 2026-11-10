@@ -820,6 +820,7 @@ export const en = {
     zonesCount: "{n} adjusted",
     zoneReset: "RESET",
     zonesResetAll: "Reset all zones",
+    rotate: "Turn the mat 90°",
     todo: "TO CHECK",
     todoCount: "{n} still to check",
     onlyTodo: "TO CHECK ONLY",

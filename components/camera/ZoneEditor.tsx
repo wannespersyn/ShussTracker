@@ -16,6 +16,7 @@
 import { useState } from "react";
 import { FIX_IDS, fixedShape, isFixed, sizeRange, toPhoto, type Pt, type ZoneFix } from "@/lib/camera";
 import { Overlay, type Photo } from "@/components/camera/CameraLab";
+import { unturn, type Rot } from "@/components/camera/rotation";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/client";
 import { format } from "@/lib/i18n";
@@ -30,7 +31,8 @@ export function ZoneEditor({
   fix,
   onChange,
   boxLabels,
-}: Readonly<{ photo: Photo; corners: Pt[]; fix: ZoneFix; onChange: (f: ZoneFix) => void; boxLabels?: (string | null)[] }>) {
+  rot = 0,
+}: Readonly<{ photo: Photo; corners: Pt[]; fix: ZoneFix; onChange: (f: ZoneFix) => void; boxLabels?: (string | null)[]; rot?: Rot }>) {
   const { t } = useT();
   const C = t.cam;
   const L = t.camLive;
@@ -49,8 +51,10 @@ export function ZoneEditor({
   const unit = Math.hypot(ax, ay);
 
   /** Move the zone the way the arrow points on screen. */
-  function move(sx: number, sy: number) {
+  function move(ax0: number, ay0: number) {
     if (!det) return;
+    // The picture may be turned: the arrow's direction on the picture itself.
+    const [sx, sy] = unturn(ax0, ay0, rot);
     const px = sx * unit * (fine ? STEP.fine : STEP.coarse);
     const py = sy * unit * (fine ? STEP.fine : STEP.coarse);
     const dx = (by * px - bx * py) / det;
@@ -105,8 +109,10 @@ export function ZoneEditor({
 
       <div className="grid grid-cols-[1fr_auto] gap-3 items-center">
         <svg viewBox={`${c.x - span / 2} ${c.y - span / 2} ${span} ${span}`} className="w-full aspect-square rounded-[14px] border border-line-strong bg-black" aria-label={label(sel)}>
-          <image href={photo.url} x={0} y={0} width={w} height={h} />
-          <Overlay corners={corners} w={span * 1.5} fix={fix} focus={sel} boxLabels={boxLabels} />
+          <g transform={`rotate(${rot} ${c.x} ${c.y})`}>
+            <image href={photo.url} x={0} y={0} width={w} height={h} />
+            <Overlay corners={corners} w={span * 1.5} fix={fix} focus={sel} boxLabels={boxLabels} />
+          </g>
         </svg>
         <div className={cn("grid grid-cols-3 gap-1.5 w-44", boxes && "opacity-30 pointer-events-none")} aria-hidden={boxes}>
           <span />

@@ -819,6 +819,7 @@ export const nl: Dictionary = {
     zonesCount: "{n} bijgesteld",
     zoneReset: "RESET",
     zonesResetAll: "Alle vakken resetten",
+    rotate: "Mat 90° draaien",
     todo: "NA TE KIJKEN",
     todoCount: "nog {n} na te kijken",
     onlyTodo: "ENKEL NA TE KIJKEN",

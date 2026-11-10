@@ -37,6 +37,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BOX_OF_CORNER, DETECTOR, FULL_H, FULL_W, MAT_W, WH, WW, align, detect, findField, inBox, unfix, warp, warpFull, type Frame, type Pt, type ZoneFix } from "@/lib/camera";
 import { ZoneEditor } from "@/components/camera/ZoneEditor";
+import { RotateButton, useMatRotation } from "@/components/camera/rotation";
 import { CornerEditor, Overlay, defaultCorners, type Photo } from "@/components/camera/CameraLab";
 import { ReviewBadge, SpotsEditor, spotsLabel, warpedToJpeg, type Spot } from "@/components/camera/MatPick";
 import { CameraLog, useGameText, type CamEvent } from "@/components/camera/CameraLog";
@@ -164,6 +165,8 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
   const [corners, setCorners] = useState<Pt[]>([]);
   const [fix, setFixState] = useState<ZoneFix>(() => (typeof window === "undefined" ? {} : loadFix()));
   const [zonesOpen, setZonesOpen] = useState(false);
+  // Turn the mat pictures the way you sit (kept on this phone).
+  const [rot, turn] = useMatRotation();
   const [status, setStatus] = useState<Status>("waiting");
   const [throws, setThrows] = useState<Throw[]>([]);
   const [ask, setAsk] = useState<{ n: number; left: number } | null>(null);
@@ -648,6 +651,7 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
           <span className="font-heading font-bold text-[12px] tracking-[0.14em] text-muted">{C.kicker}</span>
           <h1 className="font-display font-extrabold text-[28px] leading-none uppercase">{L.title}</h1>
         </span>
+        {phase !== "start" && <RotateButton onClick={turn} label={L.rotate} />}
         {phase === "live" && (
           <button type="button" onClick={() => void freeze()} className="font-heading font-bold text-[13px] tracking-[0.08em] text-gold py-2">
             {L.recalibrate}
@@ -741,14 +745,14 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
           <span className={kicker}>{C.step2}</span>
           <p className="font-body text-[15px] leading-normal text-soft">{C.step2Auto}</p>
           {sessionId && <p className="font-body text-[13px] leading-normal text-gold">{L.remoteCal}</p>}
-          <CornerEditor photo={snap} corners={corners} onChange={setCorners} labels={C} fix={fix} />
+          <CornerEditor photo={snap} corners={corners} onChange={setCorners} labels={C} fix={fix} rot={rot} />
           <button type="button" aria-expanded={zonesOpen} onClick={() => setZonesOpen((o) => !o)} className="flex items-center gap-2 text-left py-1">
             <span className={kicker}>{L.zonesTitle}</span>
             {Object.keys(fix).length > 0 && <span className="font-body text-xs text-mint">{format(L.zonesCount, { n: Object.keys(fix).length })}</span>}
             <span className={cn("ml-auto text-muted transition-transform", zonesOpen && "rotate-180")}>▾</span>
           </button>
           {sessionId && <p className="font-body text-[13px] leading-normal text-gold -mt-2">{L.zonesRemoteHint}</p>}
-          {zonesOpen && <ZoneEditor photo={snap} corners={corners} fix={fix} onChange={setFix} />}
+          {zonesOpen && <ZoneEditor photo={snap} corners={corners} fix={fix} onChange={setFix} rot={rot} />}
           <button type="button" onClick={go} className={primary}>
             {L.go}
           </button>
@@ -772,6 +776,7 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
             onClose={() => setFixing(null)}
             fix={fix}
             boxLabels={boxLabels}
+            rot={rot}
           />
         </section>
       )}

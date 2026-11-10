@@ -13,7 +13,8 @@
  */
 "use client";
 
-import { useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { pointIn, rotated, type Rot } from "@/components/camera/rotation";
 import { MAT_H, MAT_W, refix, shootingBoxes, spotAt, unfix, zoneOutlines, type ZoneFix } from "@/lib/camera";
 import { format, type Dictionary } from "@/lib/i18n";
 
@@ -40,22 +41,20 @@ export function MatPick({
   onTap,
   fix,
   boxLabels,
-}: Readonly<{ src: string | null; spots: Spot[]; gone?: Spot[]; label: string; onTap?: (p: Spot) => void; fix?: ZoneFix | null; boxLabels?: (string | null)[] }>) {
+  rot = 0,
+}: Readonly<{ src: string | null; spots: Spot[]; gone?: Spot[]; label: string; onTap?: (p: Spot) => void; fix?: ZoneFix | null; boxLabels?: (string | null)[]; rot?: Rot }>) {
+  const turned = useRef<SVGGElement>(null);
   function tap(e: ReactMouseEvent<HTMLButtonElement>) {
-    const b = e.currentTarget.getBoundingClientRect();
-    // Tapped on the picture → the spot on the real print.
-    onTap?.(unfix({ x: ((e.clientX - b.left) / b.width) * MAT_W, y: ((e.clientY - b.top) / b.height) * MAT_H }, fix));
+    // Tapped on the (maybe turned) picture → the spot on the real print.
+    onTap?.(unfix(pointIn(turned.current!, e.clientX, e.clientY), fix));
   }
   const pt = (p: Spot) => refix(p, fix);
+  const view = rotated(MAT_W, MAT_H, rot);
   const body = (
     <>
-      {src ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={src} alt="" className="w-full h-auto block rounded-[12px] border border-line" />
-      ) : (
-        <div className="w-full rounded-[12px] border border-line bg-black" style={{ aspectRatio: `${MAT_W} / ${MAT_H}` }} />
-      )}
-      <svg viewBox={`0 0 ${MAT_W} ${MAT_H}`} className="absolute inset-0 w-full h-full pointer-events-none" aria-hidden="true">
+      <svg viewBox={`0 0 ${view.vw} ${view.vh}`} className="w-full h-auto max-h-[75vh] block rounded-[12px] border border-line bg-black" aria-hidden="true">
+        <g ref={turned} transform={view.transform}>
+        {src && <image href={src} x={0} y={0} width={MAT_W} height={MAT_H} preserveAspectRatio="none" />}
         {shootingBoxes(fix).map((b, i) => (
           <g key={`b${i}`}>
             <polygon points={b.map(([x, y]) => `${x},${y}`).join(" ")} fill="rgba(255,255,255,0.1)" stroke="#ffffff" strokeOpacity={0.6} strokeWidth={1.5} />
@@ -72,6 +71,7 @@ export function MatPick({
                 stroke="#000"
                 strokeWidth={4}
                 paintOrder="stroke"
+                transform={`rotate(${-rot} ${(b[0][0] * 2 + b[1][0] + b.at(-1)![0]) / 4} ${(b[0][1] * 2 + b[1][1] + b.at(-1)![1]) / 4})`}
               >
                 {boxLabels[i]}
               </text>
@@ -93,6 +93,7 @@ export function MatPick({
         {spots.map((p, i) => (
           <circle key={`s${i}`} cx={pt(p).x} cy={pt(p).y} r={22} fill="none" stroke="#ffb627" strokeWidth={4} />
         ))}
+        </g>
       </svg>
     </>
   );
@@ -139,6 +140,7 @@ export function SpotsEditor({
   onClose,
   fix,
   boxLabels,
+  rot,
 }: Readonly<{
   src: string | null;
   initial: Spot[];
@@ -149,6 +151,7 @@ export function SpotsEditor({
   onClose: () => void;
   fix?: ZoneFix | null;
   boxLabels?: (string | null)[];
+  rot?: Rot;
 }>) {
   const [draft, setDraft] = useState(initial);
   const toggle = (p: Spot) =>
@@ -160,7 +163,7 @@ export function SpotsEditor({
   return (
     <div className="flex flex-col gap-3">
       <p className="font-body text-[15px] leading-normal text-soft">{L.whereSub}</p>
-      <MatPick src={src} spots={draft} gone={gone} label={L.whereSub} onTap={toggle} fix={fix} boxLabels={boxLabels} />
+      <MatPick src={src} spots={draft} gone={gone} label={L.whereSub} onTap={toggle} fix={fix} boxLabels={boxLabels} rot={rot} />
       <p className="font-display font-extrabold text-xl leading-tight">{spotsLabel(draft, C, L)}</p>
       <button type="button" onClick={() => onSave(draft)} className="h-14 rounded-[16px] bg-amber text-ink font-heading font-extrabold text-lg tracking-[0.06em]">
         {L.save}
