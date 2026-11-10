@@ -190,6 +190,13 @@
       "when": 1794322525309,
       "tag": "0026_camera_zone_fix",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1794331674015,
+      "tag": "0027_camera_throw_checked",
+      "breakpoints": true
     }
   ]
 }

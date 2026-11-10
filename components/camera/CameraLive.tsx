@@ -38,7 +38,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { BOX_OF_CORNER, DETECTOR, FULL_H, FULL_W, MAT_W, WH, WW, align, detect, findField, inBox, unfix, warp, warpFull, type Frame, type Pt, type ZoneFix } from "@/lib/camera";
 import { ZoneEditor } from "@/components/camera/ZoneEditor";
 import { CornerEditor, Overlay, defaultCorners, type Photo } from "@/components/camera/CameraLab";
-import { SpotsEditor, spotsLabel, warpedToJpeg, type Spot } from "@/components/camera/MatPick";
+import { ReviewBadge, SpotsEditor, spotsLabel, warpedToJpeg, type Spot } from "@/components/camera/MatPick";
 import { CameraLog, useGameText, type CamEvent } from "@/components/camera/CameraLog";
 import { asCameraGame, boxLabelsOf, stampEvents, type CameraGame } from "@/lib/camera-log";
 import {
@@ -50,6 +50,7 @@ import {
   setCameraEmptyAction,
   setCameraSnapshotAction,
   setCameraZoneFixAction,
+  checkCameraThrowAction,
   startCameraSessionAction,
 } from "@/app/(app)/camera/actions";
 import { cn } from "@/lib/cn";
@@ -89,7 +90,7 @@ function loadFix(): ZoneFix {
 }
 /** Camera events kept for the log. */
 const MAX_EVENTS = 150;
-type Throw = { n: number; spots: Spot[]; gone: Spot[]; corrected: boolean; img: string | null };
+type Throw = { n: number; spots: Spot[]; gone: Spot[]; corrected: boolean; checked?: boolean; img: string | null };
 /** How often the session is synced with the crew (ms). */
 const SYNC = 1500;
 
@@ -534,6 +535,13 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
     return () => window.clearTimeout(id);
   }, [ask, fixing]);
 
+  /** ✓ on the question: the throw is right, and reviewed. */
+  function confirm(n: number) {
+    setThrows((ts) => ts.map((th) => (th.n === n ? { ...th, checked: true } : th)));
+    setAsk(null);
+    if (session.current) checkCameraThrowAction(session.current, n).catch(() => {});
+  }
+
   function correct(n: number, spots: Spot[]) {
     setThrows((ts) => ts.map((th) => (th.n === n ? { ...th, spots, corrected: true } : th)));
     setFixing(null);
@@ -576,9 +584,14 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
           setGame(g);
           if (g && stampEvents(g, seenRef.current)) setSeenAt({ ...seenRef.current });
           const remote = new Map(st.throws.filter((th) => th.corrected).map((th) => [th.n, th.spots]));
-          if (!remote.size) return;
-          setThrows((ts) => ts.map((th) => (remote.has(th.n) && !th.corrected ? { ...th, spots: remote.get(th.n) ?? [], corrected: true } : th)));
-          setAsk((a) => (a && remote.has(a.n) ? null : a));
+          const ok = new Set(st.throws.filter((th) => th.checked).map((th) => th.n));
+          if (!remote.size && !ok.size) return;
+          setThrows((ts) =>
+            ts.map((th) =>
+              remote.has(th.n) && !th.corrected ? { ...th, spots: remote.get(th.n) ?? [], corrected: true } : ok.has(th.n) && !th.checked ? { ...th, checked: true } : th,
+            ),
+          );
+          setAsk((a) => (a && (remote.has(a.n) || ok.has(a.n)) ? null : a));
         })
         .catch(() => {});
     }, SYNC);
@@ -768,7 +781,7 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
           <span className={kicker}>{format(L.throwN, { n: asked.n })}</span>
           <p className="font-display font-extrabold text-2xl leading-tight">{asked.spots.length ? format(asked.spots.length > 1 ? L.capsIn : L.capIn, { where: spotText(asked.spots) }) : asked.gone.length ? format(L.noCapGoneQ, { n: asked.gone.length }) : L.noCapQ}</p>
           <div className="grid grid-cols-2 gap-2">
-            <button type="button" onClick={() => setAsk(null)} className="h-12 rounded-[14px] bg-mint text-ink font-heading font-extrabold text-base tracking-[0.06em]">
+            <button type="button" onClick={() => confirm(asked.n)} className="h-12 rounded-[14px] bg-mint text-ink font-heading font-extrabold text-base tracking-[0.06em]">
               ✓ {format(L.right, { s: ask!.left })}
             </button>
             <button type="button" onClick={() => setFixing(asked.n)} className={secondary}>
@@ -788,7 +801,10 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
 
       {phase === "live" && throws.length > 0 && (
         <section className="flex flex-col gap-1.5">
-          <span className={kicker}>{L.history}</span>
+          <span className="flex items-baseline gap-2">
+            <span className={kicker}>{L.history}</span>
+            <span className="font-body text-xs text-muted">{format(L.todoCount, { n: throws.filter((th) => !th.corrected && !th.checked).length })}</span>
+          </span>
           {throws.map((th) => (
             <button
               key={th.n}
@@ -798,7 +814,7 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
             >
               <span className="font-heading font-extrabold text-sm text-gold w-14">{format(C.throwShort, { n: th.n })}</span>
               <span className="flex-1 min-w-0 truncate font-body text-sm">{throwText(th)}</span>
-              {th.corrected && <span className="font-heading font-bold text-[11px] tracking-[0.08em] text-muted">{L.fixed}</span>}
+              <ReviewBadge corrected={th.corrected} checked={th.checked === true} L={L} />
             </button>
           ))}
         </section>

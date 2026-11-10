@@ -23,7 +23,7 @@ import { ZoneEditor } from "@/components/camera/ZoneEditor";
 import { CameraLog } from "@/components/camera/CameraLog";
 import { asCameraGame, boxLabelsOf, stampEvents } from "@/lib/camera-log";
 import type { CameraState } from "@/lib/db/camera";
-import { MatPick, SpotsEditor, spotsLabel, type Spot } from "@/components/camera/MatPick";
+import { MatPick, ReviewBadge, SpotsEditor, spotsLabel, type Spot } from "@/components/camera/MatPick";
 import {
   correctCameraThrowAction,
   getCameraSnapshotAction,
@@ -32,6 +32,7 @@ import {
   requestCameraSnapshotAction,
   setCameraCornersAction,
   setCameraZoneFixAction,
+  checkCameraThrowAction,
 } from "@/app/(app)/camera/actions";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/client";
@@ -46,7 +47,9 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
   const [state, setState] = useState(initial);
   const [open, setOpen] = useState<string | null>(initial.throws[0]?.id ?? null);
   const [fixing, setFixing] = useState(false);
+  // Throws ticked ✓ here (shown right away; the server has them on the next poll).
   const [okd, setOkd] = useState<Set<string>>(new Set());
+  const [onlyTodo, setOnlyTodo] = useState(false);
   const [images, setImages] = useState<Record<string, string | null>>({});
   // Calibration: the snapshot (per version) and the corners being set.
   const [snap, setSnap] = useState<{ version: number; url: string } | null>(null);
@@ -123,6 +126,23 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
 
   const th = state.throws.find((x) => x.id === open);
   const spotText = (sp: Spot[]) => spotsLabel(sp, C, L);
+
+  const isChecked = (x: { id: string; checked: boolean }) => x.checked || okd.has(x.id);
+  const todo = state.throws.filter((x) => !x.corrected && !isChecked(x));
+  /** Open the next throw still to check (oldest first), if any. */
+  function nextTodo(after: string) {
+    const next = [...todo].reverse().find((x) => x.id !== after);
+    if (next) {
+      setOpen(next.id);
+      setFixing(false);
+    }
+  }
+  /** ✓: right as the camera judged it — reviewed, on to the next one. */
+  function check(x: { id: string; n: number }) {
+    setOkd((s) => new Set(s).add(x.id));
+    checkCameraThrowAction(initial.id, x.n).catch(() => {});
+    nextTodo(x.id);
+  }
 
   function correct(id: string, spots: Spot[]) {
     setState((st) => ({ ...st, throws: st.throws.map((x) => (x.id === id ? { ...x, spots, corrected: true } : x)) }));
@@ -222,13 +242,13 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
               <p className="font-display font-extrabold text-2xl leading-tight">
                 {th.corrected ? spotText(th.spots) : th.spots.length ? format(th.spots.length > 1 ? L.capsIn : L.capIn, { where: spotText(th.spots) }) : L.noCapQ}
               </p>
-              {th.corrected || okd.has(th.id) ? (
+              {th.corrected || th.checked || okd.has(th.id) ? (
                 <button type="button" onClick={() => setFixing(true)} className={secondary}>
                   {L.change}
                 </button>
               ) : (
                 <div className="grid grid-cols-2 gap-2">
-                  <button type="button" onClick={() => setOkd((s) => new Set(s).add(th.id))} className="h-12 rounded-[14px] bg-mint text-ink font-heading font-extrabold text-base tracking-[0.06em]">
+                  <button type="button" onClick={() => check(th)} className="h-12 rounded-[14px] bg-mint text-ink font-heading font-extrabold text-base tracking-[0.06em]">
                     ✓ {L.rightShort}
                   </button>
                   <button type="button" onClick={() => setFixing(true)} className={secondary}>
@@ -245,8 +265,19 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
 
       {state.throws.length > 0 && (
         <section className="flex flex-col gap-1.5">
-          <span className={kicker}>{L.history}</span>
-          {state.throws.map((x) => (
+          <div className="flex items-center gap-2">
+            <span className={kicker}>{L.history}</span>
+            <span className="font-body text-xs text-muted">{format(L.todoCount, { n: todo.length })}</span>
+            <button
+              type="button"
+              aria-pressed={onlyTodo}
+              onClick={() => setOnlyTodo((o) => !o)}
+              className={cn("ml-auto h-8 px-3 rounded-pill font-heading font-bold text-xs tracking-[0.06em]", onlyTodo ? "bg-amber text-ink" : "bg-surface-deep border border-line text-soft")}
+            >
+              {L.onlyTodo}
+            </button>
+          </div>
+          {state.throws.filter((x) => !onlyTodo || (!x.corrected && !isChecked(x))).map((x) => (
             <button
               key={x.id}
               type="button"
@@ -259,7 +290,7 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
             >
               <span className="font-heading font-extrabold text-sm text-gold w-14">{format(C.throwShort, { n: x.n })}</span>
               <span className="flex-1 min-w-0 truncate font-body text-sm">{spotText(x.spots)}</span>
-              {x.corrected && <span className="font-heading font-bold text-[11px] tracking-[0.08em] text-muted">{L.fixed}</span>}
+              <ReviewBadge corrected={x.corrected} checked={isChecked(x)} L={L} />
             </button>
           ))}
         </section>

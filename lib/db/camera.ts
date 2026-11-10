@@ -13,7 +13,7 @@
  * camera_zone_fix (per-zone nudges, set on the camera or from another phone).
  */
 import { put } from "@vercel/blob";
-import { and, desc, eq, gt, sql } from "drizzle-orm";
+import { and, desc, eq, gt, isNotNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { cameraGames, cameraSessions, cameraThrows, cameraZoneFixes, groupMembers, users } from "@/lib/db/schema";
 
@@ -33,6 +33,8 @@ export type CameraThrow = {
   /** Where caps were knocked away from. */
   gone: Spot[];
   corrected: boolean;
+  /** Someone tapped ✓ on it (or the logger confirmed it by hand). */
+  checked: boolean;
   createdAt: Date;
 };
 export type CameraState = {
@@ -136,7 +138,7 @@ export async function getCameraState(userId: string, sessionId: string): Promise
   if (s.userId === userId && s.live) await db.update(cameraSessions).set({ updatedAt: new Date() }).where(eq(cameraSessions.id, sessionId));
   const [rows, cam, logger] = await Promise.all([
     db
-      .select({ id: cameraThrows.id, n: cameraThrows.n, found: cameraThrows.found, spots: cameraThrows.spots, gone: cameraThrows.gone, correctedBy: cameraThrows.correctedBy, createdAt: cameraThrows.createdAt })
+      .select({ id: cameraThrows.id, n: cameraThrows.n, found: cameraThrows.found, spots: cameraThrows.spots, gone: cameraThrows.gone, correctedBy: cameraThrows.correctedBy, labelHow: cameraThrows.labelHow, createdAt: cameraThrows.createdAt })
       .from(cameraThrows)
       .where(eq(cameraThrows.sessionId, sessionId))
       .orderBy(desc(cameraThrows.n))
@@ -144,7 +146,7 @@ export async function getCameraState(userId: string, sessionId: string): Promise
     db.query.users.findFirst({ where: eq(users.id, s.userId), columns: { name: true } }),
     s.loggerId ? db.query.users.findFirst({ where: eq(users.id, s.loggerId), columns: { id: true, name: true } }) : Promise.resolve(undefined),
   ]);
-  const [game, zoneFix] = await Promise.all([s.loggerId ? getCameraGame(sessionId) : Promise.resolve(null), getCameraZoneFix(sessionId)]);
+  const [game, zoneFix, checked] = await Promise.all([s.loggerId ? getCameraGame(sessionId) : Promise.resolve(null), getCameraZoneFix(sessionId), getCheckedThrows(sessionId)]);
   return {
     id: s.id,
     groupId: s.groupId,
@@ -166,7 +168,8 @@ export async function getCameraState(userId: string, sessionId: string): Promise
       found: r.found,
       spots: r.spots,
       gone: r.gone,
-      corrected: r.correctedBy !== null,
+      corrected: r.correctedBy !== null || r.labelHow === "corrected",
+      checked: checked.has(r.id) || r.labelHow === "confirmed",
       createdAt: r.createdAt,
     })),
   };
@@ -314,4 +317,26 @@ export async function setCameraZoneFix(userId: string, sessionId: string, fix: R
     .onConflictDoUpdate({ target: cameraZoneFixes.sessionId, set: { fix, version: sql`${cameraZoneFixes.version} + 1`, updatedAt: new Date() } })
     .returning();
   return row.version;
+}
+
+/** Throws someone ticked ✓ (empty when the column isn't migrated yet). */
+async function getCheckedThrows(sessionId: string): Promise<Set<string>> {
+  try {
+    const rows = await db
+      .select({ id: cameraThrows.id })
+      .from(cameraThrows)
+      .where(and(eq(cameraThrows.sessionId, sessionId), isNotNull(cameraThrows.checkedBy)));
+    return new Set(rows.map((r) => r.id));
+  } catch {
+    return new Set();
+  }
+}
+
+/** Anyone in the crew (the camera too) says a throw is right. */
+export async function checkCameraThrow(userId: string, sessionId: string, n: number) {
+  await sessionFor(userId, sessionId);
+  await db
+    .update(cameraThrows)
+    .set({ checkedBy: userId })
+    .where(and(eq(cameraThrows.sessionId, sessionId), eq(cameraThrows.n, n)));
 }

@@ -6,6 +6,8 @@
  * were knocked away from dashed. Optionally tappable (mat units, 824 × 265).
  * SpotsEditor builds on it to fix a throw: tap to add a cap, tap a circle to
  * remove it, then save. spotsLabel turns spots into "R3 (3 pt) + L2 (2 pt)".
+ * ReviewBadge shows whether a throw was checked: ✓ right, ✎ fixed, or still
+ * to check.
  * With the zone fine-tuning (`fix`) the zones are drawn as calibrated, and
  * the stored spots (on the real print) are drawn where the camera saw them.
  */
@@ -171,4 +173,14 @@ export function SpotsEditor({
       </button>
     </div>
   );
+}
+
+/** Whether a throw was looked at: ✓ right, ✎ fixed, or still to check. */
+export function ReviewBadge({ corrected, checked, L }: Readonly<{ corrected: boolean; checked: boolean; L: Dictionary["camLive"] }>) {
+  const [text, cls] = corrected
+    ? [`✎ ${L.fixed}`, "bg-gold/15 text-gold border-gold/40"]
+    : checked
+      ? [`✓ ${L.rightShort}`, "bg-mint/15 text-mint border-mint/40"]
+      : [`• ${L.todo}`, "bg-surface-raised text-muted border-line"];
+  return <span className={`shrink-0 px-2 py-0.5 rounded-pill border font-heading font-bold text-[11px] tracking-[0.08em] ${cls}`}>{text}</span>;
 }

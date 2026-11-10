@@ -759,6 +759,8 @@ export const cameraThrows = pgTable(
     // Where caps were knocked away from.
     gone: jsonb("gone").$type<{ x: number; y: number }[]>().notNull().default([]),
     correctedBy: uuid("corrected_by").references(() => users.id, { onDelete: "set null" }),
+    // Someone looked at the throw and said it's right (✓), so it's reviewed.
+    checkedBy: uuid("checked_by").references(() => users.id, { onDelete: "set null" }),
     // Full-size top-down picture after the throw (824 × 265 JPEG in Blob,
     // only when shared) and the detector that judged it.
     imageUrl: text("image_url"),

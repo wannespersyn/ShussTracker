@@ -28,6 +28,7 @@ import {
   getLiveCameras,
   setCameraGame,
   setCameraZoneFix,
+  checkCameraThrow,
   startCameraSession,
 } from "@/lib/db/camera";
 
@@ -150,4 +151,10 @@ export async function setCameraZoneFixAction(sessionId: string, fix: Record<stri
     Object.entries(fix).map(([k, d]) => [k, { dx: Math.round(d.dx * 10) / 10, dy: Math.round(d.dy * 10) / 10, ...(d.s !== undefined ? { s: Math.round(d.s * 100) / 100 } : {}) }]),
   );
   return setCameraZoneFix(userId, sessionId, clean);
+}
+
+/** A throw is right as the camera judged it (✓): it counts as reviewed. */
+export async function checkCameraThrowAction(sessionId: string, n: number) {
+  if (!Number.isInteger(n) || n < 1) throw new Error("Bad throw");
+  await checkCameraThrow(await requireUserId(), sessionId, n);
 }
