@@ -8,7 +8,9 @@ import { notFound } from "next/navigation";
 import { requireGroupMember, requireSession } from "@/lib/db/authz";
 import { getCrew, getCrewInsights } from "@/lib/db/crew-insights";
 import { getCrewGuests } from "@/lib/db/guests";
-import { getGroupTournaments } from "@/lib/db/tournaments";
+import { getCrewEvents } from "@/lib/db/crew-events";
+import { getLiveCameras } from "@/lib/db/camera";
+import { CrewEventRow, NewEventButtons } from "@/components/crews/CrewEvents";
 import { addGuestAction, removeGuestAction } from "./guests/actions";
 import { leaveCrew } from "@/app/(app)/crews/actions";
 import { getLocale, getT } from "@/lib/i18n/server";
@@ -19,7 +21,7 @@ import { wilsonLowerBound } from "@/lib/ranking";
 import { isPro } from "@/lib/plan";
 import { ConfirmForm } from "@/components/ui";
 import { AddGuestDialog } from "@/components/crews/AddGuestDialog";
-import { ChevronRightIcon, SettingsIcon, TrophyIcon } from "@/components/ui/icons";
+import { SettingsIcon } from "@/components/ui/icons";
 import { Chip, FormDots, IconButton, Kicker, MoveChip, Screen, SegmentLinks, TextTabs } from "@/components/v2";
 
 const GRID = "grid grid-cols-[28px_minmax(0,1fr)_56px_46px_54px] gap-1.5 items-center";
@@ -41,10 +43,11 @@ export default async function CrewPage({
   const group = await getCrew(crewId);
   if (!group) notFound();
 
-  const [insights, guests, tournamentList, t, locale] = await Promise.all([
+  const [insights, guests, events, cameras, t, locale] = await Promise.all([
     getCrewInsights(crewId),
     getCrewGuests(crewId),
-    getGroupTournaments(crewId),
+    getCrewEvents(crewId, { limit: 12 }),
+    getLiveCameras(crewId),
     getT(),
     getLocale(),
   ]);
@@ -54,7 +57,7 @@ export default async function CrewPage({
   const showDuos = view === "duos";
   const ranked = insights.players.filter((p) => p.games > 0);
   const unplayed = insights.players.filter((p) => p.games === 0);
-  const activeTournaments = tournamentList.filter((x) => x.status !== "completed");
+  const eventDate = new Intl.DateTimeFormat(locale === "nl" ? "nl-BE" : "en-GB", { day: "numeric", month: "short", timeZone: "Europe/Brussels" });
   const since = insights.firstGameAt
     ? new Intl.DateTimeFormat(locale === "nl" ? "nl-BE" : "en-GB", { day: "numeric", month: "short" }).format(insights.firstGameAt).replace("Sept", "Sep")
     : null;
@@ -107,6 +110,14 @@ export default async function CrewPage({
         ]}
       />
 
+      {cameras.map((c) => (
+        <Link key={c.id} href={`/camera/view/${c.id}`} className="flex items-center gap-3 px-4 py-3 rounded-[16px] bg-surface-deep border border-red/50">
+          <span className="w-2.5 h-2.5 rounded-full bg-red animate-pulse" aria-hidden="true" />
+          <span className="flex-1 font-heading font-extrabold text-sm tracking-[0.06em]">{format(c.calibrating ? t.camLive.crewCardCal : t.camLive.crewCard, { name: c.name })}</span>
+          <span aria-hidden="true" className="text-gold text-lg">→</span>
+        </Link>
+      ))}
+
       <SegmentLinks
         options={[
           { href: `/crews/${crewId}`, label: t.crew.players, active: !showDuos },
@@ -136,19 +147,20 @@ export default async function CrewPage({
       </section>
       {showDuos && minDuoGames > 1 && <span className="font-body text-xs text-muted -mt-1.5">{format(t.crew.minGames, { n: minDuoGames })}</span>}
 
-      <Link
-        href={activeTournaments[0] ? `/tournaments/${activeTournaments[0].id}` : `/tournaments/new?crewId=${crewId}`}
-        className="flex items-center gap-3 px-3.5 py-3 rounded-[16px] bg-surface-deep border border-line text-cream"
-      >
-        <span className="w-10 h-10 rounded-md bg-surface-raised text-gold flex items-center justify-center">
-          <TrophyIcon className="w-5 h-5" />
-        </span>
-        <span className="flex-1 min-w-0 flex flex-col">
-          <span className="font-body font-semibold text-[15px] truncate">{activeTournaments[0]?.name ?? t.crew.tournament}</span>
-          <span className="font-body text-xs text-muted">{t.crew.tournamentSub}</span>
-        </span>
-        <ChevronRightIcon className="w-4 h-4 text-muted" />
-      </Link>
+      <section aria-label={t.ev.title} className="flex flex-col gap-2">
+        <div className="flex items-baseline justify-between">
+          <Kicker>{t.ev.title}</Kicker>
+          {events.length > 0 && (
+            <Link href={`/crews/${crewId}/tournaments`} className="py-1.5 font-heading font-bold text-[13px] tracking-[0.1em] text-gold">
+              {t.ev.all}
+            </Link>
+          )}
+        </div>
+        {[...events.filter((e) => e.live), ...events.filter((e) => !e.live).slice(0, 2)].map((e) => (
+          <CrewEventRow key={e.id} e={e} ev={t.ev} date={eventDate.format(e.createdAt)} />
+        ))}
+        <NewEventButtons crewId={crewId} ev={t.ev} />
+      </section>
 
       <section id="guests" className="flex flex-col gap-2 scroll-mt-4" aria-label={t.common.guest}>
         <Kicker>{t.common.guest}</Kicker>

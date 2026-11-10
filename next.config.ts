@@ -1,7 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  experimental: {
+    // Camera beta: the empty-mat snapshot goes up through a server action.
+    serverActions: { bodySizeLimit: "2mb" },
+  },
 };
 
 export default nextConfig;

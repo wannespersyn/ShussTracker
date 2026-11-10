@@ -47,6 +47,10 @@ export function BottomNav({ currentUserId }: Readonly<{ currentUserId: string }>
   if (
     pathname.startsWith("/log") ||
     /\/tournaments\/[^/]+\/match\//.test(pathname) ||
+    pathname === "/americano/new" ||
+    /\/americano\/[^/]+\/game\//.test(pathname) ||
+    /\/americano\/[^/]+\/tv$/.test(pathname) ||
+    /\/americano\/[^/]+\/manage$/.test(pathname) ||
     pathname.endsWith("/recap") ||
     pathname.startsWith("/game/") ||
     pathname.endsWith("/sessions") ||
@@ -54,6 +58,7 @@ export function BottomNav({ currentUserId }: Readonly<{ currentUserId: string }>
     pathname === "/feedback" ||
     pathname.endsWith("/manage") ||
     pathname.startsWith("/chwazi") ||
+    pathname.startsWith("/camera") ||
     pathname === "/stats" ||
     pathname === "/crews/join" ||
     pathname.includes("/vs/") ||

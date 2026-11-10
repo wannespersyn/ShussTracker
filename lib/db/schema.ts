@@ -9,6 +9,7 @@ import {
   date,
   primaryKey,
   unique,
+  jsonb,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
@@ -102,6 +103,8 @@ export const fieldHitEnum = pgEnum("field_hit", [
   "3",
   "mama",
   "miss",
+  // Landed in a mama but shot out of it later that round: not counted as a mama.
+  "mama_out",
 ]);
 
 export const crewPlanEnum = pgEnum("crew_plan", ["free", "founding", "pro"]);
@@ -164,6 +167,10 @@ export const gameTeams = pgTable("game_team", {
     .references(() => games.id, { onDelete: "cascade" }),
   teamLabel: text("team_label").notNull(),
   finalRank: integer("final_rank"),
+  // Kruipen: this (losing) team didn't get to drink anything before the
+  // winners emptied their pints. Set automatically by the mat logger, or
+  // ticked by hand when logging; stats count it for every player in the team.
+  kruip: boolean("kruip").notNull().default(false),
 });
 
 // Team size (1 player for a 2-player head-to-head mat, 2 for a 4/8-player
@@ -218,6 +225,11 @@ export const gameRounds = pgTable("game_round", {
   number: integer("number").notNull(),
   // False for the round that was still going when a team emptied its pints.
   complete: boolean("complete").notNull().default(true),
+  // A team played its (one per game) joker on this round: nobody drinks, mama included.
+  // The per-team sips/mama rows keep what *would* have been drunk.
+  jokerTeamId: uuid("joker_team_id").references(() => gameTeams.id, { onDelete: "set null" }),
+  // Third round in a row with nothing to drink: everyone ad fundum.
+  allDrink: boolean("all_drink").notNull().default(false),
 });
 
 /** Drinking result of a round per team: sips from caps lying in that team's
@@ -397,6 +409,82 @@ export const tournamentMatches = pgTable(
   },
   (t) => [unique().on(t.tournamentId, t.bracket, t.round, t.slot)],
 );
+
+/* -----------------------------------------------------------------------
+ * Rotation tournaments (Americano / Mexicano) — "everybody plays with
+ * everybody": individual players, not fixed duos. Each round splits the
+ * active players into 2v2 games (the rest sit out); a played game is a
+ * normal `game` row linked back here, so it counts for every stat.
+ * --------------------------------------------------------------------- */
+
+export const rotationModeEnum = pgEnum("rotation_mode", ["americano", "mexicano"]);
+
+export const rotations = pgTable("rotation", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  groupId: uuid("group_id")
+    .notNull()
+    .references(() => groups.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  mode: rotationModeEnum("mode").notNull(),
+  // Games that can run at the same time tonight (one per mat).
+  mats: integer("mats").notNull().default(1),
+  // Planned rounds (Americano: all generated up front; Mexicano: the cap).
+  rounds: integer("rounds").notNull(),
+  // Standings order after win %: comma list of "wins" | "mama" | "elo" | "pct".
+  tiebreaks: text("tiebreaks").notNull().default("pct,wins,mama,elo"),
+  status: tournamentStatusEnum("status").notNull().default("active"),
+  createdBy: uuid("created_by")
+    .notNull()
+    .references(() => users.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const rotationPlayers = pgTable(
+  "rotation_player",
+  {
+    rotationId: uuid("rotation_id")
+      .notNull()
+      .references(() => rotations.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    // False once they stopped: no new games, their played games still count.
+    active: boolean("active").notNull().default(true),
+    // First round they could play (later for someone who joined mid-way).
+    joinedRound: integer("joined_round").notNull().default(1),
+  },
+  (t) => [primaryKey({ columns: [t.rotationId, t.userId] })],
+);
+
+/** One planned 2v2 in a round (`idx` = order within the round). Players who
+ * are in the rotation but not in any game of a round sat that round out. */
+export const rotationGames = pgTable(
+  "rotation_game",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    rotationId: uuid("rotation_id")
+      .notNull()
+      .references(() => rotations.id, { onDelete: "cascade" }),
+    round: integer("round").notNull(),
+    idx: integer("idx").notNull(),
+    a1: uuid("a1").notNull().references(() => users.id),
+    a2: uuid("a2").notNull().references(() => users.id),
+    b1: uuid("b1").notNull().references(() => users.id),
+    b2: uuid("b2").notNull().references(() => users.id),
+    gameId: uuid("game_id").references(() => games.id, { onDelete: "set null" }),
+  },
+  (t) => [unique().on(t.rotationId, t.round, t.idx)],
+);
+
+/** A player's own stats page: screens of blocks (see lib/stats-layout.ts),
+ * validated on every save. No row = the default layout. */
+export const statsLayouts = pgTable("stats_layout", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  layout: jsonb("layout").notNull(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
 
 /* -----------------------------------------------------------------------
  * Feedback & feature requests — the in-app "help build Shussapp" inbox.
@@ -608,3 +696,81 @@ export const feedbackVotesRelations = relations(feedbackVotes, ({ one }) => ({
   feedback: one(feedback, { fields: [feedbackVotes.feedbackId], references: [feedback.id] }),
   user: one(users, { fields: [feedbackVotes.userId], references: [users.id] }),
 }));
+
+/* -----------------------------------------------------------------------
+ * Camera (beta): a phone fixed above the mat streams its throws to the crew,
+ * so others can follow and correct them from their own phone.
+ * --------------------------------------------------------------------- */
+
+export const cameraSessions = pgTable("camera_session", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  groupId: uuid("group_id")
+    .notNull()
+    .references(() => groups.id, { onDelete: "cascade" }),
+  // The player whose phone is the camera.
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  // Live until stopped; "live" also needs a recent heartbeat (updatedAt).
+  live: boolean("live").notNull().default(true),
+  // "calibrating" (waiting for corners on the empty-mat snapshot) → "watching".
+  phase: text("phase").notNull().default("calibrating"),
+  // Empty-mat snapshot (JPEG data URL) so anyone in the crew can set the
+  // corners from their own phone or laptop; the version bumps per snapshot.
+  snapshot: text("snapshot"),
+  snapW: integer("snap_w"),
+  snapH: integer("snap_h"),
+  snapVersion: integer("snap_version").notNull().default(0),
+  // Someone asked the camera for a new snapshot (counter).
+  snapRequest: integer("snap_request").notNull().default(0),
+  // Field corners on the snapshot (photo pixels, mat order).
+  corners: jsonb("corners").$type<{ x: number; y: number }[]>(),
+  // "test" until a mat logger links it to a game; only "game" data is used
+  // for training.
+  kind: text("kind").notNull().default("test"),
+  // The player logging the game in the mat logger (null = camera on its own).
+  loggerId: uuid("logger_id").references(() => users.id, { onDelete: "set null" }),
+  // Linked to a logger, the camera only judges throws while armed (a throw is
+  // expected); a bump of armVersion = start from the mat as it is now (after
+  // clearing it for a new round).
+  armed: boolean("armed").notNull().default(false),
+  armVersion: integer("arm_version").notNull().default(0),
+  // The camera's owner agreed to keep top-down pictures of the mat for
+  // training (Vercel Blob); the empty mat as the reference picture.
+  shareImages: boolean("share_images").notNull().default(false),
+  emptyUrl: text("empty_url"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const cameraThrows = pgTable(
+  "camera_throw",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => cameraSessions.id, { onDelete: "cascade" }),
+    n: integer("n").notNull(),
+    // Caps that landed or moved there in this throw (mat units, 824 × 265):
+    // what the camera found, and the final list (corrected or not). One
+    // throw can move several caps (the thrown one knocks another).
+    found: jsonb("found").$type<{ x: number; y: number }[]>().notNull().default([]),
+    spots: jsonb("spots").$type<{ x: number; y: number }[]>().notNull().default([]),
+    // Where caps were knocked away from.
+    gone: jsonb("gone").$type<{ x: number; y: number }[]>().notNull().default([]),
+    correctedBy: uuid("corrected_by").references(() => users.id, { onDelete: "set null" }),
+    // Full-size top-down picture after the throw (824 × 265 JPEG in Blob,
+    // only when shared) and the detector that judged it.
+    imageUrl: text("image_url"),
+    detector: text("detector"),
+    // Training label: every cap on the mat after the throw (field units,
+    // with owner slot), as confirmed in the mat logger, and how sure it is:
+    // "corrected" (moved by hand), "confirmed" (tapped done), "auto".
+    label: jsonb("label").$type<{ x: number; y: number; owner: string; no: number }[]>(),
+    labelHow: text("label_how"),
+    // Small top-down JPEG (data URL) of the mat after the throw.
+    image: text("image"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [unique("camera_throw_session_n").on(t.sessionId, t.n)],
+);

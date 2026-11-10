@@ -1,3 +1,11 @@
+/**
+ * Game persistence
+ *
+ * Writes a finished game (teams, players, shots, kruip and the beta
+ * mat log) in one atomic batch, and reads a game back for rematches.
+ *
+ * Data: Drizzle inserts via runAtomic; ids are generated up front.
+ */
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
@@ -6,13 +14,14 @@ import { capMoves, gameRounds, gameRoundTeams, gameThrows, games, gameTeams, gam
 import type { MatGameLog } from "@/lib/mat";
 import { assertValidTeamSize } from "@/lib/db/authz";
 
-export type FieldHit = "1" | "2" | "3" | "mama" | "miss";
+export type FieldHit = "1" | "2" | "3" | "mama" | "mama_out" | "miss";
 
 /** One logged cap. `defense` = it came from a defending flick; `ownGoal` =
  * it ended in a zone scoring for the other team (see schema `shot`). */
 export type ShotInput = { playerId: string; fieldHit: FieldHit; defense?: boolean; ownGoal?: boolean };
 
-export type GameTeamInput = { label: string; playerIds: string[]; finalRank: number };
+/** `kruip`: this losing team didn't drink anything (ignored for the winner). */
+export type GameTeamInput = { label: string; playerIds: string[]; finalRank: number; kruip?: boolean };
 
 export type CreateGameInput = {
   groupId: string;
@@ -64,6 +73,7 @@ export async function createGameRecord(
         gameId,
         teamLabel: team.label,
         finalRank: team.finalRank,
+        kruip: team.finalRank !== 1 && team.kruip === true,
       }),
     ),
     ...teamInserts.flatMap(({ gameTeamId, team }) =>
@@ -123,7 +133,7 @@ function matRows(log: MatGameLog, teamIds: string[], gtp: Map<string, string>, g
   const moves: (typeof capMoves.$inferInsert)[] = [];
   for (const r of log.rounds) {
     const roundId = randomUUID();
-    rounds.push({ id: roundId, gameId, number: r.number, complete: r.complete });
+    rounds.push({ id: roundId, gameId, number: r.number, complete: r.complete, jokerTeamId: team(r.jokerTeam), allDrink: r.allDrink });
     r.teams.forEach((x, i) => teamIds[i] && roundTeams.push({ roundId, gameTeamId: teamIds[i], sips: x.sips, mama: x.mama }));
     for (const t of r.throws) {
       const throwId = randomUUID();

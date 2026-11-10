@@ -2,7 +2,7 @@ import type { DuoInsight, PlayerInsight, SessionInsight } from "@/lib/insights";
 import { firstName } from "@/lib/insights";
 import { format, type Dictionary } from "@/lib/i18n";
 
-/* v2 achievements: 16 badges in four categories, each with progress, all
+/* v2 achievements: 18 badges in four categories, each with progress, all
  * derived from the crew insights (so they always agree with the other
  * screens). Copy comes from the active dictionary (`t.ach`). */
 
@@ -60,6 +60,8 @@ export function achievementsFor(
     { id: "sharpshooter", cat: "shots", name: a.sharpshooter, desc: a.sharpshooterDesc, icon: "target", have: p.feats.maxMamaGame, need: 3 },
     { id: "dead-eye", cat: "shots", name: a.deadEye, desc: a.deadEyeDesc, icon: "target", have: p.feats.maxMamaNight, need: 5 },
     { id: "red-zone", cat: "shots", name: a.redZone, desc: a.redZoneDesc, icon: "target", have: p.mama, need: 25 },
+    { id: "first-kruip", cat: "games", name: a.firstKruip, desc: a.firstKruipDesc, icon: "target", have: p.kruipen, need: 1 },
+    { id: "kruip-king", cat: "games", name: a.kruipKing, desc: format(a.kruipKingDesc, { crew: ctx.crewName }), icon: "crown", have: p.feats.kruipKing ? 1 : 0, need: 1 },
     { id: "chug", cat: "shots", name: a.chug, desc: format(a.chugDesc, { crew: ctx.crewName }), icon: "crown", have: chug, need: 1 },
     { id: "mvp", cat: "social", name: a.mvp, desc: a.mvpDesc, icon: "star", have: p.feats.mvpNights, need: 1 },
     { id: "crowd", cat: "social", name: a.crowd, desc: a.crowdDesc, icon: "flame", have: ctx.reactions, need: 50 },

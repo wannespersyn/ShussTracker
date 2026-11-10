@@ -1,3 +1,9 @@
+/**
+ * Tournament match action
+ *
+ * Stores a played tournament match as a normal game (so it counts for Elo
+ * and stats, incl. kruip) and advances the bracket.
+ */
 "use server";
 
 import { after } from "next/server";
@@ -18,6 +24,8 @@ export type PlayTournamentMatchInput = {
   teamB: { entrantId: string; playerIds: [string, string] };
   winnerEntrantId: string;
   shotsByPlayer: ShotInput[];
+  /** Entrant id of the losing team when it had to kruip. */
+  kruipEntrantId?: string | null;
 };
 
 export async function playTournamentMatch(input: PlayTournamentMatchInput) {
@@ -41,11 +49,13 @@ export async function playTournamentMatch(input: PlayTournamentMatchInput) {
         label: "A",
         playerIds: input.teamA.playerIds,
         finalRank: input.winnerEntrantId === input.teamA.entrantId ? 1 : 2,
+        kruip: input.kruipEntrantId === input.teamA.entrantId,
       },
       {
         label: "B",
         playerIds: input.teamB.playerIds,
         finalRank: input.winnerEntrantId === input.teamB.entrantId ? 1 : 2,
+        kruip: input.kruipEntrantId === input.teamB.entrantId,
       },
     ],
     shotsByPlayer: input.shotsByPlayer,

@@ -1,6 +1,14 @@
+/**
+ * Duos
+ *
+ * The viewer's duos in one crew (?crew=, else the remembered crew, else the
+ * crew with most duo games): pick a partner for record, form, ranking and
+ * recent games together.
+ */
 import Link from "next/link";
 import { requireSession } from "@/lib/db/authz";
 import { getCrewInsights, getUserCrews } from "@/lib/db/crew-insights";
+import { getRememberedCrewId } from "@/lib/active-crew";
 import { getLocale, getT } from "@/lib/i18n/server";
 import { format } from "@/lib/i18n";
 import { firstName } from "@/lib/insights";
@@ -13,11 +21,12 @@ export default async function DuosPage({
 }: Readonly<{ searchParams: Promise<{ with?: string; crew?: string }> }>) {
   const session = await requireSession();
   const userId = session.user.id;
-  const [{ with: partnerId, crew: crewParam }, crews, t, locale] = await Promise.all([
+  const [{ with: partnerId, crew: crewParam }, crews, t, locale, remembered] = await Promise.all([
     searchParams,
     getUserCrews(userId),
     getT(),
     getLocale(),
+    getRememberedCrewId(),
   ]);
   // Every crew the viewer has duo games in, most duo games first.
   const allInsights = await Promise.all(crews.map((c) => getCrewInsights(c.id)));
@@ -25,7 +34,7 @@ export default async function DuosPage({
     .map((c, i) => ({ crew: c, insights: allInsights[i], mine: allInsights[i].duos.filter((d) => d.a.id === userId || d.b.id === userId) }))
     .filter((x) => x.mine.length > 0)
     .sort((a, b) => b.mine.reduce((n, d) => n + d.games, 0) - a.mine.reduce((n, d) => n + d.games, 0));
-  const current = duoCrews.find((x) => x.crew.id === crewParam) ?? duoCrews[0];
+  const current = duoCrews.find((x) => x.crew.id === crewParam) ?? duoCrews.find((x) => x.crew.id === remembered) ?? duoCrews[0];
   const crew = current?.crew;
   const insights = current?.insights ?? null;
   const mine = (current?.mine ?? []).sort((a, b) => b.games - a.games || b.wins - a.wins);
@@ -56,7 +65,7 @@ export default async function DuosPage({
     .sort((a, b) => wilsonLowerBound(b.wins, b.games) - wilsonLowerBound(a.wins, a.games));
   const duoRank = ranking.findIndex((d) => d.key === duo.key) + 1;
   const dateFmt = new Intl.DateTimeFormat(locale === "nl" ? "nl-BE" : "en-GB", { weekday: "short", day: "numeric", month: "short" });
-  const crewQ = crew && crew.id !== duoCrews[0]?.crew.id ? `&crew=${crew.id}` : "";
+  const crewQ = crew ? `&crew=${crew.id}` : "";
 
   return (
     <Screen>
@@ -67,7 +76,7 @@ export default async function DuosPage({
           {duoCrews.map((x) => (
             <Link
               key={x.crew.id}
-              href={x.crew.id === duoCrews[0].crew.id ? "/duos" : `/duos?crew=${x.crew.id}`}
+              href={`/duos?crew=${x.crew.id}`}
               aria-current={x.crew.id === crew?.id ? "page" : undefined}
               className={cn(
                 "shrink-0 h-8 px-3 rounded-sm flex items-center font-heading font-bold text-sm tracking-[0.06em] uppercase whitespace-nowrap",
@@ -134,6 +143,7 @@ export default async function DuosPage({
             { label: t.home.winPct, value: `${duo.winPct}%` },
             { label: t.duo.bestRun, value: `${duo.bestWinStreak} W` },
             { label: t.duo.duoElo, value: duo.duoElo },
+            { label: t.duo.kruipen, value: duo.kruipen },
           ]}
           size={24}
         />
@@ -178,6 +188,7 @@ export default async function DuosPage({
               <span className="font-body text-[11px] text-muted">
                 {dateFmt.format(g.playedAt)}
                 {g.mama > 0 && ` · ${format(t.feed.mamaN, { n: g.mama })}`}
+                {g.kruip && ` · ${t.duo.kruiped}`}
               </span>
             </span>
             {g.won && g.streakAfter >= 2 && (

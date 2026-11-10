@@ -1,14 +1,22 @@
+/**
+ * Stats page
+ *
+ * Server entry for /stats: loads the viewer's crews, games and own stats
+ * layout and renders the StatsPage, or an empty state without crew/games.
+ */
 import { requireSession } from "@/lib/db/authz";
 import { getStatsExplorerData } from "@/lib/db/stats";
+import { getRememberedCrewId } from "@/lib/active-crew";
+import { getStatsLayout } from "@/lib/db/stats-layout";
 import { Card, LinkButton } from "@/components/ui";
-import { DeepStats } from "@/components/stats/DeepStats";
+import { StatsPage as StatsView } from "@/components/stats/StatsPage";
 import { getT } from "@/lib/i18n/server";
 
 export default async function StatsPage() {
   const session = await requireSession();
   const userId = session.user.id;
 
-  const [data, t] = await Promise.all([getStatsExplorerData(userId), getT()]);
+  const [data, t, rememberedCrewId, layout] = await Promise.all([getStatsExplorerData(userId), getT(), getRememberedCrewId(), getStatsLayout(userId)]);
 
   if (data.crews.length === 0) {
     return (
@@ -38,5 +46,5 @@ export default async function StatsPage() {
     );
   }
 
-  return <DeepStats data={data} currentUserId={userId} backHref={`/players/${userId}`} />;
+  return <StatsView data={data} currentUserId={userId} backHref={`/players/${userId}`} initialCrewId={rememberedCrewId} initialLayout={layout} />;
 }

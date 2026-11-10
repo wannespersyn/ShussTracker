@@ -1,15 +1,21 @@
+/**
+ * Game page actions
+ *
+ * Server actions on a logged game: comments, reactions, mat photo, kruip
+ * correction and deleting the game. Every action checks crew access first.
+ */
 "use server";
 
 import { BLOB_ACCESS } from "@/lib/photo";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { notifyComment, notifyReaction } from "@/lib/notify";
 import { revalidatePath } from "next/cache";
 import { invalidateCrew } from "@/lib/cache-tags";
-import { canDeleteGame } from "@/lib/db/game-permissions";
+import { canDeleteGame, canEditKruip } from "@/lib/db/game-permissions";
 import { db } from "@/lib/db";
-import { games, tournamentMatches } from "@/lib/db/schema";
+import { games, gameTeams, tournamentMatches } from "@/lib/db/schema";
 import { requireUserId, requireGroupMember } from "@/lib/db/authz";
 import { addComment, deleteComment, getComment, toggleReaction, type Reaction } from "@/lib/db/activity";
 import { getT } from "@/lib/i18n/server";
@@ -55,6 +61,19 @@ export async function toggleReactionAction(gameId: string, reaction: Reaction) {
 
   const added = await toggleReaction(gameId, userId, reaction);
   if (added) after(() => notifyReaction(gameId, userId, reaction).catch(() => {}));
+  revalidatePath(`/game/${gameId}`);
+}
+
+/** Sets or clears "kruipen" for a losing team of this game (the winner can't kruip). */
+export async function setKruipAction(gameId: string, gameTeamId: string, kruip: boolean) {
+  const userId = await requireUserId();
+  const game = await requireGameAccess(gameId, userId);
+  if (!(await canEditKruip(game, userId))) throw new Error("Not allowed");
+  const team = await db.query.gameTeams.findFirst({ where: and(eq(gameTeams.id, gameTeamId), eq(gameTeams.gameId, gameId)) });
+  if (!team || team.finalRank === 1) throw new Error("Only a losing team can kruip");
+
+  await db.update(gameTeams).set({ kruip }).where(eq(gameTeams.id, gameTeamId));
+  invalidateCrew(game.groupId);
   revalidatePath(`/game/${gameId}`);
 }
 

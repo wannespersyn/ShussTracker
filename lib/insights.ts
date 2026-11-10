@@ -15,7 +15,8 @@ import { wilsonLowerBound } from "@/lib/ranking";
  * --------------------------------------------------------------------- */
 
 export type InsightPlayerRef = { id: string; name: string; isGuest: boolean };
-export type InsightTeam = { rank: number | null; players: (InsightPlayerRef & { mama: number; shots: number })[] };
+/** `kruip`: this losing team didn't get to drink (counts for each player in it). */
+export type InsightTeam = { rank: number | null; kruip?: boolean; players: (InsightPlayerRef & { mama: number; shots: number })[] };
 export type InsightGame = { id: string; playedAt: Date; matType: "2" | "4" | "8"; teams: InsightTeam[] };
 
 export type Streak = { kind: "W" | "L"; n: number };
@@ -34,6 +35,8 @@ export type PlayerInsight = {
   losses: number;
   winPct: number;
   mama: number;
+  /** Games this player's team had to kruipen. */
+  kruipen: number;
   /** Last 10 results, oldest first. */
   form: ("W" | "L")[];
   streak: Streak | null;
@@ -41,7 +44,15 @@ export type PlayerInsight = {
   /** Elo after each night played (for sparklines), oldest first. */
   eloHistory: { date: string; elo: number }[];
   /** Achievement inputs. */
-  feats: { maxMamaGame: number; maxMamaNight: number; comeback: boolean; streakBreaks: number; mvpNights: number };
+  feats: {
+    maxMamaGame: number;
+    maxMamaNight: number;
+    comeback: boolean;
+    streakBreaks: number;
+    mvpNights: number;
+    /** Most kruipen in the crew this calendar year (and at least one). */
+    kruipKing: boolean;
+  };
 };
 
 export type DuoInsight = {
@@ -56,9 +67,11 @@ export type DuoInsight = {
   duoElo: number;
   mamaA: number;
   mamaB: number;
+  /** Games this duo had to kruipen together. */
+  kruipen: number;
   bestWinStreak: number;
   streak: Streak | null;
-  recent: { gameId: string; playedAt: Date; won: boolean; opponents: string; mama: number; streakAfter: number }[];
+  recent: { gameId: string; playedAt: Date; won: boolean; kruip: boolean; opponents: string; mama: number; streakAfter: number }[];
 };
 
 export type SessionInsight = {
@@ -137,12 +150,15 @@ export function buildCrewInsights(
   const gamesThen = new Map<string, number>();
   const winsThen = new Map<string, number>();
   const maxMamaGame = new Map<string, number>();
+  const kruipen = new Map<string, number>();
+  const kruipenThisYear = new Map<string, number>();
+  const year = now.getFullYear();
   const comeback = new Set<string>();
   const breaks = new Map<string, number>();
   const history = new Map<string, Map<string, number>>();
   const ratingOf = (id: string) => rating.get(id) ?? ELO_BASE;
 
-  type DuoAcc = { a: string; b: string; results: ("W" | "L")[]; mama: Record<string, number>; recent: DuoInsight["recent"] };
+  type DuoAcc = { a: string; b: string; results: ("W" | "L")[]; mama: Record<string, number>; kruipen: number; recent: DuoInsight["recent"] };
   const duos = new Map<string, DuoAcc>();
 
   type NightAcc = {
@@ -209,6 +225,10 @@ export function buildCrewInsights(
           if (won) winsThen.set(p.id, (winsThen.get(p.id) ?? 0) + 1);
         }
         mama.set(p.id, (mama.get(p.id) ?? 0) + p.mama);
+        if (!won && team.kruip) {
+          kruipen.set(p.id, (kruipen.get(p.id) ?? 0) + 1);
+          if (game.playedAt.getFullYear() === year) kruipenThisYear.set(p.id, (kruipenThisYear.get(p.id) ?? 0) + 1);
+        }
         maxMamaGame.set(p.id, Math.max(maxMamaGame.get(p.id) ?? 0, p.mama));
         const line = acc.lines.get(p.id) ?? { games: 0, wins: 0, mama: 0 };
         line.games++;
@@ -219,7 +239,9 @@ export function buildCrewInsights(
       if (team.players.length === 2) {
         const [p1, p2] = team.players;
         const key = duoKey(p1.id, p2.id);
-        const d = duos.get(key) ?? { a: p1.id, b: p2.id, results: [], mama: {}, recent: [] };
+        const d = duos.get(key) ?? { a: p1.id, b: p2.id, results: [], mama: {}, kruipen: 0, recent: [] };
+        const kruiped = !won && team.kruip === true;
+        if (kruiped) d.kruipen++;
         d.results.push(won ? "W" : "L");
         d.mama[p1.id] = (d.mama[p1.id] ?? 0) + p1.mama;
         d.mama[p2.id] = (d.mama[p2.id] ?? 0) + p2.mama;
@@ -228,6 +250,7 @@ export function buildCrewInsights(
           gameId: game.id,
           playedAt: game.playedAt,
           won,
+          kruip: kruiped,
           opponents: teams
             .filter((t) => t !== team)
             .map((t) => t.players.map((p) => firstName(p.name)).join(" & "))
@@ -254,6 +277,8 @@ export function buildCrewInsights(
     }
   }
 
+  const topKruipYear = Math.max(0, ...kruipenThisYear.values());
+
   // Players: crew members (even with zero games) plus anyone who played.
   const ids = new Set<string>([...members.map((m) => m.id), ...results.keys()]);
   const base = [...ids].map((id) => {
@@ -274,6 +299,7 @@ export function buildCrewInsights(
       losses: res.length - wins,
       winPct: res.length ? Math.round((wins / res.length) * 100) : 0,
       mama: mama.get(id) ?? 0,
+      kruipen: kruipen.get(id) ?? 0,
       form: res.slice(-10),
       streak: streakOf(res),
       bestWinStreak: bestRun(res),
@@ -284,6 +310,7 @@ export function buildCrewInsights(
         comeback: comeback.has(id),
         streakBreaks: breaks.get(id) ?? 0,
         mvpNights: 0,
+        kruipKing: (kruipenThisYear.get(id) ?? 0) > 0 && (kruipenThisYear.get(id) ?? 0) === topKruipYear,
       },
     };
   });
@@ -312,6 +339,7 @@ export function buildCrewInsights(
     losses: p.losses,
     winPct: p.winPct,
     mama: p.mama,
+    kruipen: p.kruipen,
     form: p.form,
     streak: p.streak,
     bestWinStreak: p.bestWinStreak,
@@ -332,6 +360,7 @@ export function buildCrewInsights(
       duoElo: Math.round((ratingOf(d.a) + ratingOf(d.b)) / 2),
       mamaA: d.mama[d.a] ?? 0,
       mamaB: d.mama[d.b] ?? 0,
+      kruipen: d.kruipen,
       bestWinStreak: bestRun(d.results),
       streak: streakOf(d.results),
       recent: d.recent.slice(-5).reverse(),

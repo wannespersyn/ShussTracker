@@ -1,3 +1,11 @@
+/**
+ * Elo
+ *
+ * Team Elo for Leberschuss games (duos split evenly, 8-mat as pairwise
+ * round-robin), plus every player's rating curve game by game.
+ *
+ * Data: plain game lists in, ratings/curves out — no DB access.
+ */
 export const ELO_BASE = 1000;
 export const ELO_K = 48;
 
@@ -7,6 +15,9 @@ export type EloGame = {
 };
 
 export type EloRating = { rating: number; gamesPlayed: number };
+
+/** One point on a player's Elo curve: their rating right after a game. */
+export type EloPoint = { gameId: string; playedAt: Date; rating: number; delta: number };
 
 function expectedScore(a: number, b: number): number {
   return 1 / (1 + 10 ** ((b - a) / 400));
@@ -19,7 +30,10 @@ function expectedScore(a: number, b: number): number {
  * `finalRank` "beats" worse), with each pair's rating swing divided by
  * (teamCount - 1) so an 8-player game doesn't move ratings further than a
  * 1v1 just because there were more pairs to settle in it. */
-export function computeEloRatings(games: EloGame[]): Map<string, EloRating> {
+export function computeEloRatings(
+  games: EloGame[],
+  onGame?: (game: EloGame, deltas: Map<string, number>, ratingAfter: (id: string) => number) => void,
+): Map<string, EloRating> {
   const ratings = new Map<string, number>();
   const gamesPlayed = new Map<string, number>();
   const ratingOf = (id: string) => ratings.get(id) ?? ELO_BASE;
@@ -55,6 +69,7 @@ export function computeEloRatings(games: EloGame[]): Map<string, EloRating> {
       for (const id of team.playerIds) gamesPlayed.set(id, (gamesPlayed.get(id) ?? 0) + 1);
     }
     for (const [id, delta] of deltas) ratings.set(id, ratingOf(id) + delta);
+    onGame?.(game, deltas, ratingOf);
   }
 
   const result = new Map<string, EloRating>();
@@ -62,4 +77,19 @@ export function computeEloRatings(games: EloGame[]): Map<string, EloRating> {
     result.set(id, { rating: Math.round(ratingOf(id)), gamesPlayed: gamesPlayed.get(id) ?? 0 });
   }
   return result;
+}
+
+/** Every player's Elo curve over the same games (same math as
+ * computeEloRatings), oldest first — for the stats page's rating chart. */
+export function computeEloHistory(games: (EloGame & { id: string })[]): Map<string, EloPoint[]> {
+  const history = new Map<string, EloPoint[]>();
+  computeEloRatings(games, (game, deltas, ratingAfter) => {
+    const id = (game as EloGame & { id: string }).id;
+    for (const [playerId, delta] of deltas) {
+      const points = history.get(playerId) ?? [];
+      points.push({ gameId: id, playedAt: game.playedAt, rating: Math.round(ratingAfter(playerId)), delta: Math.round(delta) });
+      history.set(playerId, points);
+    }
+  });
+  return history;
 }

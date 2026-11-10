@@ -1,7 +1,17 @@
+/**
+ * Stats queries
+ *
+ * Player summaries for home/profile and the one-shot payload for the stats
+ * page: every crew game with per-player shots and kruip, plus per-crew
+ * Elo curves.
+ *
+ * Data: Drizzle queries over game/game_team/game_team_player/shot.
+ */
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { games, gameTeamPlayers, groupMembers, shots } from "@/lib/db/schema";
 import { scoreForPlayers as scoreFor } from "@/lib/scoring";
+import { computeEloHistory } from "@/lib/elo";
 
 export type ShotDistributionEntry = { fieldHit: string; label: string; count: number; pct: number };
 
@@ -216,7 +226,16 @@ export async function getPlayerStatsSummary(userId: string): Promise<PlayerStats
 export type StatsPerson = { id: string; name: string };
 export type StatsCrew = { id: string; name: string; memberCount: number };
 export type StatsFieldCounts = { far: number; mid: number; near: number; risk: number; miss: number };
-export type StatsTeam = { userIds: string[]; won: boolean; points: number; shots: Record<string, StatsFieldCounts> };
+/** `kruip`: this team lost without drinking (counts for every player in it). */
+export type StatsTeam = {
+  userIds: string[];
+  won: boolean;
+  points: number;
+  shots: Record<string, StatsFieldCounts>;
+  kruip: boolean;
+};
+/** Rating right after a game: g = game id, t = ISO time, r = rating, d = change. */
+export type StatsEloPoint = { g: string; t: string; r: number; d: number };
 export type StatsGame = {
   id: string;
   crewId: string | null;
@@ -228,6 +247,8 @@ export type StatsExplorerData = {
   people: StatsPerson[];
   crews: StatsCrew[];
   games: StatsGame[];
+  /** Elo curve per crew, per player (crew id → user id → points, oldest first). */
+  elo: Record<string, Record<string, StatsEloPoint[]>>;
   /** True once any game in scope has a "2" or "3" shot on record — lets the
    * explorer collapse the far/mid/near breakdown into a single HIT filter
    * when nobody here has ever tracked shot zones. */
@@ -259,7 +280,7 @@ export async function getStatsExplorerData(userId: string): Promise<StatsExplore
     with: { group: { with: { members: { with: { user: true } } } } },
   });
   if (memberships.length === 0) {
-    return { people: [], crews: [], games: [], hasZoneData: false };
+    return { people: [], crews: [], games: [], elo: {}, hasZoneData: false };
   }
 
   const groupIds = memberships.map((m) => m.groupId);
@@ -286,13 +307,33 @@ export async function getStatsExplorerData(userId: string): Promise<StatsExplore
       const shots: Record<string, StatsFieldCounts> = {};
       for (const p of t.players) shots[p.userId] = tallyShots(p.shots);
       const points = scoreFor(t.players, g.teams.filter((x) => x.id !== t.id).flatMap((x) => x.players));
-      return { userIds: t.players.map((p) => p.userId), won: t.finalRank === 1, points, shots };
+      return { userIds: t.players.map((p) => p.userId), won: t.finalRank === 1, points, shots, kruip: t.kruip };
     }),
   }));
+
+  // Elo is per crew (same as the crew leaderboard), so each crew gets its own curves.
+  const elo: StatsExplorerData["elo"] = {};
+  for (const crewId of groupIds) {
+    const history = computeEloHistory(
+      groupGames
+        .filter((g) => g.groupId === crewId)
+        .map((g) => ({
+          id: g.id,
+          playedAt: g.playedAt,
+          teams: g.teams.map((t) => ({ playerIds: t.players.map((p) => p.userId), finalRank: t.finalRank })),
+        })),
+    );
+    elo[crewId] = Object.fromEntries(
+      [...history].map(([userId, points]) => [
+        userId,
+        points.map((x) => ({ g: x.gameId, t: x.playedAt.toISOString(), r: x.rating, d: x.delta })),
+      ]),
+    );
+  }
 
   const hasZoneData = gameList.some((g) =>
     g.teams.some((t) => Object.values(t.shots).some((s) => s.mid > 0 || s.far > 0)),
   );
 
-  return { people: [...peopleById.values()], crews, games: gameList, hasZoneData };
+  return { people: [...peopleById.values()], crews, games: gameList, elo, hasZoneData };
 }

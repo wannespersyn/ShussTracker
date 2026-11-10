@@ -1,8 +1,15 @@
+/**
+ * Crew feed — Route: /crews/[crewId]/feed
+ *
+ * What happened lately in a crew: game of the week, hot streaks, climbers,
+ * night recaps, new crew records and every game, newest first.
+ */
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireSession, requireGroupMember } from "@/lib/db/authz";
 import { getCrewActivityFeed, type FeedGame } from "@/lib/db/activity";
-import { getCrew, getCrewInsights } from "@/lib/db/crew-insights";
+import { getCrew, getCrewHistory, getCrewInsights } from "@/lib/db/crew-insights";
+import { crewRecords, type RecordEvent } from "@/lib/records";
 import { getLocale, getT } from "@/lib/i18n/server";
 import { format } from "@/lib/i18n";
 import { firstName, nightKey } from "@/lib/insights";
@@ -24,7 +31,8 @@ type Item =
       mvp: string | null;
       wins: number;
     }
-  | { kind: "game"; key: string; at: number; game: FeedGame };
+  | { kind: "game"; key: string; at: number; game: FeedGame }
+  | { kind: "record"; key: string; at: number; record: RecordEvent };
 
 export default async function CrewFeedPage({
   params,
@@ -40,9 +48,10 @@ export default async function CrewFeedPage({
   const group = await getCrew(crewId);
   if (!group) notFound();
 
-  const [feed, insights, t, locale] = await Promise.all([
+  const [feed, insights, history, t, locale] = await Promise.all([
     getCrewActivityFeed(crewId, userId, 40),
     getCrewInsights(crewId),
+    getCrewHistory(crewId),
     getT(),
     getLocale(),
   ]);
@@ -101,6 +110,24 @@ export default async function CrewFeedPage({
     }
     items.push({ kind: "game", key: g.id, at: g.playedAt.getTime(), game: g });
   }
+
+  // New crew records, placed above the game that set them (within the feed's window).
+  const oldest = feed.at(-1)?.playedAt.getTime() ?? Infinity;
+  for (const r of crewRecords(history.games)) {
+    if (r.at.getTime() < oldest) break;
+    items.push({ kind: "record", key: `r-${r.kind}-${r.gameId}-${r.userId}`, at: r.at.getTime(), record: r });
+  }
+  const rank = { session: 0, record: 1, game: 2 } as const;
+  items.sort((a, b) => b.at - a.at || rank[a.kind] - rank[b.kind]);
+  const person = new Map(history.members.map((m) => [m.id, firstName(m.name)]));
+  for (const g of history.games) for (const tm of g.teams) for (const p of tm.players) if (!person.has(p.id)) person.set(p.id, firstName(p.name));
+  const who = (id: string | null) => (id ? (person.get(id) ?? t.more.player) : "");
+  const recordTitle: Record<RecordEvent["kind"], string> = {
+    streak: t.feed.recStreak,
+    mamaGame: t.feed.recMamaGame,
+    mamaLeader: t.feed.recMamaLeader,
+    kruipLeader: t.feed.recKruipLeader,
+  };
 
   const teamName = (names: string[]) => names.map(firstName).join(" & ");
 
@@ -219,7 +246,21 @@ export default async function CrewFeedPage({
       )}
 
       {items.map((it) =>
-        it.kind === "session" ? (
+        it.kind === "record" ? (
+          <Row
+            key={it.key}
+            href={`/game/${it.record.gameId}`}
+            icon={<TrophyGlyph />}
+            iconClass="bg-amber/15 text-gold"
+            title={format(recordTitle[it.record.kind], { name: who(it.record.userId), n: it.record.value })}
+            meta={
+              it.record.previous > 0
+                ? format(t.feed.recPrev, { name: who(it.record.previousHolder), n: it.record.previous })
+                : t.feed.recPrevNone
+            }
+            right={t.feed.recordTag}
+          />
+        ) : it.kind === "session" ? (
           <Row
             key={it.key}
             href={`/crews/${crewId}/sessions?night=${it.night}`}
@@ -333,6 +374,15 @@ function Row({
         </span>
       )}
     </Link>
+  );
+}
+
+function TrophyGlyph() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+      <path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z" />
+      <path d="M7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3" />
+    </svg>
   );
 }
 

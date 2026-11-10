@@ -4,35 +4,54 @@
  * the MatLogger component (client) and the game-saving code (server types).
  *
  * Coordinates are landscape mat space (824 × 265, same geometry as the mama
- * animation); the component draws it rotated upright. Corners are named as seen
+ * animation; the black field is 28–796 × 10–255, shapes measured on the real
+ * mat in lib/mat-geometry.ts); the component draws it rotated upright. Corners are named as seen
  * with the mat upright on a phone (TL = top-left).
  */
+
+import { FIELD_BOTTLES, FIELD_CUT, FIELD_H, FIELD_MAMAS, FIELD_W, FIELD_ZONES } from "@/lib/mat-geometry";
 
 export type Slot = "a1" | "a2" | "b1" | "b2";
 export type Corner = "TL" | "TR" | "BL" | "BR";
 type Pt = [number, number];
 
-export const ZONES: { id: string; v: number; pts: Pt[] }[] = [
-  { id: "L3", v: 3, pts: [[95, 131], [175, 100], [175, 163]] },
-  { id: "L2", v: 2, pts: [[182, 96], [255, 70], [255, 195], [182, 167]] },
-  { id: "L1", v: 1, pts: [[262, 66], [344, 34], [401, 131], [344, 229], [262, 197]] },
-  { id: "R1", v: 1, pts: [[423, 131], [480, 34], [562, 66], [562, 197], [480, 229]] },
-  { id: "R2", v: 2, pts: [[569, 70], [642, 96], [642, 167], [569, 195]] },
-  { id: "R3", v: 3, pts: [[649, 100], [729, 131], [649, 163]] },
-];
-export const MAMAS = [
-  { id: "ML", x: 40, y: 94, w: 40, h: 77 },
-  { id: "MR", x: 744, y: 94, w: 40, h: 77 },
-];
-/** Shooting boxes are the four gold corners; each player's cap waits on the spot in their corner. */
-export const CORNERS: Record<Corner, { end: "T" | "B"; pts: Pt[]; start: { x: number; y: number } }> = {
-  TL: { end: "T", pts: [[28, 255], [92, 255], [28, 191]], start: { x: 56, y: 227 } },
-  TR: { end: "T", pts: [[28, 10], [92, 10], [28, 74]], start: { x: 56, y: 38 } },
-  BL: { end: "B", pts: [[796, 255], [732, 255], [796, 191]], start: { x: 768, y: 227 } },
-  BR: { end: "B", pts: [[796, 10], [732, 10], [796, 74]], start: { x: 768, y: 38 } },
+/* The mat as measured from photos (lib/mat-geometry.ts, black field 824 ×
+ * 265), placed on the logger's drawing where the field is 28–796 × 10–255. */
+const fx = (x: number) => Math.round((28 + (x * 768) / FIELD_W) * 10) / 10;
+const fy = (y: number) => Math.round((10 + (y * 245) / FIELD_H) * 10) / 10;
+const fp = ([x, y]: Pt): Pt => [fx(x), fy(y)];
+/** Camera/field coordinates → logger coordinates, and back. */
+export const fromField = (p: { x: number; y: number }) => ({ x: fx(p.x), y: fy(p.y) });
+export const toField = (p: { x: number; y: number }) => ({ x: ((p.x - 28) * FIELD_W) / 768, y: ((p.y - 10) * FIELD_H) / 245 });
+
+export const ZONES: { id: string; v: number; pts: Pt[] }[] = FIELD_ZONES.map((z) => ({ ...z, pts: z.pts.map(fp) }));
+export const MAMAS = FIELD_MAMAS.map((m) => ({ id: m.id, x: fx(m.x), y: fy(m.y), w: fx(m.x + m.w) - fx(m.x), h: fy(m.y + m.h) - fy(m.y) }));
+/** The field's outline: a rectangle with its corners cut off (the shooting boxes). */
+const CUT = FIELD_CUT;
+export const FIELD_OUTLINE: Pt[] = (
+  [
+    [CUT, 0], [FIELD_W - CUT, 0], [FIELD_W, CUT], [FIELD_W, FIELD_H - CUT],
+    [FIELD_W - CUT, FIELD_H], [CUT, FIELD_H], [0, FIELD_H - CUT], [0, CUT],
+  ] as Pt[]
+).map(fp);
+/** Shooting boxes are the four white cut-off corners; each player's cap waits
+ * on the spot in their corner. A bit larger than the printed corner, so a
+ * cap lying half over the edge still counts. */
+const BOX = CUT + 14;
+const box = (cx: number, cy: number): Pt[] => {
+  const sx = cx === 0 ? 1 : -1;
+  const sy = cy === 0 ? 1 : -1;
+  return ([[cx, cy], [cx + sx * BOX, cy], [cx, cy + sy * BOX]] as Pt[]).map(fp);
 };
-/** The four brown circles are bottles: a cap can't come to rest on one. */
-export const BOTTLES: Pt[] = [[76, 101], [76, 166], [748, 101], [748, 166]];
+const startAt = (cx: number, cy: number) => fromField({ x: cx === 0 ? 13 : FIELD_W - 13, y: cy === 0 ? 13 : FIELD_H - 13 });
+export const CORNERS: Record<Corner, { end: "T" | "B"; pts: Pt[]; start: { x: number; y: number } }> = {
+  TL: { end: "T", pts: box(0, FIELD_H), start: startAt(0, FIELD_H) },
+  TR: { end: "T", pts: box(0, 0), start: startAt(0, 0) },
+  BL: { end: "B", pts: box(FIELD_W, FIELD_H), start: startAt(FIELD_W, FIELD_H) },
+  BR: { end: "B", pts: box(FIELD_W, 0), start: startAt(FIELD_W, 0) },
+};
+/** The four bottles: a cap can't come to rest on one. */
+export const BOTTLES: Pt[] = FIELD_BOTTLES.map(fp);
 export const BOTTLE_CLEAR = 37;
 
 /** Only A1's corner is chosen: A2 sits beside A1, B1 diagonally across from A1
@@ -55,7 +74,11 @@ export type Spot =
 
 export type MoveRec = { capNo: number; owner: Slot; isThrownCap: boolean; from: { x: number; y: number; spot: string }; to: { x: number; y: number; spot: string; countsFor: number | null } };
 export type ThrowRec = { round: number; slot: Slot; kind: "normal" | "bonus" | "skipped"; skipReason: "cap_knocked" | "box_empty" | null; capNo: number | null; box: Slot | null; firstSpot: string | null; missed: boolean; moves: MoveRec[] };
-export type RoundResult = { round: number; sips: number[]; mamaTeams: number[] };
+/** `jokerTeam`: a team played its joker on this round, so nobody drinks (mama included).
+ * `allDrink`: third round in a row with nothing to drink, so everyone drinks ad fundum.
+ * `emptyStreak`: how many nothing-rounds in a row up to and including this one. */
+export type RoundResult = { round: number; sips: number[]; mamaTeams: number[]; jokerTeam: number | null; allDrink: boolean; emptyStreak: number };
+export const EMPTY_ROUNDS_FOR_ALL = 3;
 
 export type MatState = {
   solo: boolean;
@@ -70,6 +93,8 @@ export type MatState = {
   activeCap: number | null;
   turnStart: { no: number; x: number; y: number; waiting: boolean }[];
   nextCap: number;
+  /** Teams that already played their joker (one per team per game). */
+  jokersUsed: number[];
 };
 
 export const teamOfSlot = (s: Slot) => (s[0] === "a" ? 0 : 1);
@@ -115,6 +140,7 @@ export function newMatState(solo: boolean, a1: Corner = "TR"): MatState {
     activeCap: null,
     turnStart: [],
     nextCap: 1,
+    jokersUsed: [],
   };
   spawnRound(st);
   startTurn(st);
@@ -178,7 +204,37 @@ export function settle(st: MatState): RoundResult {
     if (s.kind === "mama") mamas.add(mamaTeam(st, s.id));
     if (s.kind === "zone") sips[zoneTeam(st, s.id)] += s.v;
   }
-  return mamas.size ? { round: st.round, sips: [0, 0], mamaTeams: [...mamas].sort() } : { round: st.round, sips, mamaTeams: [] };
+  if (mamas.size) return { round: st.round, sips: [0, 0], mamaTeams: [...mamas].sort(), jokerTeam: null, allDrink: false, emptyStreak: 0 };
+  // Nothing to drink this round: count the streak (a joker round or an all-drink round breaks it).
+  const empty = sips[0] === 0 && sips[1] === 0;
+  const prev = st.results.filter((r) => r.round < st.round).at(-1);
+  const emptyStreak = empty ? (prev && prev.jokerTeam === null && !prev.allDrink ? prev.emptyStreak : 0) + 1 : 0;
+  return { round: st.round, sips, mamaTeams: [], jokerTeam: null, allDrink: emptyStreak >= EMPTY_ROUNDS_FOR_ALL, emptyStreak };
+}
+
+/** What actually gets drunk: nothing when a joker was played. */
+export const drunk = (r: RoundResult): RoundResult => (r.jokerTeam === null ? r : { ...r, sips: [0, 0], mamaTeams: [], allDrink: false });
+
+/** Play a team's joker on the round that just finished. False if not allowed. */
+export function playJoker(st: MatState, ti: number): boolean {
+  const r = st.results.at(-1);
+  if (st.phase !== "done" || !r || r.round !== st.round || r.jokerTeam !== null || st.jokersUsed.includes(ti)) return false;
+  r.jokerTeam = ti;
+  st.jokersUsed.push(ti);
+  return true;
+}
+
+/** Throws whose cap first landed in a mama but was shot out of it later that round: those
+ * don't count as a mama in the stats ("mama weggeschoten"). Returns their indexes. */
+export function knockedMamas(throws: { round: number; capNo: number | null; firstSpot: string | null; moves: { capNo: number; isThrownCap: boolean; from: { spot: string }; to: { spot: string } }[] }[]): Set<number> {
+  const isMama = (s: string | null) => s === "ML" || s === "MR";
+  const out = new Set<number>();
+  throws.forEach((t, i) => {
+    if (!isMama(t.firstSpot) || t.capNo === null) return;
+    const later = throws.slice(i + 1).filter((x) => x.round === t.round);
+    if (later.some((x) => x.moves.some((m) => m.capNo === t.capNo && !m.isThrownCap && isMama(m.from.spot) && !isMama(m.to.spot)))) out.add(i);
+  });
+  return out;
 }
 
 /** Commit the current throw. Returns false when the thrown cap wasn't placed yet. */
@@ -239,15 +295,67 @@ export function dropCap(st: MatState, no: number) {
   }
 }
 
+/** A camera saw the throw: `landed` = where caps came to rest (strongest
+ * first), `gone` = where caps were knocked away from (logger coordinates).
+ * Knocked caps take the nearest landing spot, the thrower's cap the best one
+ * left. Returns whether the thrower's cap got a spot. */
+export function placeFromCamera(st: MatState, landed: { x: number; y: number }[], gone: { x: number; y: number }[]): boolean {
+  const mine = st.caps.find((c) => c.no === st.activeCap);
+  if (!mine) return false;
+  const others = st.caps.filter((c) => c.no !== mine.no && !c.waiting);
+  const knocked: Cap[] = [];
+  for (const g of gone) {
+    let best: Cap | null = null;
+    let bd = 40;
+    for (const c of others) {
+      if (knocked.includes(c)) continue;
+      const d = Math.hypot(c.x - g.x, c.y - g.y);
+      if (d < bd) [best, bd] = [c, d];
+    }
+    if (best) knocked.push(best);
+  }
+  // A landing right where an untouched cap already lies is that cap, seen again.
+  const free = landed.filter((p) => !others.some((c) => !knocked.includes(c) && Math.hypot(c.x - p.x, c.y - p.y) < 18));
+  for (const c of knocked) {
+    if (free.length <= 1) break;
+    let bi = -1;
+    let bd = Infinity;
+    free.forEach((p, i) => {
+      if (i === 0 && free.length > 1 && knocked.length < free.length) return; // keep the strongest for the thrower
+      const d = Math.hypot(c.x - p.x, c.y - p.y);
+      if (d < bd) [bi, bd] = [i, d];
+    });
+    if (bi < 0) continue;
+    const [p] = free.splice(bi, 1);
+    Object.assign(c, { x: Math.round(p.x), y: Math.round(p.y), waiting: false });
+    dropCap(st, c.no);
+  }
+  if (!free.length) return false;
+  Object.assign(mine, { x: Math.round(free[0].x), y: Math.round(free[0].y), waiting: false });
+  dropCap(st, mine.no);
+  return true;
+}
+
 /* ---------- what gets saved ---------- */
 
 export type MatMoveLog = { capNo: number; ownerId: string; isThrownCap: boolean; fromX: number; fromY: number; fromSpot: string; toX: number; toY: number; toSpot: string; toCountsForTeam: number | null };
 export type MatThrowLog = { seq: number; playerId: string; slot: Slot; kind: ThrowRec["kind"]; skipReason: ThrowRec["skipReason"]; capNo: number | null; moves: MatMoveLog[] };
-export type MatRoundLog = { number: number; complete: boolean; teams: { sips: number; mama: boolean }[]; throws: MatThrowLog[] };
+export type MatRoundLog = { number: number; complete: boolean; jokerTeam: number | null; allDrink: boolean; teams: { sips: number; mama: boolean }[]; throws: MatThrowLog[] };
 export type MatGameLog = { a1Corner: Corner; endedBy: "pints_empty"; winnerTeam: number; rounds: MatRoundLog[] };
 
+/** Stats that follow from a finished mat log. `kruipTeams`: losing teams
+ * that never got to drink (no sips or mama in a finished, non-joker round and
+ * no "3 empty rounds" ad fundum) before the winners emptied their pints. */
+export function matExtras(log: MatGameLog): { kruipTeams: number[] } {
+  const done = log.rounds.filter((r) => r.complete);
+  const drank = (ti: number) =>
+    done.some((r) => r.allDrink || (r.jokerTeam === null && ((r.teams[ti]?.sips ?? 0) > 0 || r.teams[ti]?.mama)));
+  const kruipTeams = [0, 1].filter((ti) => ti !== log.winnerTeam && !drank(ti));
+  return { kruipTeams };
+}
+
 /** Field hit for the classic `shot` row of a throw (first landing of the thrown cap). */
-export function fieldHitOf(t: ThrowRec): "1" | "2" | "3" | "mama" | "miss" | null {
+export function fieldHitOf(t: ThrowRec): "1" | "2" | "3" | "mama" | "mama_out" | "miss" | null {
   if (t.kind === "skipped" || !t.firstSpot) return null;
   const z = ZONES.find((x) => x.id === t.firstSpot);
   if (z) return String(z.v) as "1" | "2" | "3";
@@ -265,6 +373,8 @@ export function toGameLog(st: MatState, players: Record<Slot, string | undefined
     rounds.push({
       number: r,
       complete: Boolean(st.results.find((x) => x.round === r)),
+      jokerTeam: res?.jokerTeam ?? null,
+      allDrink: res?.allDrink ?? false,
       teams: [0, 1].map((ti) => ({ sips: res?.sips[ti] ?? 0, mama: res?.mamaTeams.includes(ti) ?? false })),
       throws: throws.map((t, i) => ({
         seq: i + 1,

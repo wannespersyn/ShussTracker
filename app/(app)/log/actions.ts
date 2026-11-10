@@ -1,3 +1,9 @@
+/**
+ * Log game action
+ *
+ * Server action behind the log wizard: checks crew membership, stores the
+ * game (mat log only for beta users) and notifies the crew.
+ */
 "use server";
 
 import { after } from "next/server";
@@ -6,14 +12,14 @@ import { invalidateCrew } from "@/lib/cache-tags";
 
 import { redirect } from "next/navigation";
 import { requireUserId, requireGroupMember } from "@/lib/db/authz";
-import { createGameRecord, type ShotInput } from "@/lib/db/games";
+import { createGameRecord, type GameTeamInput, type ShotInput } from "@/lib/db/games";
 import type { MatGameLog } from "@/lib/mat";
 import { hasBeta } from "@/lib/db/beta";
 
 export type LogGameInput = {
   groupId: string;
   matType: "2" | "4" | "8";
-  teams: { label: string; playerIds: string[]; finalRank: number }[];
+  teams: GameTeamInput[];
   shotsByPlayer: ShotInput[];
   mat?: MatGameLog;
 };
