@@ -465,7 +465,7 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
           S.busy = true;
           window.setTimeout(() => {
             try {
-              post(f, warp(f, S.corners), [], []);
+              post(f, warp(f, S.corners), [], [], true);
               note(format(L.evMiss, { n: S.n }), "warn");
             } finally {
               S.busy = false;
@@ -535,7 +535,8 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
       }, 30);
     }, TICK);
     /** Post a judged throw (empty = a miss); returns its number. */
-    function post(f: Frame, cur: Float32Array, spots: Spot[], gone: Spot[]): number {
+    /** `miss`: a real miss (the cap left its box and landed nowhere). */
+    function post(f: Frame, cur: Float32Array, spots: Spot[], gone: Spot[], miss = false): number {
       const S = live.current;
       const n = ++S.n;
       const img = warpedToJpeg(cur, WW, WH);
@@ -543,7 +544,7 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
       setThrows((ts) => [{ n, spots, gone, corrected: false, img }, ...ts]);
       setAsk({ n, left: CONFIRM_S });
       if (session.current)
-        addCameraThrowAction(session.current, { n, spots, gone, image: img, full, detector: DETECTOR }).catch(() =>
+        addCameraThrowAction(session.current, { n, spots, gone, image: img, full, detector: miss ? `${DETECTOR}+miss` : DETECTOR }).catch(() =>
           // Not stored (offline, or the database isn't migrated): say so instead of failing silently.
           note(format(L.evPostFail, { n }), "warn"),
         );

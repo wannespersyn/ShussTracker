@@ -35,6 +35,9 @@ export type CameraThrow = {
   corrected: boolean;
   /** Someone tapped ✓ on it (or the logger confirmed it by hand). */
   checked: boolean;
+  /** A real miss: the cap left its box and landed nowhere, or someone tapped
+   * MISS. (An empty throw without this = the camera just found no cap.) */
+  miss: boolean;
   createdAt: Date;
 };
 export type CameraState = {
@@ -143,7 +146,7 @@ export async function getCameraState(userId: string, sessionId: string, gameSinc
   if (s.userId === userId && s.live) await db.update(cameraSessions).set({ updatedAt: new Date() }).where(eq(cameraSessions.id, sessionId));
   const [rows, cam, logger] = await Promise.all([
     db
-      .select({ id: cameraThrows.id, n: cameraThrows.n, found: cameraThrows.found, spots: cameraThrows.spots, gone: cameraThrows.gone, correctedBy: cameraThrows.correctedBy, labelHow: cameraThrows.labelHow, createdAt: cameraThrows.createdAt })
+      .select({ id: cameraThrows.id, n: cameraThrows.n, found: cameraThrows.found, spots: cameraThrows.spots, gone: cameraThrows.gone, correctedBy: cameraThrows.correctedBy, labelHow: cameraThrows.labelHow, detector: cameraThrows.detector, createdAt: cameraThrows.createdAt })
       .from(cameraThrows)
       .where(eq(cameraThrows.sessionId, sessionId))
       .orderBy(desc(cameraThrows.n))
@@ -182,6 +185,7 @@ export async function getCameraState(userId: string, sessionId: string, gameSinc
       gone: r.gone,
       corrected: r.correctedBy !== null || r.labelHow === "corrected",
       checked: checked.has(r.id) || r.labelHow === "confirmed",
+      miss: r.detector?.endsWith("miss") ?? false,
       createdAt: r.createdAt,
     })),
   };

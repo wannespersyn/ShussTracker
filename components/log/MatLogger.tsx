@@ -11,8 +11,8 @@
  * here (placeFromCamera) and is confirmed after a short countdown, or by
  * "Throw done" after you fixed it by hand. An empty camera throw (the cap
  * left its shooting box and landed nowhere, or a "miss" from another phone)
- * is proposed as a miss, and so is a throw whose cap the camera can't find
- * on the mat: a camera throw never leaves the game waiting. The confirmed mat goes back to
+ * is proposed as a miss. A camera throw in which no cap was found for the
+ * thrower changes nothing (it's not a miss) and doesn't hold up the next one. The confirmed mat goes back to
  * the camera session as a training label. The game itself is shared with
  * the camera too (camera_game), so the camera phone can show its log/stats.
  */
@@ -168,18 +168,19 @@ export function MatLogger({
           if (!next) return;
           if (camPendingRef.current) return; // one at a time: confirm or fix the current one first
           camSeen.current = next.n;
-          if (!next.spots.length && !next.gone.length) {
-            // The cap left its box and landed nowhere: propose a miss.
+          if (next.miss) {
+            // A real miss (the cap left its box and landed nowhere, or someone tapped MISS).
             setCamPending({ n: next.n, left: CAM_CONFIRM, touched: false, found: true, miss: true });
             return;
           }
           const d = structuredClone(cur);
           const found = placeFromCamera(d, next.spots.map(fromField), next.gone.map(fromField));
+          // The camera found no cap for the thrower: that's not a miss, just nothing
+          // useful — leave the mat alone and wait for the next camera throw (or a tap).
+          if (!found) return;
           setHistory((h) => [...h, cur]);
           setSt(d);
-          // Thrower's cap not found on the mat (only caps knocked away, or it landed
-          // where the camera can't see): propose a miss, so the game never stalls.
-          setCamPending({ n: next.n, left: CAM_CONFIRM, touched: false, found: true, miss: !found });
+          setCamPending({ n: next.n, left: CAM_CONFIRM, touched: false, found });
         })
         .catch(() => {});
     }, CAM_POLL);
