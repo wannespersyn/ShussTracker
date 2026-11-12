@@ -861,6 +861,7 @@ export const en = {
     evThrow: "Throw {n}: cap {where} ({gone} shot away)",
     evThrowGone: "Throw {n}: no new cap, {gone} shot away",
     evThrowNone: "Throw {n}: no cap found (not counted as a miss)",
+    evNoThrow: "Something changed on the mat, but no cap found: not a throw",
     gRound: "Round {n} starts",
     gThrow: "{name}: {spot}",
     gBonus: "bonus throw",

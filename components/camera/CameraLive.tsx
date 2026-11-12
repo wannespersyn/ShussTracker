@@ -526,6 +526,13 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
             note(L.evCleared, "good");
             return;
           }
+          if (!r.landed.length && !r.gone.length && !S.left) {
+            // Something changed, but no cap landed or left and none left a
+            // shooting box: light, a shadow or noise, not a throw. Posting it
+            // would ask to check a throw that never happened.
+            note(L.evNoThrow, "muted");
+            return;
+          }
           S.left = null;
           // Back onto the real print with the per-zone nudges.
           const spots = r.landed.map((b) => unfix({ x: b.x, y: b.y }, S.fix));

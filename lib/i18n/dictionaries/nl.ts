@@ -860,6 +860,7 @@ export const nl: Dictionary = {
     evThrow: "Worp {n}: dop {where} ({gone} weggeschoten)",
     evThrowGone: "Worp {n}: geen nieuwe dop, {gone} weggeschoten",
     evThrowNone: "Worp {n}: geen dop gevonden (telt niet als mis)",
+    evNoThrow: "Iets veranderd op de mat, maar geen dop gevonden: geen worp",
     gRound: "Ronde {n} begint",
     gThrow: "{name}: {spot}",
     gBonus: "bonusworp",
