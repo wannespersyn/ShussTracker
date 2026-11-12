@@ -50,6 +50,11 @@ export type CameraState = {
   cameraUserId: string;
   cameraName: string;
   live: boolean;
+  /** Stopped (by the camera or from another phone); `live` is also false
+   * when the camera merely hasn't checked in for a while. */
+  ended: boolean;
+  /** Ended for a new game: the session the camera carries on in. */
+  nextId: string | null;
   /** "calibrating" until someone confirmed the corners, then "watching". */
   phase: "calibrating" | "watching";
   snap: { version: number; w: number; h: number } | null;
@@ -100,8 +105,40 @@ export async function startCameraSession(userId: string, groupId: string, share 
   return row.id;
 }
 
+/** Stops a camera: the camera itself, or anyone in the crew from their own
+ * phone (so nobody has to take the camera down from above the mat). */
 export async function endCameraSession(userId: string, sessionId: string) {
-  await db.update(cameraSessions).set({ live: false }).where(and(eq(cameraSessions.id, sessionId), eq(cameraSessions.userId, userId)));
+  await sessionFor(userId, sessionId);
+  await db.update(cameraSessions).set({ live: false }).where(eq(cameraSessions.id, sessionId));
+}
+
+/** New game on the same camera, from any phone in the crew: this session
+ * ends and a new one starts with the same calibration (empty mat, corners,
+ * zone nudges). The camera keeps filming and follows `nextId`. Returns the
+ * new session (the existing one if someone was just ahead of you). */
+export async function nextCameraSession(userId: string, sessionId: string): Promise<string> {
+  const s = await sessionFor(userId, sessionId);
+  if (s.nextId) return s.nextId;
+  const [{ snapshot }] = await db.select({ snapshot: cameraSessions.snapshot }).from(cameraSessions).where(eq(cameraSessions.id, sessionId)).limit(1);
+  const [row] = await db
+    .insert(cameraSessions)
+    .values({
+      groupId: s.groupId,
+      userId: s.userId,
+      phase: s.phase,
+      snapshot,
+      snapW: s.snapW,
+      snapH: s.snapH,
+      snapVersion: s.snapVersion,
+      corners: s.corners,
+      shareImages: s.shareImages,
+      emptyUrl: s.emptyUrl,
+    })
+    .returning();
+  const fix = await getCameraZoneFix(sessionId);
+  if (fix) await db.insert(cameraZoneFixes).values({ sessionId: row.id, fix: fix.fix, version: fix.version }).onConflictDoNothing();
+  await db.update(cameraSessions).set({ live: false, nextId: row.id }).where(eq(cameraSessions.id, sessionId));
+  return row.id;
 }
 
 /** The camera posts a judged throw. */
@@ -176,6 +213,8 @@ export async function getCameraState(userId: string, sessionId: string, gameSinc
     cameraUserId: s.userId,
     cameraName: cam?.name ?? "?",
     live: s.live && Date.now() - s.updatedAt.getTime() < STALE_MS,
+    ended: !s.live,
+    nextId: s.nextId ?? null,
     phase: s.phase === "watching" ? "watching" : "calibrating",
     snap: s.snapVersion > 0 && s.snapW && s.snapH ? { version: s.snapVersion, w: s.snapW, h: s.snapH } : null,
     snapRequest: s.snapRequest,

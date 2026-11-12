@@ -23,5 +23,6 @@ export default async function CameraViewPage({ params }: Readonly<{ params: Prom
   });
   if (!state) notFound();
   const crew = await getCrew(state.groupId);
-  return <CameraViewer initial={state} crewName={crew?.name ?? ""} />;
+  // Keyed by session: "new game" moves to another session and starts fresh.
+  return <CameraViewer key={state.id} initial={state} crewName={crew?.name ?? ""} />;
 }

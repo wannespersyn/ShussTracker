@@ -1,0 +1,1 @@
+ALTER TABLE "camera_session" ADD COLUMN "next_id" uuid;

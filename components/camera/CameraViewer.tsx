@@ -36,8 +36,11 @@ import {
   setCameraZoneFixAction,
   checkCameraThrowAction,
   addCameraMissAction,
+  endCameraSessionAction,
+  nextCameraSessionAction,
 } from "@/app/(app)/camera/actions";
 import { cn } from "@/lib/cn";
+import { useRouter } from "next/navigation";
 import { useT } from "@/lib/i18n/client";
 import { format } from "@/lib/i18n";
 import { retry } from "@/lib/retry";
@@ -54,6 +57,30 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
   // Throws ticked ✓ here (shown right away; the server has them on the next poll).
   const [okd, setOkd] = useState<Set<string>>(new Set());
   const [onlyTodo, setOnlyTodo] = useState(false);
+  // "New game" tapped once: tap again to end this game and start the next.
+  const router = useRouter();
+  const [nextAsk, setNextAsk] = useState(false);
+  const [nextBusy, setNextBusy] = useState(false);
+  function newGame() {
+    if (!nextAsk) return setNextAsk(true);
+    setNextAsk(false);
+    setNextBusy(true);
+    nextCameraSessionAction(initial.id)
+      .then((id) => router.replace(`/camera/view/${id}`))
+      .catch(() => {
+        setNextBusy(false);
+        setStopFail(true);
+      });
+  }
+  // "Stop camera" tapped once: tap again to really stop it.
+  const [stopAsk, setStopAsk] = useState(false);
+  function stopCamera() {
+    if (!stopAsk) return setStopAsk(true);
+    setStopAsk(false);
+    setState((st) => ({ ...st, live: false, ended: true }));
+    retry(() => endCameraSessionAction(initial.id), () => setStopFail(true));
+  }
+  const [stopFail, setStopFail] = useState(false);
   // A check or correction that didn't reach the server after retrying (throw number).
   const [saveFail, setSaveFail] = useState<number | null>(null);
   // "Miss" just sent (the button rests a moment so it isn't sent twice).
@@ -100,6 +127,8 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
       getCameraStateAction(initial.id, gameAt.current)
         .then((st) => {
           // The game only comes along when it changed: keep our copy otherwise.
+          // A new game was started (here or on another phone): follow it.
+          if (st.nextId) router.replace(`/camera/view/${st.nextId}`);
           gameAt.current = st.logger ? st.gameAt : 0;
           setState((prev) => ({ ...st, game: st.game === undefined ? prev.game : st.game }));
           if (st.zoneFix && st.zoneFix.version > fixVersion.current) {
@@ -118,7 +147,7 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
         .catch(() => {});
     }, POLL);
     return () => window.clearInterval(id);
-  }, [initial.id, initial.throws]);
+  }, [initial.id, initial.throws, router]);
 
   // Fetch the picture of the throw being looked at.
   useEffect(() => {
@@ -347,6 +376,37 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
           ))}
         </section>
       )}
+
+      {state.live && (
+        <section className="flex flex-col gap-2 pt-2">
+          <button
+            type="button"
+            onClick={newGame}
+            disabled={nextBusy}
+            className={cn("h-12 rounded-[14px] font-heading font-extrabold text-base tracking-[0.06em] disabled:opacity-50", nextAsk ? "bg-amber text-ink" : "bg-surface-deep border border-line-strong text-cream")}
+          >
+            {nextAsk ? L.newGameSure : L.newGame}
+          </button>
+          <button
+            type="button"
+            onClick={stopCamera}
+            className={cn("h-12 rounded-[14px] font-heading font-extrabold text-base tracking-[0.06em]", stopAsk ? "bg-red text-cream" : "bg-surface-deep border border-line-strong text-soft")}
+          >
+            {stopAsk ? L.stopRemoteSure : L.stopRemote}
+          </button>
+          {(stopAsk || nextAsk) && (
+            <button
+              type="button"
+              onClick={() => {
+                setStopAsk(false);
+                setNextAsk(false);
+              }} className="font-heading font-bold text-[13px] tracking-[0.08em] text-muted py-1">
+              {L.cancel}
+            </button>
+          )}
+        </section>
+      )}
+      {stopFail && <p role="alert" className="font-body text-[13px] text-red-pale">{L.stopRemoteFail}</p>}
     </div>
   );
 }

@@ -608,6 +608,39 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
     const id = window.setInterval(() => {
       getCameraStateAction(sessionId, gameAt.current)
         .then((st) => {
+          if (st.nextId && session.current === sessionId) {
+            // New game started from another phone: keep filming in the new
+            // session (same calibration), from an empty mat.
+            const S = live.current;
+            session.current = st.nextId;
+            setSessionId(st.nextId);
+            S.n = 0;
+            S.field = [];
+            S.left = null;
+            S.armed = false;
+            S.gated = false;
+            S.armVersion = 0;
+            S.rebase = true;
+            gameRef.current = null;
+            gameAt.current = 0;
+            setGame(null);
+            setLoggerName(null);
+            setThrows([]);
+            setAsk(null);
+            setFixing(null);
+            note(L.evNewGame, "good");
+            return;
+          }
+          if (st.ended && session.current === sessionId) {
+            // Stopped from another phone: stop filming and go back to the start.
+            stream.current?.getTracks().forEach((tr) => tr.stop());
+            stream.current = null;
+            session.current = null;
+            setSessionId(null);
+            setPhase("start");
+            setError(L.stoppedRemote);
+            return;
+          }
           // Zone nudges set on another phone or laptop.
           if (st.zoneFix && st.zoneFix.version > fixVersion.current) {
             fixVersion.current = st.zoneFix.version;

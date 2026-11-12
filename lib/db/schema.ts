@@ -739,6 +739,9 @@ export const cameraSessions = pgTable("camera_session", {
   // training (Vercel Blob); the empty mat as the reference picture.
   shareImages: boolean("share_images").notNull().default(false),
   emptyUrl: text("empty_url"),
+  // "New game" from any phone: this session ended and the camera carries on
+  // in this one (same calibration); the camera and viewers follow it.
+  nextId: uuid("next_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

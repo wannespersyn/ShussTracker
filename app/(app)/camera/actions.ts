@@ -31,6 +31,7 @@ import {
   checkCameraThrow,
   addCameraMiss,
   startCameraSession,
+  nextCameraSession,
   type FieldFix,
 } from "@/lib/db/camera";
 
@@ -52,6 +53,11 @@ export async function startCameraSessionAction(groupId: string, share = false) {
 
 export async function setCameraEmptyAction(sessionId: string, full: string) {
   await setCameraEmpty(await requireUserId(), sessionId, full);
+}
+
+/** New game on the same camera (from any phone in the crew); returns the new session. */
+export async function nextCameraSessionAction(sessionId: string) {
+  return nextCameraSession(await requireUserId(), sessionId);
 }
 
 export async function endCameraSessionAction(sessionId: string) {
