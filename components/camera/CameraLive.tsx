@@ -386,6 +386,8 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
   // The camera loop.
   useEffect(() => {
     if (phase !== "live") return;
+    /** Caps on the field: what's in a shooting box is waiting, not lying on the mat. */
+    const onField = <T extends Pt>(bs: T[]) => bs.filter((b) => ![0, 1, 2, 3].some((i) => inBox(b, i, live.current.fix)));
     const id = window.setInterval(() => {
       const S = live.current;
       if (S.busy || !S.empty) return;
@@ -417,7 +419,8 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
         if (S.rebase) {
           // New round: start from the mat as it is now, but only once it's clear.
           S.still = warp(f, S.corners);
-          const left = detect(S.empty, S.empty, S.still).present.length;
+          // Caps already waiting in the shooting boxes for this round don't count.
+          const left = onField(detect(S.empty, S.empty, S.still).present).length;
           S.clearing = left > 0;
           S.clearLeft = left;
           S.field = [];
@@ -509,15 +512,24 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
             return;
           }
           S.still = cur;
-          if (S.clearing) S.clearSince = Date.now();
           if (S.clearing) {
-            // Caps being taken off for the new round: never a throw.
-            if (!r.present.length) {
+            // Caps being taken off for the new round: never a throw. Caps put
+            // back in the shooting boxes don't count; the time limit runs from
+            // the last cap taken off, so light flicker can't keep it going.
+            const left = onField(r.present).length;
+            if (!left) {
               S.clearing = false;
               S.field = [];
               note(L.evCleared, "good");
-            } else if (r.present.length !== S.clearLeft) note(format(L.evClearing, { n: r.present.length }), "warn");
-            S.clearLeft = r.present.length;
+            } else if (Date.now() - S.clearSince > CLEAR_MAX) {
+              S.clearing = false;
+              S.field = [];
+              note(format(L.evClearTimeout, { n: left }), "good");
+            } else if (left !== S.clearLeft) {
+              S.clearSince = Date.now();
+              note(format(L.evClearing, { n: left }), "warn");
+            }
+            S.clearLeft = left;
             return;
           }
           if (!r.landed.length && !r.present.length && r.gone.length >= 2) {
@@ -538,7 +550,7 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
           const spots = r.landed.map((b) => unfix({ x: b.x, y: b.y }, S.fix));
           const gone = r.gone.map((b) => unfix({ x: b.x, y: b.y }, S.fix));
           // The whole field: every cap it still sees on the field (not in a shooting box).
-          const present = r.present.filter((b) => ![0, 1, 2, 3].some((i) => inBox(b, i, S.fix))).map((b) => unfix({ x: b.x, y: b.y }, S.fix));
+          const present = onField(r.present).map((b) => unfix({ x: b.x, y: b.y }, S.fix));
           const n = post(f, cur, spots, gone, false, nextField(S.field, spots, gone, present));
           note(
             spots.length

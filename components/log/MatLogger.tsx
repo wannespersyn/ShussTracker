@@ -170,7 +170,9 @@ export function MatLogger({
           }
           const next = cs.throws.filter((x) => x.n > camSeen.current!).sort((a, b) => a.n - b.n)[0];
           if (!next) return;
-          if (camPendingRef.current) return; // one at a time: confirm or fix the current one first
+          // One at a time: confirm or fix the current one first (a throw the
+          // camera saw but couldn't place gives way to the next one).
+          if (camPendingRef.current?.found) return;
           camSeen.current = next.n;
           if (next.miss) {
             // A real miss (the cap left its box and landed nowhere, or someone tapped MISS).
@@ -179,9 +181,13 @@ export function MatLogger({
           }
           const d = structuredClone(cur);
           const found = placeFromCamera(d, next.spots.map(fromField), next.gone.map(fromField));
-          // The camera found no cap for the thrower: that's not a miss, just nothing
-          // useful — leave the mat alone and wait for the next camera throw (or a tap).
-          if (!found) return;
+          if (!found) {
+            // The camera saw a throw but found no cap for the thrower: not a miss.
+            // Leave the mat alone, but say so (place it by hand, or the next
+            // camera throw takes over) instead of silently waiting.
+            setCamPending({ n: next.n, left: CAM_CONFIRM, touched: false, found: false });
+            return;
+          }
           setHistory((h) => [...h, cur]);
           setSt(d);
           setCamPending({ n: next.n, left: CAM_CONFIRM, touched: false, found });
