@@ -39,7 +39,8 @@ import { BOX_OF_CORNER, DETECTOR, FULL_H, FULL_W, MAT_W, WH, WW, align, detect, 
 import { ZoneEditor } from "@/components/camera/ZoneEditor";
 import { RotateButton, useMatRotation } from "@/components/camera/rotation";
 import { CornerEditor, Overlay, defaultCorners, type Photo } from "@/components/camera/CameraLab";
-import { ReviewBadge, SpotsEditor, spotsLabel, warpedToJpeg, type Spot } from "@/components/camera/MatPick";
+import { MatPick, ReviewBadge, SpotsEditor, fieldPick, spotsLabel, warpedToJpeg, type Spot } from "@/components/camera/MatPick";
+import { fieldDiff, nextField } from "@/lib/camera-field";
 import { CameraLog, useGameText, type CamEvent } from "@/components/camera/CameraLog";
 import { asCameraGame, boxLabelsOf, stampEvents, type CameraGame } from "@/lib/camera-log";
 import {
@@ -57,6 +58,7 @@ import {
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/client";
 import { format } from "@/lib/i18n";
+import { retry } from "@/lib/retry";
 
 /** Frames are grabbed at most this big (long side). */
 const MAX_SIDE = 1280;
@@ -74,8 +76,6 @@ const MIN_CELLS = 2;
 const LIGHT_SHARE = 0.3;
 /** Still ticks in a row before a throw is judged (~1 s). */
 const SETTLE = 3;
-/** Seconds a "cap in zone X?" question stays before it counts as right. */
-const CONFIRM_S = 6;
 
 type Phase = "start" | "calibrate" | "live";
 type Status = "waiting" | "moving" | "looking" | "paused" | "clearing";
@@ -91,7 +91,8 @@ function loadFix(): ZoneFix {
 }
 /** Camera events kept for the log. */
 const MAX_EVENTS = 150;
-type Throw = { n: number; spots: Spot[]; gone: Spot[]; corrected: boolean; checked?: boolean; img: string | null };
+/** `field`/`before`: every cap on the mat after and before the throw (lib/camera-field.ts). */
+type Throw = { n: number; spots: Spot[]; gone: Spot[]; field?: Spot[] | null; before?: Spot[] | null; corrected: boolean; checked?: boolean; img: string | null };
 /** How often the session is synced with the crew (ms). */
 const SYNC = 1500;
 
@@ -172,7 +173,10 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
   const [rot, turn] = useMatRotation();
   const [status, setStatus] = useState<Status>("waiting");
   const [throws, setThrows] = useState<Throw[]>([]);
-  const [ask, setAsk] = useState<{ n: number; left: number } | null>(null);
+  // The throw whose "is the whole mat right?" question is open. It waits for
+  // ✓ or a correction (no countdown: an unchecked throw is no training data);
+  // a newer throw takes its place, and the older one stays to check in the list.
+  const [ask, setAsk] = useState<{ n: number } | null>(null);
   const [fixing, setFixing] = useState<number | null>(null);
   const [crewId, setCrewId] = useState(initialCrewId ?? crews[0]?.id ?? "");
   // Keep top-down pictures of the mat for training (asked at the start).
@@ -229,6 +233,8 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
     calm: 0,
     busy: false,
     n: 0,
+    // Every cap on the field after the last throw (empty when the mat is cleared).
+    field: [] as Spot[],
   });
 
   // Zone nudges are shared with the crew: version of the last one seen here.
@@ -414,6 +420,7 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
           const left = detect(S.empty, S.empty, S.still).present.length;
           S.clearing = left > 0;
           S.clearLeft = left;
+          S.field = [];
           S.clearSince = Date.now();
           note(left > 0 ? format(L.evClearing, { n: left }) : L.evNewRound, left > 0 ? "warn" : "good");
         }
@@ -457,6 +464,7 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
           S.clearing = false;
           S.base = small;
           S.still = warp(f, S.corners);
+          S.field = [];
           note(format(L.evClearTimeout, { n: S.clearLeft }), "good");
         }
         if (S.left && Date.now() - S.left.t > MISS_MS && !S.clearing) {
@@ -506,6 +514,7 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
             // Caps being taken off for the new round: never a throw.
             if (!r.present.length) {
               S.clearing = false;
+              S.field = [];
               note(L.evCleared, "good");
             } else if (r.present.length !== S.clearLeft) note(format(L.evClearing, { n: r.present.length }), "warn");
             S.clearLeft = r.present.length;
@@ -513,6 +522,7 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
           }
           if (!r.landed.length && !r.present.length && r.gone.length >= 2) {
             // Several caps gone and the mat is empty again: it was cleared.
+            S.field = [];
             note(L.evCleared, "good");
             return;
           }
@@ -520,7 +530,9 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
           // Back onto the real print with the per-zone nudges.
           const spots = r.landed.map((b) => unfix({ x: b.x, y: b.y }, S.fix));
           const gone = r.gone.map((b) => unfix({ x: b.x, y: b.y }, S.fix));
-          const n = post(f, cur, spots, gone);
+          // The whole field: every cap it still sees on the field (not in a shooting box).
+          const present = r.present.filter((b) => ![0, 1, 2, 3].some((i) => inBox(b, i, S.fix))).map((b) => unfix({ x: b.x, y: b.y }, S.fix));
+          const n = post(f, cur, spots, gone, false, nextField(S.field, spots, gone, present));
           note(
             spots.length
               ? format(L.evThrow, { n, where: spotsLabel(spots, C, L), gone: gone.length })
@@ -536,15 +548,19 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
     }, TICK);
     /** Post a judged throw (empty = a miss); returns its number. */
     /** `miss`: a real miss (the cap left its box and landed nowhere). */
-    function post(f: Frame, cur: Float32Array, spots: Spot[], gone: Spot[], miss = false): number {
+    /** `field`: every cap on the field after it (default: as before the throw). */
+    function post(f: Frame, cur: Float32Array, spots: Spot[], gone: Spot[], miss = false, field?: Spot[]): number {
       const S = live.current;
       const n = ++S.n;
+      const before = S.field;
+      const after = field ?? before;
+      S.field = after;
       const img = warpedToJpeg(cur, WW, WH);
       const full = shareRef.current && session.current ? warpedToJpeg(warpFull(f, S.corners), FULL_W, FULL_H, 0.85) : null;
-      setThrows((ts) => [{ n, spots, gone, corrected: false, img }, ...ts]);
-      setAsk({ n, left: CONFIRM_S });
+      setThrows((ts) => [{ n, spots, gone, field: after, before, corrected: false, img }, ...ts]);
+      setAsk({ n });
       if (session.current)
-        addCameraThrowAction(session.current, { n, spots, gone, image: img, full, detector: miss ? `${DETECTOR}+miss` : DETECTOR }).catch(() =>
+        addCameraThrowAction(session.current, { n, spots, gone, field: after, fieldBefore: before, image: img, full, detector: miss ? `${DETECTOR}+miss` : DETECTOR }).catch(() =>
           // Not stored (offline, or the database isn't migrated): say so instead of failing silently.
           note(format(L.evPostFail, { n }), "warn"),
         );
@@ -555,25 +571,27 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
-  // Countdown on the question; at zero it counts as right.
-  useEffect(() => {
-    if (!ask || fixing !== null) return;
-    const id = window.setTimeout(() => setAsk((a) => (!a || a.n !== ask.n ? a : a.left <= 1 ? null : { ...a, left: a.left - 1 })), 1000);
-    return () => window.clearTimeout(id);
-  }, [ask, fixing]);
-
   /** ✓ on the question: the throw is right, and reviewed. */
   function confirm(n: number) {
     setThrows((ts) => ts.map((th) => (th.n === n ? { ...th, checked: true } : th)));
     setAsk(null);
-    if (session.current) checkCameraThrowAction(session.current, n).catch(() => {});
+    const sid = session.current;
+    if (sid) retry(() => checkCameraThrowAction(sid, n), () => note(format(L.evSaveFail, { n }), "warn"));
   }
 
-  function correct(n: number, spots: Spot[]) {
-    setThrows((ts) => ts.map((th) => (th.n === n ? { ...th, spots, corrected: true } : th)));
+  /** `value`: the whole field when the throw has one, else the throw's caps. */
+  function correct(n: number, value: Spot[]) {
+    const th = throws.find((x) => x.n === n);
+    const whole = th?.field && th.before ? { field: value, ...fieldDiff(th.before, value) } : null;
+    const spots = whole ? whole.spots : value;
+    setThrows((ts) => ts.map((x) => (x.n === n ? { ...x, spots, ...(whole ? { field: whole.field, gone: whole.gone } : {}), corrected: true } : x)));
+    // The next throw builds on the corrected field.
+    if (whole && n === live.current.n) live.current.field = whole.field;
     setFixing(null);
     setAsk(null);
-    if (session.current) correctCameraThrowByNAction(session.current, n, spots).catch(() => {});
+    const sid = session.current;
+    const f = whole ? { field: whole.field, gone: whole.gone } : undefined;
+    if (sid) retry(() => correctCameraThrowByNAction(sid, n, spots, f), () => note(format(L.evSaveFail, { n }), "warn"));
   }
 
   // Sync with the crew: corners set on another phone or laptop, requests
@@ -620,15 +638,22 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
           const extra = st.throws.filter((th) => th.n > 0);
           setThrows((ts) => {
             const have = new Set(ts.map((x) => x.n));
-            const add = extra.filter((th) => !have.has(th.n)).map((th) => ({ n: th.n, spots: th.spots, gone: th.gone, corrected: th.corrected, checked: th.checked, img: null }));
+            const add = extra.filter((th) => !have.has(th.n)).map((th) => ({ n: th.n, spots: th.spots, gone: th.gone, field: th.field, before: th.fieldBefore, corrected: th.corrected, checked: th.checked, img: null }));
             return add.length ? [...add, ...ts].sort((a, b) => b.n - a.n) : ts;
           });
-          const remote = new Map(st.throws.filter((th) => th.corrected).map((th) => [th.n, th.spots]));
+          const remote = new Map(st.throws.filter((th) => th.corrected).map((th) => [th.n, th]));
+          // A field corrected on another phone: the next throw builds on it.
+          const top = remote.get(live.current.n);
+          if (top?.field) live.current.field = top.field;
           const ok = new Set(st.throws.filter((th) => th.checked).map((th) => th.n));
           if (!remote.size && !ok.size) return;
           setThrows((ts) =>
             ts.map((th) =>
-              remote.has(th.n) && !th.corrected ? { ...th, spots: remote.get(th.n) ?? [], corrected: true } : ok.has(th.n) && !th.checked ? { ...th, checked: true } : th,
+              remote.has(th.n) && !th.corrected
+                ? { ...th, spots: remote.get(th.n)!.spots, gone: remote.get(th.n)!.gone, field: remote.get(th.n)!.field ?? th.field, corrected: true }
+                : ok.has(th.n) && !th.checked
+                  ? { ...th, checked: true }
+                  : th,
             ),
           );
           setAsk((a) => (a && (remote.has(a.n) || ok.has(a.n)) ? null : a));
@@ -805,7 +830,8 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
           <SpotsEditor
             key={fixingThrow.n}
             src={fixingThrow.img}
-            initial={fixingThrow.spots}
+            initial={fixingThrow.field ?? fixingThrow.spots}
+            before={fixingThrow.field ? (fixingThrow.before ?? []) : null}
             gone={fixingThrow.gone}
             C={C}
             L={L}
@@ -822,9 +848,16 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
         <section className="flex flex-col gap-3 p-4 rounded-[18px] bg-surface-deep border border-gold/50" aria-live="polite">
           <span className={kicker}>{format(L.throwN, { n: asked.n })}</span>
           <p className="font-display font-extrabold text-2xl leading-tight">{asked.spots.length ? format(asked.spots.length > 1 ? L.capsIn : L.capIn, { where: spotText(asked.spots) }) : asked.gone.length ? format(L.noCapGoneQ, { n: asked.gone.length }) : L.noCapQ}</p>
+          {asked.field && (
+            // The whole mat, so a ✓ vouches for every cap on it (white = already there, orange = this throw).
+            <>
+              <MatPick src={asked.img} {...fieldPick(asked.before ?? [], asked.field)} label={format(L.fieldAsk, { n: asked.field.length })} fix={fix} boxLabels={boxLabels} rot={rot} />
+              <p className="font-body text-[13px] text-soft -mt-1">{format(L.fieldAsk, { n: asked.field.length })}</p>
+            </>
+          )}
           <div className="grid grid-cols-2 gap-2">
             <button type="button" onClick={() => confirm(asked.n)} className="h-12 rounded-[14px] bg-mint text-ink font-heading font-extrabold text-base tracking-[0.06em]">
-              ✓ {format(L.right, { s: ask!.left })}
+              ✓ {L.rightShort}
             </button>
             <button type="button" onClick={() => setFixing(asked.n)} className={secondary}>
               {L.wrong}

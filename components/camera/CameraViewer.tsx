@@ -24,7 +24,8 @@ import { RotateButton, useMatRotation } from "@/components/camera/rotation";
 import { CameraLog } from "@/components/camera/CameraLog";
 import { asCameraGame, boxLabelsOf, stampEvents } from "@/lib/camera-log";
 import type { CameraState } from "@/lib/db/camera";
-import { MatPick, ReviewBadge, SpotsEditor, spotsLabel, type Spot } from "@/components/camera/MatPick";
+import { MatPick, ReviewBadge, SpotsEditor, fieldPick, spotsLabel, type Spot } from "@/components/camera/MatPick";
+import { fieldDiff } from "@/lib/camera-field";
 import {
   correctCameraThrowAction,
   getCameraSnapshotAction,
@@ -39,6 +40,7 @@ import {
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/client";
 import { format } from "@/lib/i18n";
+import { retry } from "@/lib/retry";
 
 const POLL = 2000;
 
@@ -52,6 +54,8 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
   // Throws ticked ✓ here (shown right away; the server has them on the next poll).
   const [okd, setOkd] = useState<Set<string>>(new Set());
   const [onlyTodo, setOnlyTodo] = useState(false);
+  // A check or correction that didn't reach the server after retrying (throw number).
+  const [saveFail, setSaveFail] = useState<number | null>(null);
   // "Miss" just sent (the button rests a moment so it isn't sent twice).
   const [missSent, setMissSent] = useState(false);
   function miss() {
@@ -158,14 +162,19 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
   /** ✓: right as the camera judged it — reviewed, on to the next one. */
   function check(x: { id: string; n: number }) {
     setOkd((s) => new Set(s).add(x.id));
-    checkCameraThrowAction(initial.id, x.n).catch(() => {});
+    retry(() => checkCameraThrowAction(initial.id, x.n), () => setSaveFail(x.n));
     nextTodo(x.id);
   }
 
-  function correct(id: string, spots: Spot[]) {
-    setState((st) => ({ ...st, throws: st.throws.map((x) => (x.id === id ? { ...x, spots, corrected: true } : x)) }));
+  /** `value`: the whole field when the throw has one (lib/camera-field.ts), else the throw's caps. */
+  function correct(id: string, value: Spot[]) {
+    const old = state.throws.find((x) => x.id === id);
+    const whole = old?.field ? { field: value, ...fieldDiff(old.fieldBefore ?? [], value) } : null;
+    const spots = whole ? whole.spots : value;
+    setState((st) => ({ ...st, throws: st.throws.map((x) => (x.id === id ? { ...x, spots, ...(whole ? { field: whole.field, gone: whole.gone } : {}), corrected: true } : x)) }));
     setFixing(false);
-    correctCameraThrowAction(id, spots).catch(() => {});
+    const f = whole ? { field: whole.field, gone: whole.gone } : undefined;
+    retry(() => correctCameraThrowAction(id, spots, f), () => setSaveFail(old?.n ?? 0));
   }
 
   const kicker = "font-heading font-bold text-[12px] tracking-[0.14em] text-gold";
@@ -188,6 +197,12 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
           {state.live ? L.liveBadge : L.stopped}
         </span>
       </header>
+
+      {saveFail !== null && (
+        <p role="alert" className="px-3 py-2 rounded-[12px] bg-red/10 border border-red/40 font-body text-[13px] text-cream">
+          {format(L.evSaveFail, { n: saveFail })}
+        </p>
+      )}
 
       {state.live && state.phase === "calibrating" && (
         <section className="flex flex-col gap-3">
@@ -255,10 +270,16 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
         <section className="flex flex-col gap-3" aria-live="polite">
           <span className={kicker}>{format(L.throwN, { n: th.n })}</span>
           {fixing ? (
-            <SpotsEditor key={th.id} src={images[th.id] ?? null} initial={th.spots} gone={th.gone} C={C} L={L} onSave={(sp) => correct(th.id, sp)} onClose={() => setFixing(false)} fix={fix} boxLabels={boxLabels} rot={rot} />
+            <SpotsEditor key={th.id} src={images[th.id] ?? null} initial={th.field ?? th.spots} before={th.field ? (th.fieldBefore ?? []) : null} gone={th.gone} C={C} L={L} onSave={(sp) => correct(th.id, sp)} onClose={() => setFixing(false)} fix={fix} boxLabels={boxLabels} rot={rot} />
           ) : (
             <>
-              <MatPick src={images[th.id] ?? null} spots={th.spots} gone={th.gone} label={spotText(th.spots)} fix={fix} boxLabels={boxLabels} rot={rot} />
+              {th.field ? (
+                // The whole mat (white = already there, orange = this throw), so a ✓ vouches for every cap.
+                <MatPick src={images[th.id] ?? null} {...fieldPick(th.fieldBefore ?? [], th.field)} label={format(L.fieldAsk, { n: th.field.length })} fix={fix} boxLabels={boxLabels} rot={rot} />
+              ) : (
+                <MatPick src={images[th.id] ?? null} spots={th.spots} gone={th.gone} label={spotText(th.spots)} fix={fix} boxLabels={boxLabels} rot={rot} />
+              )}
+              {th.field && <p className="font-body text-[13px] text-soft">{format(L.fieldAsk, { n: th.field.length })}</p>}
               <p className="font-display font-extrabold text-2xl leading-tight">
                 {th.corrected ? spotText(th.spots) : th.spots.length ? format(th.spots.length > 1 ? L.capsIn : L.capIn, { where: spotText(th.spots) }) : L.noCapQ}
               </p>

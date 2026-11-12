@@ -770,6 +770,13 @@ export const cameraThrows = pgTable(
     // "corrected" (moved by hand), "confirmed" (tapped done), "auto".
     label: jsonb("label").$type<{ x: number; y: number; owner: string; no: number }[]>(),
     labelHow: text("label_how"),
+    // Every cap on the field after the throw (mat units, lib/camera-field.ts),
+    // the field before it, and whether a person vouched for the whole field:
+    // "checked" (✓) or "corrected"; null = as the camera judged it. Null
+    // field: a throw from before the camera kept the whole field.
+    field: jsonb("field").$type<{ x: number; y: number }[]>(),
+    fieldBefore: jsonb("field_before").$type<{ x: number; y: number }[]>(),
+    fieldHow: text("field_how"),
     // Small top-down JPEG (data URL) of the mat after the throw.
     image: text("image"),
     createdAt: timestamp("created_at").notNull().defaultNow(),

@@ -38,6 +38,10 @@ export type CameraThrow = {
   /** A real miss: the cap left its box and landed nowhere, or someone tapped
    * MISS. (An empty throw without this = the camera just found no cap.) */
   miss: boolean;
+  /** Every cap on the field after the throw, and before it (lib/camera-field.ts);
+   * null for throws from before the camera kept the whole field. */
+  field: Spot[] | null;
+  fieldBefore: Spot[] | null;
   createdAt: Date;
 };
 export type CameraState = {
@@ -104,7 +108,7 @@ export async function endCameraSession(userId: string, sessionId: string) {
 export async function addCameraThrow(
   userId: string,
   sessionId: string,
-  t: { n: number; spots: Spot[]; gone: Spot[]; image: string | null; full?: string | null; detector?: string },
+  t: { n: number; spots: Spot[]; gone: Spot[]; field?: Spot[] | null; fieldBefore?: Spot[] | null; image: string | null; full?: string | null; detector?: string },
 ) {
   const s = await db.query.cameraSessions.findFirst({ where: and(eq(cameraSessions.id, sessionId), eq(cameraSessions.userId, userId)), columns: { snapshot: false } });
   if (!s) throw new Error("Not your camera");
@@ -112,28 +116,33 @@ export async function addCameraThrow(
   const image = t.image && t.image.startsWith("data:image/jpeg;base64,") && t.image.length < 120_000 ? t.image : null;
   await db
     .insert(cameraThrows)
-    .values({ sessionId, n: t.n, found: t.spots, spots: t.spots, gone: t.gone, image, imageUrl, detector: t.detector?.slice(0, 40) ?? null })
+    .values({ sessionId, n: t.n, found: t.spots, spots: t.spots, gone: t.gone, field: t.field ?? null, fieldBefore: t.fieldBefore ?? null, image, imageUrl, detector: t.detector?.slice(0, 40) ?? null })
     .onConflictDoNothing();
   await db.update(cameraSessions).set({ updatedAt: new Date() }).where(eq(cameraSessions.id, sessionId));
 }
 
+/** A correction of the whole field (lib/camera-field.ts): the new field and
+ * what the throw did according to it. Without it only `spots` changes. */
+export type FieldFix = { field: Spot[]; gone: Spot[] };
+const fieldSet = (f?: FieldFix) => (f ? { field: f.field, gone: f.gone, fieldHow: "corrected" } : {});
+
 /** Anyone in the crew (the camera too) fixes where a throw's cap lies. */
-export async function correctCameraThrow(userId: string, throwId: string, spots: Spot[]) {
+export async function correctCameraThrow(userId: string, throwId: string, spots: Spot[], f?: FieldFix) {
   const t = await db.query.cameraThrows.findFirst({ where: eq(cameraThrows.id, throwId), columns: { sessionId: true } });
   if (!t) throw new Error("Not found");
   await sessionFor(userId, t.sessionId);
   await db
     .update(cameraThrows)
-    .set({ spots, correctedBy: userId })
+    .set({ spots, correctedBy: userId, ...fieldSet(f) })
     .where(eq(cameraThrows.id, throwId));
 }
 
 /** Same, by throw number (the camera knows its own numbers, not the ids). */
-export async function correctCameraThrowByN(userId: string, sessionId: string, n: number, spots: Spot[]) {
+export async function correctCameraThrowByN(userId: string, sessionId: string, n: number, spots: Spot[], f?: FieldFix) {
   await sessionFor(userId, sessionId);
   await db
     .update(cameraThrows)
-    .set({ spots, correctedBy: userId })
+    .set({ spots, correctedBy: userId, ...fieldSet(f) })
     .where(and(eq(cameraThrows.sessionId, sessionId), eq(cameraThrows.n, n)));
 }
 
@@ -146,7 +155,7 @@ export async function getCameraState(userId: string, sessionId: string, gameSinc
   if (s.userId === userId && s.live) await db.update(cameraSessions).set({ updatedAt: new Date() }).where(eq(cameraSessions.id, sessionId));
   const [rows, cam, logger] = await Promise.all([
     db
-      .select({ id: cameraThrows.id, n: cameraThrows.n, found: cameraThrows.found, spots: cameraThrows.spots, gone: cameraThrows.gone, correctedBy: cameraThrows.correctedBy, labelHow: cameraThrows.labelHow, detector: cameraThrows.detector, createdAt: cameraThrows.createdAt })
+      .select({ id: cameraThrows.id, n: cameraThrows.n, found: cameraThrows.found, spots: cameraThrows.spots, gone: cameraThrows.gone, correctedBy: cameraThrows.correctedBy, labelHow: cameraThrows.labelHow, detector: cameraThrows.detector, field: cameraThrows.field, fieldBefore: cameraThrows.fieldBefore, createdAt: cameraThrows.createdAt })
       .from(cameraThrows)
       .where(eq(cameraThrows.sessionId, sessionId))
       .orderBy(desc(cameraThrows.n))
@@ -186,6 +195,8 @@ export async function getCameraState(userId: string, sessionId: string, gameSinc
       corrected: r.correctedBy !== null || r.labelHow === "corrected",
       checked: checked.has(r.id) || r.labelHow === "confirmed",
       miss: r.detector?.endsWith("miss") ?? false,
+      field: r.field ?? null,
+      fieldBefore: r.fieldBefore ?? null,
       createdAt: r.createdAt,
     })),
   };
@@ -360,7 +371,8 @@ export async function checkCameraThrow(userId: string, sessionId: string, n: num
   await sessionFor(userId, sessionId);
   await db
     .update(cameraThrows)
-    .set({ checkedBy: userId })
+    // A ✓ on a throw with a field vouches for the whole field (unless it was corrected).
+    .set({ checkedBy: userId, fieldHow: sql`case when ${cameraThrows.field} is not null and ${cameraThrows.fieldHow} is null then 'checked' else ${cameraThrows.fieldHow} end` })
     .where(and(eq(cameraThrows.sessionId, sessionId), eq(cameraThrows.n, n)));
 }
 

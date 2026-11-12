@@ -21,6 +21,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/client";
+import { retry } from "@/lib/retry";
 import { format } from "@/lib/i18n";
 import type { Duo } from "@/lib/teams";
 import { BetaPill } from "@/components/beta/BetaUi";
@@ -87,6 +88,8 @@ export function MatLogger({
   const [cams, setCams] = useState<{ id: string; name: string; calibrating: boolean }[] | null>(null);
   /** A camera throw placed on the mat, waiting to be confirmed. */
   const [camPending, setCamPending] = useState<{ n: number; left: number; touched: boolean; found: boolean; miss?: boolean } | null>(null);
+  // A camera throw whose label didn't reach the server after retrying (its number).
+  const [camSaveFail, setCamSaveFail] = useState<number | null>(null);
   const camSeen = useRef<number | null>(null);
   const armedRound = useRef<number | null>(null);
   /** Camera throw number → index in st.throws it became (shared with the camera). */
@@ -118,7 +121,8 @@ export function MatLogger({
       if (ok && cam && pend) {
         camLinks.current[pend.n] = idx;
         const label = d.caps.filter((c) => !c.waiting).map((c) => ({ ...toField(c), owner: c.owner, no: c.no }));
-        labelCameraThrowAction(cam.id, pend.n, label, pend.touched && how === "confirmed" ? "corrected" : how).catch(() => {});
+        const camId = cam.id;
+        retry(() => labelCameraThrowAction(camId, pend.n, label, pend.touched && how === "confirmed" ? "corrected" : how), () => setCamSaveFail(pend.n));
       }
       const last = d.throws.filter((x) => x.kind !== "skipped").at(-1);
       if (ok && celebrate && last?.moves.some((m) => m.to.spot === "ML" || m.to.spot === "MR")) {
@@ -498,6 +502,9 @@ export function MatLogger({
                 </button>
               )}
             </div>
+          )}
+          {cam && camSaveFail !== null && (
+            <span role="alert" className="font-body text-xs text-red">⚠️ {format(M.camSaveFail, { n: camSaveFail })}</span>
           )}
           {cam && !camPending && st.phase === "throw" && (
             <span className="font-body text-xs text-muted">📹 {format(M.camLinked, { name: cam.name })}</span>

@@ -5,7 +5,9 @@
  * mamas drawn over it, the caps of that throw circled and the spots caps
  * were knocked away from dashed. Optionally tappable (mat units, 824 × 265).
  * SpotsEditor builds on it to fix a throw: tap to add a cap, tap a circle to
- * remove it, then save. spotsLabel turns spots into "R3 (3 pt) + L2 (2 pt)".
+ * remove it, then save. With the field before the throw it edits the whole
+ * field (every cap on the mat): caps already lying there are drawn white,
+ * caps of this throw amber. spotsLabel turns spots into "R3 (3 pt) + L2 (2 pt)".
  * ReviewBadge shows whether a throw was checked: ✓ right, ✎ fixed, or still
  * to check.
  * With the zone fine-tuning (`fix`) the zones are drawn as calibrated, and
@@ -16,6 +18,7 @@
 import { useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { pointIn, rotated, type Rot } from "@/components/camera/rotation";
 import { MAT_H, MAT_W, refix, shootingBoxes, spotAt, unfix, zoneOutlines, type ZoneFix } from "@/lib/camera";
+import { fieldDiff } from "@/lib/camera-field";
 import { format, type Dictionary } from "@/lib/i18n";
 
 export type Spot = { x: number; y: number };
@@ -36,13 +39,14 @@ export function spotsLabel(spots: Spot[], C: Dictionary["cam"], L: Dictionary["c
 export function MatPick({
   src,
   spots,
+  others = [],
   gone = [],
   label,
   onTap,
   fix,
   boxLabels,
   rot = 0,
-}: Readonly<{ src: string | null; spots: Spot[]; gone?: Spot[]; label: string; onTap?: (p: Spot) => void; fix?: ZoneFix | null; boxLabels?: (string | null)[]; rot?: Rot }>) {
+}: Readonly<{ src: string | null; spots: Spot[]; others?: Spot[]; gone?: Spot[]; label: string; onTap?: (p: Spot) => void; fix?: ZoneFix | null; boxLabels?: (string | null)[]; rot?: Rot }>) {
   const turned = useRef<SVGGElement>(null);
   function tap(e: ReactMouseEvent<HTMLButtonElement>) {
     // Tapped on the (maybe turned) picture → the spot on the real print.
@@ -90,6 +94,9 @@ export function MatPick({
         {gone.map((p, i) => (
           <circle key={`g${i}`} cx={pt(p).x} cy={pt(p).y} r={20} fill="none" stroke="#ffffff" strokeOpacity={0.7} strokeWidth={3} strokeDasharray="6 5" />
         ))}
+        {others.map((p, i) => (
+          <circle key={`o${i}`} cx={pt(p).x} cy={pt(p).y} r={20} fill="none" stroke="#ffffff" strokeWidth={3} />
+        ))}
         {spots.map((p, i) => (
           <circle key={`s${i}`} cx={pt(p).x} cy={pt(p).y} r={22} fill="none" stroke="#ffb627" strokeWidth={4} />
         ))}
@@ -106,6 +113,19 @@ export function MatPick({
       {body}
     </figure>
   );
+}
+
+/** A field against the one before: caps of this throw (`fresh`), caps that
+ * were already there (`lying`) and spots caps left (`left`). */
+export function splitField(before: Spot[], field: Spot[]): { fresh: Spot[]; lying: Spot[]; left: Spot[] } {
+  const { spots, gone } = fieldDiff(before, field);
+  return { fresh: spots, lying: field.filter((p) => !spots.includes(p)), left: gone };
+}
+
+/** A field as MatPick draws it (spread into its props). */
+export function fieldPick(before: Spot[], field: Spot[]): { spots: Spot[]; others: Spot[]; gone: Spot[] } {
+  const v = splitField(before, field);
+  return { spots: v.fresh, others: v.lying, gone: v.left };
 }
 
 /** A warped top-down frame (lib/camera) as a small JPEG data URL. */
@@ -133,6 +153,7 @@ export function warpedToJpeg(warped: Float32Array, w: number, h: number, quality
 export function SpotsEditor({
   src,
   initial,
+  before = null,
   gone,
   C,
   L,
@@ -144,6 +165,8 @@ export function SpotsEditor({
 }: Readonly<{
   src: string | null;
   initial: Spot[];
+  /** The field before the throw: then `initial` is the whole field after it and that is what's edited and saved. */
+  before?: Spot[] | null;
   gone: Spot[];
   C: Dictionary["cam"];
   L: Dictionary["camLive"];
@@ -157,18 +180,25 @@ export function SpotsEditor({
   const toggle = (p: Spot) =>
     setDraft((d) => {
       const near = d.findIndex((q) => Math.hypot(q.x - p.x, q.y - p.y) < 28);
-      return near >= 0 ? d.filter((_, i) => i !== near) : [...d, p].slice(0, 12);
+      return near >= 0 ? d.filter((_, i) => i !== near) : [...d, p].slice(0, before ? 16 : 12);
     });
   const secondary = "h-12 rounded-[14px] bg-surface-deep border border-line-strong text-cream font-heading font-extrabold text-base tracking-[0.06em]";
+  // Whole field: split it into caps already lying there and caps of this throw.
+  const v = before ? splitField(before, draft) : { fresh: draft, lying: [], left: gone };
+  const sub = before ? L.fieldSub : L.whereSub;
   return (
     <div className="flex flex-col gap-3">
-      <p className="font-body text-[15px] leading-normal text-soft">{L.whereSub}</p>
-      <MatPick src={src} spots={draft} gone={gone} label={L.whereSub} onTap={toggle} fix={fix} boxLabels={boxLabels} rot={rot} />
-      <p className="font-display font-extrabold text-xl leading-tight">{spotsLabel(draft, C, L)}</p>
+      <p className="font-body text-[15px] leading-normal text-soft">{sub}</p>
+      <MatPick src={src} spots={v.fresh} others={v.lying} gone={v.left} label={sub} onTap={toggle} fix={fix} boxLabels={boxLabels} rot={rot} />
+      <p className="font-display font-extrabold text-xl leading-tight">
+        {spotsLabel(v.fresh, C, L)}
+        {before && v.left.length > 0 && <span className="text-muted"> · {format(L.fieldGone, { n: v.left.length })}</span>}
+      </p>
+      {before && <p className="font-body text-xs text-muted -mt-2">{format(L.fieldCount, { n: draft.length })}</p>}
       <button type="button" onClick={() => onSave(draft)} className="h-14 rounded-[16px] bg-amber text-ink font-heading font-extrabold text-lg tracking-[0.06em]">
         {L.save}
       </button>
-      <button type="button" onClick={() => onSave([])} className={secondary}>
+      <button type="button" onClick={() => onSave(before ? v.lying : [])} className={secondary}>
         {L.noCapBtn}
       </button>
       <button type="button" onClick={onClose} className="font-heading font-bold text-[13px] tracking-[0.08em] text-muted py-2">
