@@ -8,12 +8,14 @@
  * regular polling doubles as its heartbeat: a session counts as live while
  * it's open and the camera checked in recently.
  *
- * Data: camera_session, camera_throw (spots in mat units, 824 × 265).
+ * Data: camera_session, camera_throw (spots in mat units, 824 × 265),
+ * camera_game (the linked mat logger's game, so the camera can show it),
+ * camera_zone_fix (per-zone nudges, set on the camera or from another phone).
  */
 import { put } from "@vercel/blob";
-import { and, desc, eq, gt } from "drizzle-orm";
+import { and, desc, eq, gt, isNotNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { cameraSessions, cameraThrows, groupMembers, users } from "@/lib/db/schema";
+import { cameraGames, cameraSessions, cameraThrows, cameraZoneFixes, groupMembers, users } from "@/lib/db/schema";
 
 /** A camera that hasn't checked in for this long is gone. */
 const STALE_MS = 2 * 60 * 1000;
@@ -31,6 +33,15 @@ export type CameraThrow = {
   /** Where caps were knocked away from. */
   gone: Spot[];
   corrected: boolean;
+  /** Someone tapped ✓ on it (or the logger confirmed it by hand). */
+  checked: boolean;
+  /** A real miss: the cap left its box and landed nowhere, or someone tapped
+   * MISS. (An empty throw without this = the camera just found no cap.) */
+  miss: boolean;
+  /** Every cap on the field after the throw, and before it (lib/camera-field.ts);
+   * null for throws from before the camera kept the whole field. */
+  field: Spot[] | null;
+  fieldBefore: Spot[] | null;
   createdAt: Date;
 };
 export type CameraState = {
@@ -39,6 +50,11 @@ export type CameraState = {
   cameraUserId: string;
   cameraName: string;
   live: boolean;
+  /** Stopped (by the camera or from another phone); `live` is also false
+   * when the camera merely hasn't checked in for a while. */
+  ended: boolean;
+  /** Ended for a new game: the session the camera carries on in. */
+  nextId: string | null;
   /** "calibrating" until someone confirmed the corners, then "watching". */
   phase: "calibrating" | "watching";
   snap: { version: number; w: number; h: number } | null;
@@ -49,13 +65,20 @@ export type CameraState = {
   armed: boolean;
   armVersion: number;
   throws: CameraThrow[];
+  /** The linked mat logger's game (lib/camera-log.ts CameraGame), null if
+   * none; undefined = unchanged since the caller's `gameSince` (keep yours). */
+  game: unknown;
+  /** When that game last changed (pass it back as `gameSince`). */
+  gameAt: number;
+  /** Per-zone nudges (lib/camera.ts ZoneFix) and their version, if any. */
+  zoneFix: { fix: Record<string, { dx: number; dy: number; s?: number }>; version: number } | null;
 };
 
 const isMember = async (userId: string, groupId: string) =>
   !!(await db.query.groupMembers.findFirst({ where: and(eq(groupMembers.groupId, groupId), eq(groupMembers.userId, userId)), columns: { userId: true } }));
 
 async function sessionFor(userId: string, sessionId: string) {
-  const s = await db.query.cameraSessions.findFirst({ where: eq(cameraSessions.id, sessionId) });
+  const s = await db.query.cameraSessions.findFirst({ where: eq(cameraSessions.id, sessionId), columns: { snapshot: false } });
   if (!s || !(await isMember(userId, s.groupId))) throw new Error("Not found");
   return s;
 }
@@ -82,55 +105,94 @@ export async function startCameraSession(userId: string, groupId: string, share 
   return row.id;
 }
 
+/** Stops a camera: the camera itself, or anyone in the crew from their own
+ * phone (so nobody has to take the camera down from above the mat). */
 export async function endCameraSession(userId: string, sessionId: string) {
-  await db.update(cameraSessions).set({ live: false }).where(and(eq(cameraSessions.id, sessionId), eq(cameraSessions.userId, userId)));
+  await sessionFor(userId, sessionId);
+  await db.update(cameraSessions).set({ live: false }).where(eq(cameraSessions.id, sessionId));
+}
+
+/** New game on the same camera, from any phone in the crew: this session
+ * ends and a new one starts with the same calibration (empty mat, corners,
+ * zone nudges). The camera keeps filming and follows `nextId`. Returns the
+ * new session (the existing one if someone was just ahead of you). */
+export async function nextCameraSession(userId: string, sessionId: string): Promise<string> {
+  const s = await sessionFor(userId, sessionId);
+  if (s.nextId) return s.nextId;
+  const [{ snapshot }] = await db.select({ snapshot: cameraSessions.snapshot }).from(cameraSessions).where(eq(cameraSessions.id, sessionId)).limit(1);
+  const [row] = await db
+    .insert(cameraSessions)
+    .values({
+      groupId: s.groupId,
+      userId: s.userId,
+      phase: s.phase,
+      snapshot,
+      snapW: s.snapW,
+      snapH: s.snapH,
+      snapVersion: s.snapVersion,
+      corners: s.corners,
+      shareImages: s.shareImages,
+      emptyUrl: s.emptyUrl,
+    })
+    .returning();
+  const fix = await getCameraZoneFix(sessionId);
+  if (fix) await db.insert(cameraZoneFixes).values({ sessionId: row.id, fix: fix.fix, version: fix.version }).onConflictDoNothing();
+  await db.update(cameraSessions).set({ live: false, nextId: row.id }).where(eq(cameraSessions.id, sessionId));
+  return row.id;
 }
 
 /** The camera posts a judged throw. */
 export async function addCameraThrow(
   userId: string,
   sessionId: string,
-  t: { n: number; spots: Spot[]; gone: Spot[]; image: string | null; full?: string | null; detector?: string },
+  t: { n: number; spots: Spot[]; gone: Spot[]; field?: Spot[] | null; fieldBefore?: Spot[] | null; image: string | null; full?: string | null; detector?: string },
 ) {
-  const s = await db.query.cameraSessions.findFirst({ where: and(eq(cameraSessions.id, sessionId), eq(cameraSessions.userId, userId)) });
+  const s = await db.query.cameraSessions.findFirst({ where: and(eq(cameraSessions.id, sessionId), eq(cameraSessions.userId, userId)), columns: { snapshot: false } });
   if (!s) throw new Error("Not your camera");
   const imageUrl = s.shareImages ? await storeJpeg(`camera/${sessionId}/throw-${t.n}.jpg`, t.full) : null;
   const image = t.image && t.image.startsWith("data:image/jpeg;base64,") && t.image.length < 120_000 ? t.image : null;
   await db
     .insert(cameraThrows)
-    .values({ sessionId, n: t.n, found: t.spots, spots: t.spots, gone: t.gone, image, imageUrl, detector: t.detector?.slice(0, 40) ?? null })
+    .values({ sessionId, n: t.n, found: t.spots, spots: t.spots, gone: t.gone, field: t.field ?? null, fieldBefore: t.fieldBefore ?? null, image, imageUrl, detector: t.detector?.slice(0, 40) ?? null })
     .onConflictDoNothing();
   await db.update(cameraSessions).set({ updatedAt: new Date() }).where(eq(cameraSessions.id, sessionId));
 }
 
+/** A correction of the whole field (lib/camera-field.ts): the new field and
+ * what the throw did according to it. Without it only `spots` changes. */
+export type FieldFix = { field: Spot[]; gone: Spot[] };
+const fieldSet = (f?: FieldFix) => (f ? { field: f.field, gone: f.gone, fieldHow: "corrected" } : {});
+
 /** Anyone in the crew (the camera too) fixes where a throw's cap lies. */
-export async function correctCameraThrow(userId: string, throwId: string, spots: Spot[]) {
+export async function correctCameraThrow(userId: string, throwId: string, spots: Spot[], f?: FieldFix) {
   const t = await db.query.cameraThrows.findFirst({ where: eq(cameraThrows.id, throwId), columns: { sessionId: true } });
   if (!t) throw new Error("Not found");
   await sessionFor(userId, t.sessionId);
   await db
     .update(cameraThrows)
-    .set({ spots, correctedBy: userId })
+    .set({ spots, correctedBy: userId, ...fieldSet(f) })
     .where(eq(cameraThrows.id, throwId));
 }
 
 /** Same, by throw number (the camera knows its own numbers, not the ids). */
-export async function correctCameraThrowByN(userId: string, sessionId: string, n: number, spots: Spot[]) {
+export async function correctCameraThrowByN(userId: string, sessionId: string, n: number, spots: Spot[], f?: FieldFix) {
   await sessionFor(userId, sessionId);
   await db
     .update(cameraThrows)
-    .set({ spots, correctedBy: userId })
+    .set({ spots, correctedBy: userId, ...fieldSet(f) })
     .where(and(eq(cameraThrows.sessionId, sessionId), eq(cameraThrows.n, n)));
 }
 
 /** The session with its throws (no pictures); a poll by the camera itself
  * also counts as its heartbeat. */
-export async function getCameraState(userId: string, sessionId: string): Promise<CameraState> {
+/** `gameSince`: time of the game the caller already has (the game is only
+ * sent when newer); null = the caller doesn't need the game (the logger). */
+export async function getCameraState(userId: string, sessionId: string, gameSince: number | null = 0): Promise<CameraState> {
   const s = await sessionFor(userId, sessionId);
   if (s.userId === userId && s.live) await db.update(cameraSessions).set({ updatedAt: new Date() }).where(eq(cameraSessions.id, sessionId));
   const [rows, cam, logger] = await Promise.all([
     db
-      .select({ id: cameraThrows.id, n: cameraThrows.n, found: cameraThrows.found, spots: cameraThrows.spots, gone: cameraThrows.gone, correctedBy: cameraThrows.correctedBy, createdAt: cameraThrows.createdAt })
+      .select({ id: cameraThrows.id, n: cameraThrows.n, found: cameraThrows.found, spots: cameraThrows.spots, gone: cameraThrows.gone, correctedBy: cameraThrows.correctedBy, labelHow: cameraThrows.labelHow, detector: cameraThrows.detector, field: cameraThrows.field, fieldBefore: cameraThrows.fieldBefore, createdAt: cameraThrows.createdAt })
       .from(cameraThrows)
       .where(eq(cameraThrows.sessionId, sessionId))
       .orderBy(desc(cameraThrows.n))
@@ -138,12 +200,21 @@ export async function getCameraState(userId: string, sessionId: string): Promise
     db.query.users.findFirst({ where: eq(users.id, s.userId), columns: { name: true } }),
     s.loggerId ? db.query.users.findFirst({ where: eq(users.id, s.loggerId), columns: { id: true, name: true } }) : Promise.resolve(undefined),
   ]);
+  const [g, zoneFix, checked] = await Promise.all([
+    s.loggerId && gameSince !== null ? getCameraGame(sessionId, gameSince) : Promise.resolve(null),
+    getCameraZoneFix(sessionId),
+    getCheckedThrows(sessionId),
+  ]);
+  const game = g ? g.state : null;
+  const gameAt = g?.at ?? 0;
   return {
     id: s.id,
     groupId: s.groupId,
     cameraUserId: s.userId,
     cameraName: cam?.name ?? "?",
     live: s.live && Date.now() - s.updatedAt.getTime() < STALE_MS,
+    ended: !s.live,
+    nextId: s.nextId ?? null,
     phase: s.phase === "watching" ? "watching" : "calibrating",
     snap: s.snapVersion > 0 && s.snapW && s.snapH ? { version: s.snapVersion, w: s.snapW, h: s.snapH } : null,
     snapRequest: s.snapRequest,
@@ -151,13 +222,20 @@ export async function getCameraState(userId: string, sessionId: string): Promise
     logger: logger ? { id: logger.id, name: logger.name ?? "?" } : null,
     armed: s.armed,
     armVersion: s.armVersion,
+    game,
+    gameAt,
+    zoneFix,
     throws: rows.map((r) => ({
       id: r.id,
       n: r.n,
       found: r.found,
       spots: r.spots,
       gone: r.gone,
-      corrected: r.correctedBy !== null,
+      corrected: r.correctedBy !== null || r.labelHow === "corrected",
+      checked: checked.has(r.id) || r.labelHow === "confirmed",
+      miss: r.detector?.endsWith("miss") ?? false,
+      field: r.field ?? null,
+      fieldBefore: r.fieldBefore ?? null,
       createdAt: r.createdAt,
     })),
   };
@@ -169,7 +247,7 @@ const cornersOk = (c: unknown, w: number, h: number): c is { x: number; y: numbe
 /** The camera uploads a new empty-mat snapshot with its own guess of the
  * corners; the session goes (back) to calibrating. Returns the version. */
 export async function setCameraSnapshot(userId: string, sessionId: string, snap: { image: string; w: number; h: number; corners: { x: number; y: number }[] }) {
-  const s = await db.query.cameraSessions.findFirst({ where: and(eq(cameraSessions.id, sessionId), eq(cameraSessions.userId, userId)) });
+  const s = await db.query.cameraSessions.findFirst({ where: and(eq(cameraSessions.id, sessionId), eq(cameraSessions.userId, userId)), columns: { snapshot: false } });
   if (!s) throw new Error("Not your camera");
   if (!snap.image.startsWith("data:image/jpeg;base64,") || snap.image.length > 900_000 || !cornersOk(snap.corners, snap.w, snap.h)) throw new Error("Bad snapshot");
   const version = s.snapVersion + 1;
@@ -196,7 +274,7 @@ export async function setCameraCorners(userId: string, sessionId: string, versio
 
 /** The camera stores its full-size empty mat (the training reference). */
 export async function setCameraEmpty(userId: string, sessionId: string, full: string) {
-  const s = await db.query.cameraSessions.findFirst({ where: and(eq(cameraSessions.id, sessionId), eq(cameraSessions.userId, userId)) });
+  const s = await db.query.cameraSessions.findFirst({ where: and(eq(cameraSessions.id, sessionId), eq(cameraSessions.userId, userId)), columns: { snapshot: false } });
   if (!s || !s.shareImages) return;
   const url = await storeJpeg(`camera/${sessionId}/empty-v${s.snapVersion}.jpg`, full);
   if (url) await db.update(cameraSessions).set({ emptyUrl: url }).where(eq(cameraSessions.id, sessionId));
@@ -218,7 +296,7 @@ export async function unlinkCameraLogger(userId: string, sessionId: string) {
 /** The logger arms (a throw is expected) or disarms the camera; `fresh`
  * also tells it to start from the mat as it is now. */
 export async function armCamera(userId: string, sessionId: string, armed: boolean, fresh: boolean) {
-  const s = await db.query.cameraSessions.findFirst({ where: and(eq(cameraSessions.id, sessionId), eq(cameraSessions.loggerId, userId)) });
+  const s = await db.query.cameraSessions.findFirst({ where: and(eq(cameraSessions.id, sessionId), eq(cameraSessions.loggerId, userId)), columns: { snapshot: false } });
   if (!s) throw new Error("Not your game");
   await db
     .update(cameraSessions)
@@ -241,8 +319,10 @@ export async function labelCameraThrow(
 
 /** The current empty-mat snapshot. */
 export async function getCameraSnapshot(userId: string, sessionId: string): Promise<string | null> {
-  const s = await sessionFor(userId, sessionId);
-  return s.snapshot;
+  await sessionFor(userId, sessionId);
+  // The snapshot is big (a JPEG): only read here, never with the session row.
+  const [row] = await db.select({ snapshot: cameraSessions.snapshot }).from(cameraSessions).where(eq(cameraSessions.id, sessionId)).limit(1);
+  return row?.snapshot ?? null;
 }
 
 /** One throw's picture (fetched only when someone looks at it). */
@@ -262,4 +342,87 @@ export async function getLiveCameras(groupId: string): Promise<{ id: string; nam
     .where(and(eq(cameraSessions.groupId, groupId), eq(cameraSessions.live, true), gt(cameraSessions.updatedAt, new Date(Date.now() - STALE_MS))))
     .orderBy(desc(cameraSessions.createdAt));
   return rows.map((r) => ({ id: r.id, name: r.name ?? "?", calibrating: r.phase !== "watching" }));
+}
+
+/** The game of the linked logger; null when there is none (or the table isn't
+ * migrated yet — the camera then just works without it). */
+async function getCameraGame(sessionId: string, since: number): Promise<{ state: unknown; at: number } | null> {
+  try {
+    // Only send the game when it changed since the caller's copy (it can be tens of kB).
+    const [meta] = await db.select({ at: cameraGames.updatedAt }).from(cameraGames).where(eq(cameraGames.sessionId, sessionId)).limit(1);
+    if (!meta) return null;
+    const at = meta.at.getTime();
+    if (at <= since) return { state: undefined, at };
+    const [row] = await db.select({ state: cameraGames.state }).from(cameraGames).where(eq(cameraGames.sessionId, sessionId)).limit(1);
+    return { state: row?.state ?? null, at };
+  } catch {
+    return null;
+  }
+}
+
+/** The linked logger shares its game with the camera. */
+export async function setCameraGame(userId: string, sessionId: string, state: unknown) {
+  const s = await db.query.cameraSessions.findFirst({ where: and(eq(cameraSessions.id, sessionId), eq(cameraSessions.loggerId, userId)), columns: { id: true } });
+  if (!s) throw new Error("Not your game");
+  await db
+    .insert(cameraGames)
+    .values({ sessionId, state, updatedAt: new Date() })
+    .onConflictDoUpdate({ target: cameraGames.sessionId, set: { state, updatedAt: new Date() } });
+}
+
+/** The zone nudges of a session; null when none were set (or the table isn't
+ * migrated yet). */
+async function getCameraZoneFix(sessionId: string) {
+  try {
+    const [row] = await db.select({ fix: cameraZoneFixes.fix, version: cameraZoneFixes.version }).from(cameraZoneFixes).where(eq(cameraZoneFixes.sessionId, sessionId)).limit(1);
+    return row ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Anyone in the crew (the camera too) sets the zone nudges; returns the new version. */
+export async function setCameraZoneFix(userId: string, sessionId: string, fix: Record<string, { dx: number; dy: number; s?: number }>): Promise<number> {
+  await sessionFor(userId, sessionId);
+  const [row] = await db
+    .insert(cameraZoneFixes)
+    .values({ sessionId, fix, version: 1, updatedAt: new Date() })
+    .onConflictDoUpdate({ target: cameraZoneFixes.sessionId, set: { fix, version: sql`${cameraZoneFixes.version} + 1`, updatedAt: new Date() } })
+    .returning();
+  return row.version;
+}
+
+/** Throws someone ticked ✓ (empty when the column isn't migrated yet). */
+async function getCheckedThrows(sessionId: string): Promise<Set<string>> {
+  try {
+    const rows = await db
+      .select({ id: cameraThrows.id })
+      .from(cameraThrows)
+      .where(and(eq(cameraThrows.sessionId, sessionId), isNotNull(cameraThrows.checkedBy)));
+    return new Set(rows.map((r) => r.id));
+  } catch {
+    return new Set();
+  }
+}
+
+/** Anyone in the crew (the camera too) says a throw is right. */
+export async function checkCameraThrow(userId: string, sessionId: string, n: number) {
+  await sessionFor(userId, sessionId);
+  await db
+    .update(cameraThrows)
+    // A ✓ on a throw with a field vouches for the whole field (unless it was corrected).
+    .set({ checkedBy: userId, fieldHow: sql`case when ${cameraThrows.field} is not null and ${cameraThrows.fieldHow} is null then 'checked' else ${cameraThrows.fieldHow} end` })
+    .where(and(eq(cameraThrows.sessionId, sessionId), eq(cameraThrows.n, n)));
+}
+
+/** Anyone in the crew says the last throw went off the mat (the camera
+ * didn't see it): an empty throw, which the mat logger takes as a miss.
+ * Numbered after the newest; the camera follows the numbering. */
+export async function addCameraMiss(userId: string, sessionId: string): Promise<number> {
+  await sessionFor(userId, sessionId);
+  const [last] = await db.select({ n: cameraThrows.n }).from(cameraThrows).where(eq(cameraThrows.sessionId, sessionId)).orderBy(desc(cameraThrows.n)).limit(1);
+  const n = (last?.n ?? 0) + 1;
+  await db.insert(cameraThrows).values({ sessionId, n, found: [], spots: [], gone: [], detector: "manual-miss" }).onConflictDoNothing();
+  await db.update(cameraSessions).set({ updatedAt: new Date() }).where(eq(cameraSessions.id, sessionId));
+  return n;
 }

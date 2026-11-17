@@ -14,6 +14,18 @@
  *    tap on "Wrong" lets them point at the real spot on the mat (or say
  *    there was no cap). Corrections are kept with the throw, so they can
  *    later become training data.
+ * Calibration: the 4 corners (tips of the shooting boxes; tap the photo or
+ * nudge), then optionally each zone and mama on its own (ZoneEditor); the
+ * zone nudges are kept on this phone and applied to every cap found.
+ * Next to the throws, a log shows what the code sees and decides (paused,
+ * new round, mat being cleared, light changed, each judged throw) and, with
+ * a linked mat logger, what the game made of it, plus stats (CameraLog).
+ * Misses: the shooting boxes are watched on their own (the cap waits there
+ * before it's thrown). When the thrower's box empties and nothing lands on
+ * the mat within ~2 s, the camera posts an empty throw = a miss.
+ * After a new round starts, the camera first waits until the mat is clear
+ * (only the shooting boxes may hold caps); caps disappearing while the mat
+ * is cleared are never a throw.
  * The session is shared with a crew: every judged throw (spot + a small
  * top-down picture) is posted, crew members follow and correct it from
  * their own phone (CameraViewer, linked from the crew page), and their
@@ -23,9 +35,14 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { DETECTOR, FULL_H, FULL_W, WH, WW, align, detect, findField, warp, warpFull, type Frame, type Pt } from "@/lib/camera";
+import { BOX_OF_CORNER, DETECTOR, FULL_H, FULL_W, MAT_W, WH, WW, align, detect, findField, inBox, unfix, warp, warpFull, type Frame, type Pt, type ZoneFix } from "@/lib/camera";
+import { ZoneEditor } from "@/components/camera/ZoneEditor";
+import { RotateButton, useMatRotation } from "@/components/camera/rotation";
 import { CornerEditor, Overlay, defaultCorners, type Photo } from "@/components/camera/CameraLab";
-import { SpotsEditor, spotsLabel, warpedToJpeg, type Spot } from "@/components/camera/MatPick";
+import { MatPick, ReviewBadge, SpotsEditor, fieldPick, spotsLabel, warpedToJpeg, type Spot } from "@/components/camera/MatPick";
+import { fieldDiff, nextField } from "@/lib/camera-field";
+import { CameraLog, useGameText, type CamEvent } from "@/components/camera/CameraLog";
+import { asCameraGame, boxLabelsOf, stampEvents, type CameraGame } from "@/lib/camera-log";
 import {
   addCameraThrowAction,
   correctCameraThrowByNAction,
@@ -34,11 +51,14 @@ import {
   setCameraCornersAction,
   setCameraEmptyAction,
   setCameraSnapshotAction,
+  setCameraZoneFixAction,
+  checkCameraThrowAction,
   startCameraSessionAction,
 } from "@/app/(app)/camera/actions";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/client";
 import { format } from "@/lib/i18n";
+import { retry } from "@/lib/retry";
 
 /** Frames are grabbed at most this big (long side). */
 const MAX_SIDE = 1280;
@@ -56,12 +76,23 @@ const MIN_CELLS = 2;
 const LIGHT_SHARE = 0.3;
 /** Still ticks in a row before a throw is judged (~1 s). */
 const SETTLE = 3;
-/** Seconds a "cap in zone X?" question stays before it counts as right. */
-const CONFIRM_S = 6;
 
 type Phase = "start" | "calibrate" | "live";
-type Status = "waiting" | "moving" | "looking" | "paused";
-type Throw = { n: number; spots: Spot[]; gone: Spot[]; corrected: boolean; img: string | null };
+type Status = "waiting" | "moving" | "looking" | "paused" | "clearing";
+/** Zone nudges are kept per phone (the camera stays in the same place). */
+const FIX_KEY = "shuss.camera.zoneFix";
+function loadFix(): ZoneFix {
+  try {
+    const v = JSON.parse(localStorage.getItem(FIX_KEY) ?? "{}");
+    return v && typeof v === "object" ? v : {};
+  } catch {
+    return {};
+  }
+}
+/** Camera events kept for the log. */
+const MAX_EVENTS = 150;
+/** `field`/`before`: every cap on the mat after and before the throw (lib/camera-field.ts). */
+type Throw = { n: number; spots: Spot[]; gone: Spot[]; field?: Spot[] | null; before?: Spot[] | null; corrected: boolean; checked?: boolean; img: string | null };
 /** How often the session is synced with the crew (ms). */
 const SYNC = 1500;
 
@@ -96,6 +127,34 @@ function changed(a: Float32Array, b: Float32Array, t: number): number {
   return n;
 }
 const CELLS = (Math.floor(WH / CELL) - 2) * (Math.floor(WW / CELL) - 2 * Math.round(Math.floor(WW / CELL) * 0.06));
+/** A shooting box holds a cap when this many of its cells differ from the empty mat. */
+const BOX_CELL = 20;
+const BOX_MIN = 2;
+/** Readings in a row before a box counts as filled or emptied (no flicker). */
+const BOX_STEADY = 2;
+/** A cap left its box and nothing landed for this long = a miss (ms). */
+const MISS_MS = 2000;
+/** Clearing the mat for a new round ends at the latest when the mat lay
+ * still this long (a shadow can look like a cap left behind forever). */
+const CLEAR_MAX = 10000;
+
+/** Cells (indexes into `tiny`) inside each shooting box. */
+function boxCells(fix: ZoneFix): number[][] {
+  const tw = Math.floor(WW / CELL);
+  const th = Math.floor(WH / CELL);
+  const k = MAT_W / WW;
+  const out: number[][] = [[], [], [], []];
+  for (let y = 0; y < th; y++)
+    for (let x = 0; x < tw; x++) {
+      const p = { x: (x + 0.5) * CELL * k, y: (y + 0.5) * CELL * k };
+      for (let i = 0; i < 4; i++) if (inBox(p, i, fix)) out[i].push(y * tw + x);
+    }
+  return out;
+}
+/** Which shooting boxes hold a cap right now. */
+function boxesFull(small: Float32Array, empty: Float32Array, cells: number[][]): boolean[] {
+  return cells.map((cs) => cs.filter((c) => Math.abs(small[c] - empty[c]) > BOX_CELL).length >= BOX_MIN);
+}
 
 export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: string; name: string }[]; initialCrewId?: string }>) {
   const { t } = useT();
@@ -108,9 +167,16 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
   const [error, setError] = useState<string | null>(null);
   const [snap, setSnap] = useState<Photo | null>(null);
   const [corners, setCorners] = useState<Pt[]>([]);
+  const [fix, setFixState] = useState<ZoneFix>(() => (typeof window === "undefined" ? {} : loadFix()));
+  const [zonesOpen, setZonesOpen] = useState(false);
+  // Turn the mat pictures the way you sit (kept on this phone).
+  const [rot, turn] = useMatRotation();
   const [status, setStatus] = useState<Status>("waiting");
   const [throws, setThrows] = useState<Throw[]>([]);
-  const [ask, setAsk] = useState<{ n: number; left: number } | null>(null);
+  // The throw whose "is the whole mat right?" question is open. It waits for
+  // ✓ or a correction (no countdown: an unchecked throw is no training data);
+  // a newer throw takes its place, and the older one stays to check in the list.
+  const [ask, setAsk] = useState<{ n: number } | null>(null);
   const [fixing, setFixing] = useState<number | null>(null);
   const [crewId, setCrewId] = useState(initialCrewId ?? crews[0]?.id ?? "");
   // Keep top-down pictures of the mat for training (asked at the start).
@@ -119,6 +185,18 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
   const [sessionId, setSessionId] = useState<string | null>(null);
   const session = useRef<string | null>(null);
   const [loggerName, setLoggerName] = useState<string | null>(null);
+  const [game, setGame] = useState<CameraGame | null>(null);
+  const gameRef = useRef<CameraGame | null>(null);
+  const gameAt = useRef(0);
+  // When each line of the game was first seen here (for the log's order).
+  const seenRef = useRef<Record<string, number>>({});
+  const [seenAt, setSeenAt] = useState<Record<string, number>>({});
+  const [events, setEvents] = useState<CamEvent[]>([]);
+  const evNo = useRef(0);
+  /** Add a line to the log (skipped when it repeats the last line). */
+  const note = useCallback((text: string, tone?: CamEvent["tone"]) => {
+    setEvents((es) => (es[0]?.text === text ? es : [{ key: `c${++evNo.current}`, t: Date.now(), text, tone }, ...es].slice(0, MAX_EVENTS)));
+  }, []);
   // Snapshot version on the server, and the last "new snapshot" request seen.
   const snapVersion = useRef(0);
   const handledRequest = useRef(0);
@@ -139,10 +217,56 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
     armed: false,
     armVersion: 0,
     rebase: false,
+    // A new round started: wait until the mat is clear before judging throws.
+    clearing: false,
+    clearLeft: -1,
+    clearSince: 0,
+    lastArmed: null as boolean | null,
+    fix: {} as ZoneFix,
+    // Shooting boxes: cells per box, the empty mat in cells, which hold a cap
+    // (steady readings), and the box a cap just left (a throw started).
+    boxCells: null as number[][] | null,
+    emptyTiny: null as Float32Array | null,
+    boxes: null as boolean[] | null,
+    boxRun: [0, 0, 0, 0],
+    left: null as { i: number; t: number } | null,
     calm: 0,
     busy: false,
     n: 0,
+    // Every cap on the field after the last throw (empty when the mat is cleared).
+    field: [] as Spot[],
   });
+
+  // Zone nudges are shared with the crew: version of the last one seen here.
+  const fixVersion = useRef(0);
+  const fixPush = useRef<number | null>(null);
+  function pushFix(f: ZoneFix) {
+    if (!session.current) return;
+    const sid = session.current;
+    if (fixPush.current) window.clearTimeout(fixPush.current);
+    fixPush.current = window.setTimeout(() => {
+      setCameraZoneFixAction(sid, f)
+        .then((v) => (fixVersion.current = Math.max(fixVersion.current, v)))
+        .catch(() => {});
+    }, 400);
+  }
+  /** `push`: changed on this phone (share it); false: it came from another phone. */
+  function setFix(f: ZoneFix, push = true) {
+    setFixState(f);
+    live.current.fix = f;
+    live.current.boxCells = null;
+    try {
+      localStorage.setItem(FIX_KEY, JSON.stringify(f));
+    } catch {
+      /* private mode */
+    }
+    if (push) pushFix(f);
+  }
+  useEffect(() => {
+    live.current.fix = fix;
+    // only on mount: later changes go through setFix
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const stop = useCallback(() => {
     stream.current?.getTracks().forEach((tr) => tr.stop());
@@ -203,6 +327,8 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
         const id = await startCameraSessionAction(crewId, share);
         session.current = id;
         setSessionId(id);
+        // Share the nudges this phone already has, so other phones start from them.
+        if (Object.keys(live.current.fix).length) pushFix(live.current.fix);
       } catch {
         setError(L.shareError);
       }
@@ -241,7 +367,11 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
       const full = warpedToJpeg(warpFull(frame, c), FULL_W, FULL_H, 0.85);
       if (full) setCameraEmptyAction(session.current, full).catch(() => {});
     }
-    Object.assign(live.current, { corners: c, empty, still: empty, prevTiny: null, base: null, calm: 0, busy: false });
+    Object.assign(live.current, {
+      corners: c, empty, still: empty, prevTiny: null, base: null, calm: 0, busy: false, clearing: false, clearLeft: -1,
+      emptyTiny: tiny(empty), boxCells: null, boxes: null, boxRun: [0, 0, 0, 0], left: null,
+    });
+    note(L.evStart, "good");
     setCorners(c);
     setAsk(null);
     setFixing(null);
@@ -256,6 +386,8 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
   // The camera loop.
   useEffect(() => {
     if (phase !== "live") return;
+    /** Caps on the field: what's in a shooting box is waiting, not lying on the mat. */
+    const onField = <T extends Pt>(bs: T[]) => bs.filter((b) => ![0, 1, 2, 3].some((i) => inBox(b, i, live.current.fix)));
     const id = window.setInterval(() => {
       const S = live.current;
       if (S.busy || !S.empty) return;
@@ -266,14 +398,37 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
       S.prevTiny = small;
       if (S.gated && !S.armed) {
         // No throw expected (round over, mat being cleared): ignore it all.
+        if (S.lastArmed !== false) note(L.evPaused, "muted");
+        S.lastArmed = false;
         setStatus("paused");
         return;
       }
+      if (S.gated && S.lastArmed !== true) {
+        S.lastArmed = true;
+        const g = gameRef.current;
+        const who = g?.st.thrower ? g.names[g.st.thrower] : null;
+        note(who ? format(L.evArmedName, { name: who }) : L.evArmed);
+      }
+      const idle = () => setStatus(S.clearing ? "clearing" : "waiting");
+      S.boxCells ??= boxCells(S.fix);
       if (!S.base || S.rebase) {
         S.base = small;
-        if (S.rebase) S.still = warp(f, S.corners);
+        S.boxes = S.emptyTiny ? boxesFull(small, S.emptyTiny, S.boxCells) : null;
+        S.boxRun = [0, 0, 0, 0];
+        S.left = null;
+        if (S.rebase) {
+          // New round: start from the mat as it is now, but only once it's clear.
+          S.still = warp(f, S.corners);
+          // Caps already waiting in the shooting boxes for this round don't count.
+          const left = onField(detect(S.empty, S.empty, S.still).present).length;
+          S.clearing = left > 0;
+          S.clearLeft = left;
+          S.field = [];
+          S.clearSince = Date.now();
+          note(left > 0 ? format(L.evClearing, { n: left }) : L.evNewRound, left > 0 ? "warn" : "good");
+        }
         S.rebase = false;
-        setStatus("waiting");
+        idle();
         return;
       }
       if (prev && changed(small, prev, MOTION_CELL) >= MIN_CELLS) {
@@ -281,16 +436,62 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
         setStatus("moving");
         return;
       }
+      // Still: did a cap leave a shooting box? (the thrower's, when the game says who)
+      if (S.emptyTiny && S.boxes) {
+        const now = boxesFull(small, S.emptyTiny, S.boxCells);
+        const g = gameRef.current;
+        const corner = g?.st.thrower ? g.st.corner[g.st.thrower] : undefined;
+        const mine = corner ? BOX_OF_CORNER[corner] : null;
+        now.forEach((full, i) => {
+          if (full === S.boxes![i]) return void (S.boxRun[i] = 0);
+          if (++S.boxRun[i] < BOX_STEADY) return;
+          S.boxRun[i] = 0;
+          S.boxes![i] = full;
+          if (!full && (mine === null || mine === i)) {
+            if (S.clearing) {
+              // Someone throws: the mat is ready, whatever still looks like a cap.
+              S.clearing = false;
+              note(L.evClearThrow, "good");
+            }
+            S.left = { i, t: Date.now() };
+            note(format(L.evBoxLeft, { box: boxName(i) }));
+          }
+        });
+      }
       const diff = changed(small, S.base, CHANGE_CELL);
       if (diff < MIN_CELLS) {
-        // Still, and nothing on the mat changed (a hand passed by).
+        // Still, and nothing on the mat changed (a hand passed by)…
         S.calm = 0;
-        setStatus("waiting");
+        if (S.clearing && Date.now() - S.clearSince > CLEAR_MAX) {
+          // The mat has been lying still a while: take it as ready.
+          S.clearing = false;
+          S.base = small;
+          S.still = warp(f, S.corners);
+          S.field = [];
+          note(format(L.evClearTimeout, { n: S.clearLeft }), "good");
+        }
+        if (S.left && Date.now() - S.left.t > MISS_MS && !S.clearing) {
+          // …but a cap left its box a while ago and landed nowhere: a miss.
+          S.left = null;
+          S.busy = true;
+          window.setTimeout(() => {
+            try {
+              post(f, warp(f, S.corners), [], [], true);
+              note(format(L.evMiss, { n: S.n }), "warn");
+            } finally {
+              S.busy = false;
+              idle();
+            }
+          }, 30);
+          return;
+        }
+        idle();
         return;
       }
       if (diff > LIGHT_SHARE * CELLS) {
         S.base = small;
         S.calm = 0;
+        note(L.evLight, "muted");
         return;
       }
       if (++S.calm < SETTLE) return;
@@ -305,36 +506,111 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
           S.corners = align(f, S.corners, S.empty!);
           const cur = warp(f, S.corners);
           const r = detect(S.empty!, S.still!, cur);
+          if (r.occluded) {
+            // A hand or arm resting on the mat: judge again once it's gone.
+            note(L.evHand, "muted");
+            return;
+          }
           S.still = cur;
-          const n = ++S.n;
-          const spots = r.landed.map((b) => ({ x: b.x, y: b.y }));
-          const gone = r.gone.map((b) => ({ x: b.x, y: b.y }));
-          const img = warpedToJpeg(cur, WW, WH);
-          const full = shareRef.current && session.current ? warpedToJpeg(warpFull(f, S.corners), FULL_W, FULL_H, 0.85) : null;
-          setThrows((ts) => [{ n, spots, gone, corrected: false, img }, ...ts]);
-          setAsk({ n, left: CONFIRM_S });
-          if (session.current) addCameraThrowAction(session.current, { n, spots, gone, image: img, full, detector: DETECTOR }).catch(() => {});
+          if (S.clearing) {
+            // Caps being taken off for the new round: never a throw. Caps put
+            // back in the shooting boxes don't count; the time limit runs from
+            // the last cap taken off, so light flicker can't keep it going.
+            const left = onField(r.present).length;
+            if (!left) {
+              S.clearing = false;
+              S.field = [];
+              note(L.evCleared, "good");
+            } else if (Date.now() - S.clearSince > CLEAR_MAX) {
+              S.clearing = false;
+              S.field = [];
+              note(format(L.evClearTimeout, { n: left }), "good");
+            } else if (left !== S.clearLeft) {
+              S.clearSince = Date.now();
+              note(format(L.evClearing, { n: left }), "warn");
+            }
+            S.clearLeft = left;
+            return;
+          }
+          if (!r.landed.length && !r.present.length && r.gone.length >= 2) {
+            // Several caps gone and the mat is empty again: it was cleared.
+            S.field = [];
+            note(L.evCleared, "good");
+            return;
+          }
+          if (!r.landed.length && !r.gone.length && !S.left) {
+            // Something changed, but no cap landed or left and none left a
+            // shooting box: light, a shadow or noise, not a throw. Posting it
+            // would ask to check a throw that never happened.
+            note(L.evNoThrow, "muted");
+            return;
+          }
+          S.left = null;
+          // Back onto the real print with the per-zone nudges.
+          const spots = r.landed.map((b) => unfix({ x: b.x, y: b.y }, S.fix));
+          const gone = r.gone.map((b) => unfix({ x: b.x, y: b.y }, S.fix));
+          // The whole field: every cap it still sees on the field (not in a shooting box).
+          const present = onField(r.present).map((b) => unfix({ x: b.x, y: b.y }, S.fix));
+          const n = post(f, cur, spots, gone, false, nextField(S.field, spots, gone, present));
+          note(
+            spots.length
+              ? format(L.evThrow, { n, where: spotsLabel(spots, C, L), gone: gone.length })
+              : gone.length
+                ? format(L.evThrowGone, { n, gone: gone.length })
+                : format(L.evThrowNone, { n }),
+          );
         } finally {
           S.busy = false;
-          setStatus("waiting");
+          idle();
         }
       }, 30);
     }, TICK);
+    /** Post a judged throw (empty = a miss); returns its number. */
+    /** `miss`: a real miss (the cap left its box and landed nowhere). */
+    /** `field`: every cap on the field after it (default: as before the throw). */
+    function post(f: Frame, cur: Float32Array, spots: Spot[], gone: Spot[], miss = false, field?: Spot[]): number {
+      const S = live.current;
+      const n = ++S.n;
+      const before = S.field;
+      const after = field ?? before;
+      S.field = after;
+      const img = warpedToJpeg(cur, WW, WH);
+      const full = shareRef.current && session.current ? warpedToJpeg(warpFull(f, S.corners), FULL_W, FULL_H, 0.85) : null;
+      setThrows((ts) => [{ n, spots, gone, field: after, before, corrected: false, img }, ...ts]);
+      setAsk({ n });
+      if (session.current)
+        addCameraThrowAction(session.current, { n, spots, gone, field: after, fieldBefore: before, image: img, full, detector: miss ? `${DETECTOR}+miss` : DETECTOR }).catch(() =>
+          // Not stored (offline, or the database isn't migrated): say so instead of failing silently.
+          note(format(L.evPostFail, { n }), "warn"),
+        );
+      return n;
+    }
     return () => window.clearInterval(id);
+    // note/format only read the dictionaries.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
-  // Countdown on the question; at zero it counts as right.
-  useEffect(() => {
-    if (!ask || fixing !== null) return;
-    const id = window.setTimeout(() => setAsk((a) => (!a || a.n !== ask.n ? a : a.left <= 1 ? null : { ...a, left: a.left - 1 })), 1000);
-    return () => window.clearTimeout(id);
-  }, [ask, fixing]);
+  /** ✓ on the question: the throw is right, and reviewed. */
+  function confirm(n: number) {
+    setThrows((ts) => ts.map((th) => (th.n === n ? { ...th, checked: true } : th)));
+    setAsk(null);
+    const sid = session.current;
+    if (sid) retry(() => checkCameraThrowAction(sid, n), () => note(format(L.evSaveFail, { n }), "warn"));
+  }
 
-  function correct(n: number, spots: Spot[]) {
-    setThrows((ts) => ts.map((th) => (th.n === n ? { ...th, spots, corrected: true } : th)));
+  /** `value`: the whole field when the throw has one, else the throw's caps. */
+  function correct(n: number, value: Spot[]) {
+    const th = throws.find((x) => x.n === n);
+    const whole = th?.field && th.before ? { field: value, ...fieldDiff(th.before, value) } : null;
+    const spots = whole ? whole.spots : value;
+    setThrows((ts) => ts.map((x) => (x.n === n ? { ...x, spots, ...(whole ? { field: whole.field, gone: whole.gone } : {}), corrected: true } : x)));
+    // The next throw builds on the corrected field.
+    if (whole && n === live.current.n) live.current.field = whole.field;
     setFixing(null);
     setAsk(null);
-    if (session.current) correctCameraThrowByNAction(session.current, n, spots).catch(() => {});
+    const sid = session.current;
+    const f = whole ? { field: whole.field, gone: whole.gone } : undefined;
+    if (sid) retry(() => correctCameraThrowByNAction(sid, n, spots, f), () => note(format(L.evSaveFail, { n }), "warn"));
   }
 
   // Sync with the crew: corners set on another phone or laptop, requests
@@ -342,8 +618,47 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
   useEffect(() => {
     if (!sessionId) return;
     const id = window.setInterval(() => {
-      getCameraStateAction(sessionId)
+      getCameraStateAction(sessionId, gameAt.current)
         .then((st) => {
+          if (st.nextId && session.current === sessionId) {
+            // New game started from another phone: keep filming in the new
+            // session (same calibration), from an empty mat.
+            const S = live.current;
+            session.current = st.nextId;
+            setSessionId(st.nextId);
+            S.n = 0;
+            S.field = [];
+            S.left = null;
+            S.armed = false;
+            S.gated = false;
+            S.armVersion = 0;
+            S.rebase = true;
+            gameRef.current = null;
+            gameAt.current = 0;
+            setGame(null);
+            setLoggerName(null);
+            setThrows([]);
+            setAsk(null);
+            setFixing(null);
+            note(L.evNewGame, "good");
+            return;
+          }
+          if (st.ended && session.current === sessionId) {
+            // Stopped from another phone: stop filming and go back to the start.
+            stream.current?.getTracks().forEach((tr) => tr.stop());
+            stream.current = null;
+            session.current = null;
+            setSessionId(null);
+            setPhase("start");
+            setError(L.stoppedRemote);
+            return;
+          }
+          // Zone nudges set on another phone or laptop.
+          if (st.zoneFix && st.zoneFix.version > fixVersion.current) {
+            fixVersion.current = st.zoneFix.version;
+            setFix(st.zoneFix.fix, false);
+            note(L.evZonesRemote);
+          }
           if (st.snapRequest > handledRequest.current) {
             handledRequest.current = st.snapRequest;
             void freeze();
@@ -361,10 +676,39 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
             S.rebase = true;
           }
           setLoggerName(st.logger?.name ?? null);
-          const remote = new Map(st.throws.filter((th) => th.corrected).map((th) => [th.n, th.spots]));
-          if (!remote.size) return;
-          setThrows((ts) => ts.map((th) => (remote.has(th.n) && !th.corrected ? { ...th, spots: remote.get(th.n) ?? [], corrected: true } : th)));
-          setAsk((a) => (a && remote.has(a.n) ? null : a));
+          // The game only comes along when it changed (undefined = keep ours).
+          const g = !st.logger ? null : st.game === undefined ? gameRef.current : asCameraGame(st.game);
+          gameAt.current = st.logger ? st.gameAt : 0;
+          if (g !== gameRef.current) {
+            gameRef.current = g;
+            setGame(g);
+          }
+          if (g && stampEvents(g, seenRef.current)) setSeenAt({ ...seenRef.current });
+          // Throws added on another phone (a "miss"): keep the numbering in step and list them.
+          const newest = st.throws[0]?.n ?? 0;
+          if (newest > live.current.n) live.current.n = newest;
+          const extra = st.throws.filter((th) => th.n > 0);
+          setThrows((ts) => {
+            const have = new Set(ts.map((x) => x.n));
+            const add = extra.filter((th) => !have.has(th.n)).map((th) => ({ n: th.n, spots: th.spots, gone: th.gone, field: th.field, before: th.fieldBefore, corrected: th.corrected, checked: th.checked, img: null }));
+            return add.length ? [...add, ...ts].sort((a, b) => b.n - a.n) : ts;
+          });
+          const remote = new Map(st.throws.filter((th) => th.corrected).map((th) => [th.n, th]));
+          // A field corrected on another phone: the next throw builds on it.
+          const top = remote.get(live.current.n);
+          if (top?.field) live.current.field = top.field;
+          const ok = new Set(st.throws.filter((th) => th.checked).map((th) => th.n));
+          if (!remote.size && !ok.size) return;
+          setThrows((ts) =>
+            ts.map((th) =>
+              remote.has(th.n) && !th.corrected
+                ? { ...th, spots: remote.get(th.n)!.spots, gone: remote.get(th.n)!.gone, field: remote.get(th.n)!.field ?? th.field, corrected: true }
+                : ok.has(th.n) && !th.checked
+                  ? { ...th, checked: true }
+                  : th,
+            ),
+          );
+          setAsk((a) => (a && (remote.has(a.n) || ok.has(a.n)) ? null : a));
         })
         .catch(() => {});
     }, SYNC);
@@ -374,6 +718,33 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
   }, [sessionId]);
 
   const spotText = (sp: Spot[]) => spotsLabel(sp, C, L);
+  /** Who throws from each shooting box (A1, B2…), from the linked game. */
+  const boxLabels = boxLabelsOf(game);
+  /** "box A1" in the log, or the corner number without a game. */
+  function boxName(i: number) {
+    return gameRef.current ? (gameRef.current.st.order.find((s) => gameRef.current?.st.corner[s] && BOX_OF_CORNER[gameRef.current.st.corner[s]!] === i)?.toUpperCase() ?? String(i + 1)) : String(i + 1);
+  }
+  const G = useGameText(game);
+  /** What became of a camera throw: the logger's view when linked, else what the camera found. */
+  function throwText(th: Throw): string {
+    if (game) {
+      const idx = game.links[String(th.n)];
+      const rec = idx !== undefined ? game.st.throws[idx] : undefined;
+      if (rec) {
+        const mine = rec.moves.find((m) => m.isThrownCap);
+        const knocked = rec.moves.filter((m) => !m.isThrownCap).length;
+        const base = `${G.name(rec.slot)}: ${G.spot(rec.firstSpot ?? "none", rec.missed ? null : (mine?.to.countsFor ?? null))}`;
+        return knocked ? `${base} · ${format(L.thrKnocked, { n: knocked })}` : base;
+      }
+      if (game.pending?.n === th.n) {
+        const who = game.st.thrower ? G.name(game.st.thrower) : "?";
+        return game.pending.touched ? format(L.thrFixing, { name: who }) : !game.pending.found ? format(L.thrNoneLogger, { name: who }) : format(L.thrPending, { name: who, s: game.pending.left });
+      }
+      if (th.n <= game.seen) return L.thrUnused;
+    }
+    if (th.spots.length) return spotText(th.spots);
+    return th.gone.length ? format(L.thrGoneOnly, { n: th.gone.length }) : L.thrNone;
+  }
 
 
   const kicker = "font-heading font-bold text-[12px] tracking-[0.14em] text-gold";
@@ -394,6 +765,7 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
           <span className="font-heading font-bold text-[12px] tracking-[0.14em] text-muted">{C.kicker}</span>
           <h1 className="font-display font-extrabold text-[28px] leading-none uppercase">{L.title}</h1>
         </span>
+        {phase !== "start" && <RotateButton onClick={turn} label={L.rotate} />}
         {phase === "live" && (
           <button type="button" onClick={() => void freeze()} className="font-heading font-bold text-[13px] tracking-[0.08em] text-gold py-2">
             {L.recalibrate}
@@ -410,15 +782,21 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
       {/* The video stays mounted in every phase so the stream keeps running. */}
       <div className={cn("relative rounded-[16px] overflow-hidden bg-black", phase === "start" && "hidden", phase === "calibrate" && snap && "hidden")}>
         <video ref={video} playsInline muted autoPlay className="w-full h-auto block" />
+        {phase === "live" && snap && corners.length === 4 && (
+          // The calibration over the live picture, with who throws from which box.
+          <svg viewBox={`0 0 ${snap.frame.w} ${snap.frame.h}`} className="absolute inset-0 w-full h-full pointer-events-none" aria-hidden="true">
+            <Overlay corners={corners} w={snap.frame.w} fix={fix} boxLabels={boxLabels} />
+          </svg>
+        )}
         {phase === "live" && (
           <span
             role="status"
             className={cn(
               "absolute top-2.5 left-2.5 px-3 py-1.5 rounded-pill font-heading font-bold text-xs tracking-[0.08em]",
-              status === "moving" ? "bg-amber text-ink" : status === "looking" ? "bg-cream text-ink" : "bg-black/60 text-cream",
+              status === "moving" ? "bg-amber text-ink" : status === "looking" ? "bg-cream text-ink" : status === "clearing" ? "bg-red text-cream" : "bg-black/60 text-cream",
             )}
           >
-            {status === "moving" ? L.moving : status === "looking" ? L.looking : status === "paused" ? L.paused : L.waiting}
+            {status === "moving" ? L.moving : status === "looking" ? L.looking : status === "paused" ? L.paused : status === "clearing" ? L.clearing : L.waiting}
           </span>
         )}
       </div>
@@ -481,7 +859,14 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
           <span className={kicker}>{C.step2}</span>
           <p className="font-body text-[15px] leading-normal text-soft">{C.step2Auto}</p>
           {sessionId && <p className="font-body text-[13px] leading-normal text-gold">{L.remoteCal}</p>}
-          <CornerEditor photo={snap} corners={corners} onChange={setCorners} labels={C} />
+          <CornerEditor photo={snap} corners={corners} onChange={setCorners} labels={C} fix={fix} rot={rot} />
+          <button type="button" aria-expanded={zonesOpen} onClick={() => setZonesOpen((o) => !o)} className="flex items-center gap-2 text-left py-1">
+            <span className={kicker}>{L.zonesTitle}</span>
+            {Object.keys(fix).length > 0 && <span className="font-body text-xs text-mint">{format(L.zonesCount, { n: Object.keys(fix).length })}</span>}
+            <span className={cn("ml-auto text-muted transition-transform", zonesOpen && "rotate-180")}>▾</span>
+          </button>
+          {sessionId && <p className="font-body text-[13px] leading-normal text-gold -mt-2">{L.zonesRemoteHint}</p>}
+          {zonesOpen && <ZoneEditor photo={snap} corners={corners} fix={fix} onChange={setFix} rot={rot} />}
           <button type="button" onClick={go} className={primary}>
             {L.go}
           </button>
@@ -497,12 +882,16 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
           <SpotsEditor
             key={fixingThrow.n}
             src={fixingThrow.img}
-            initial={fixingThrow.spots}
+            initial={fixingThrow.field ?? fixingThrow.spots}
+            before={fixingThrow.field ? (fixingThrow.before ?? []) : null}
             gone={fixingThrow.gone}
             C={C}
             L={L}
             onSave={(sp) => correct(fixingThrow.n, sp)}
             onClose={() => setFixing(null)}
+            fix={fix}
+            boxLabels={boxLabels}
+            rot={rot}
           />
         </section>
       )}
@@ -510,10 +899,17 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
       {phase === "live" && !fixingThrow && asked && (
         <section className="flex flex-col gap-3 p-4 rounded-[18px] bg-surface-deep border border-gold/50" aria-live="polite">
           <span className={kicker}>{format(L.throwN, { n: asked.n })}</span>
-          <p className="font-display font-extrabold text-2xl leading-tight">{asked.spots.length ? format(asked.spots.length > 1 ? L.capsIn : L.capIn, { where: spotText(asked.spots) }) : L.noCapQ}</p>
+          <p className="font-display font-extrabold text-2xl leading-tight">{asked.spots.length ? format(asked.spots.length > 1 ? L.capsIn : L.capIn, { where: spotText(asked.spots) }) : asked.gone.length ? format(L.noCapGoneQ, { n: asked.gone.length }) : L.noCapQ}</p>
+          {asked.field && (
+            // The whole mat, so a ✓ vouches for every cap on it (white = already there, orange = this throw).
+            <>
+              <MatPick src={asked.img} {...fieldPick(asked.before ?? [], asked.field)} label={format(L.fieldAsk, { n: asked.field.length })} fix={fix} boxLabels={boxLabels} rot={rot} />
+              <p className="font-body text-[13px] text-soft -mt-1">{format(L.fieldAsk, { n: asked.field.length })}</p>
+            </>
+          )}
           <div className="grid grid-cols-2 gap-2">
-            <button type="button" onClick={() => setAsk(null)} className="h-12 rounded-[14px] bg-mint text-ink font-heading font-extrabold text-base tracking-[0.06em]">
-              ✓ {format(L.right, { s: ask!.left })}
+            <button type="button" onClick={() => confirm(asked.n)} className="h-12 rounded-[14px] bg-mint text-ink font-heading font-extrabold text-base tracking-[0.06em]">
+              ✓ {L.rightShort}
             </button>
             <button type="button" onClick={() => setFixing(asked.n)} className={secondary}>
               {L.wrong}
@@ -528,9 +924,14 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
         </p>
       )}
 
+      {phase === "live" && <CameraLog game={game} seenAt={seenAt} events={events} />}
+
       {phase === "live" && throws.length > 0 && (
         <section className="flex flex-col gap-1.5">
-          <span className={kicker}>{L.history}</span>
+          <span className="flex items-baseline gap-2">
+            <span className={kicker}>{L.history}</span>
+            <span className="font-body text-xs text-muted">{format(L.todoCount, { n: throws.filter((th) => !th.corrected && !th.checked).length })}</span>
+          </span>
           {throws.map((th) => (
             <button
               key={th.n}
@@ -539,20 +940,20 @@ export function CameraLive({ crews, initialCrewId }: Readonly<{ crews: { id: str
               className="flex items-center gap-3 px-3.5 py-2.5 rounded-[14px] bg-surface-deep border border-line text-left"
             >
               <span className="font-heading font-extrabold text-sm text-gold w-14">{format(C.throwShort, { n: th.n })}</span>
-              <span className="flex-1 min-w-0 truncate font-body text-sm">{spotText(th.spots)}</span>
-              {th.corrected && <span className="font-heading font-bold text-[11px] tracking-[0.08em] text-muted">{L.fixed}</span>}
+              <span className="flex-1 min-w-0 truncate font-body text-sm">{throwText(th)}</span>
+              <ReviewBadge corrected={th.corrected} checked={th.checked === true} L={L} />
             </button>
           ))}
         </section>
       )}
 
-      {phase === "live" && snap && <MiniOverlay photo={snap} corners={corners} label={L.calibration} />}
+      {phase === "live" && snap && <MiniOverlay photo={snap} corners={corners} fix={fix} boxLabels={boxLabels} label={L.calibration} />}
     </div>
   );
 }
 
 /** Small reminder of the calibration (zones over the empty-mat frame). */
-function MiniOverlay({ photo, corners, label }: Readonly<{ photo: Photo; corners: Pt[]; label: string }>) {
+function MiniOverlay({ photo, corners, fix, boxLabels, label }: Readonly<{ photo: Photo; corners: Pt[]; fix: ZoneFix; boxLabels: (string | null)[]; label: string }>) {
   if (!corners.length) return null;
   return (
     <details className="font-body text-xs text-muted">
@@ -561,7 +962,7 @@ function MiniOverlay({ photo, corners, label }: Readonly<{ photo: Photo; corners
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={photo.url} alt="" className="w-full h-auto rounded-[12px]" />
         <svg viewBox={`0 0 ${photo.frame.w} ${photo.frame.h}`} className="absolute inset-0 w-full h-full" aria-hidden="true">
-          <Overlay corners={corners} w={photo.frame.w} />
+          <Overlay corners={corners} w={photo.frame.w} fix={fix} boxLabels={boxLabels} />
         </svg>
       </div>
     </details>

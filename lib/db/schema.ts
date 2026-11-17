@@ -752,6 +752,9 @@ export const cameraSessions = pgTable("camera_session", {
   // training (Vercel Blob); the empty mat as the reference picture.
   shareImages: boolean("share_images").notNull().default(false),
   emptyUrl: text("empty_url"),
+  // "New game" from any phone: this session ended and the camera carries on
+  // in this one (same calibration); the camera and viewers follow it.
+  nextId: uuid("next_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -772,6 +775,8 @@ export const cameraThrows = pgTable(
     // Where caps were knocked away from.
     gone: jsonb("gone").$type<{ x: number; y: number }[]>().notNull().default([]),
     correctedBy: uuid("corrected_by").references(() => users.id, { onDelete: "set null" }),
+    // Someone looked at the throw and said it's right (✓), so it's reviewed.
+    checkedBy: uuid("checked_by").references(() => users.id, { onDelete: "set null" }),
     // Full-size top-down picture after the throw (824 × 265 JPEG in Blob,
     // only when shared) and the detector that judged it.
     imageUrl: text("image_url"),
@@ -781,9 +786,39 @@ export const cameraThrows = pgTable(
     // "corrected" (moved by hand), "confirmed" (tapped done), "auto".
     label: jsonb("label").$type<{ x: number; y: number; owner: string; no: number }[]>(),
     labelHow: text("label_how"),
+    // Every cap on the field after the throw (mat units, lib/camera-field.ts),
+    // the field before it, and whether a person vouched for the whole field:
+    // "checked" (✓) or "corrected"; null = as the camera judged it. Null
+    // field: a throw from before the camera kept the whole field.
+    field: jsonb("field").$type<{ x: number; y: number }[]>(),
+    fieldBefore: jsonb("field_before").$type<{ x: number; y: number }[]>(),
+    fieldHow: text("field_how"),
     // Small top-down JPEG (data URL) of the mat after the throw.
     image: text("image"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (t) => [unique("camera_throw_session_n").on(t.sessionId, t.n)],
 );
+
+// The game a mat logger is playing with a linked camera: the logger's state
+// (lib/mat.ts MatState, player names, which camera throw became which mat
+// throw), so the camera phone can show what the game made of every throw.
+export const cameraGames = pgTable("camera_game", {
+  sessionId: uuid("session_id")
+    .primaryKey()
+    .references(() => cameraSessions.id, { onDelete: "cascade" }),
+  state: jsonb("state").notNull(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Per-zone nudges on top of the corners (lib/camera.ts ZoneFix, mat units),
+// set on the camera itself or from another phone/laptop in the crew; the
+// version bumps on every change so the camera picks it up.
+export const cameraZoneFixes = pgTable("camera_zone_fix", {
+  sessionId: uuid("session_id")
+    .primaryKey()
+    .references(() => cameraSessions.id, { onDelete: "cascade" }),
+  fix: jsonb("fix").$type<Record<string, { dx: number; dy: number; s?: number }>>().notNull(),
+  version: integer("version").notNull().default(1),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});

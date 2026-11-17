@@ -9,19 +9,25 @@
  * only while a throw is expected (never while the mat is cleared between
  * rounds) and starts fresh each round; every throw it sees moves the caps
  * here (placeFromCamera) and is confirmed after a short countdown, or by
- * "Throw done" after you fixed it by hand. The confirmed mat goes back to
- * the camera session as a training label.
+ * "Throw done" after you fixed it by hand. An empty camera throw (the cap
+ * left its shooting box and landed nowhere, or a "miss" from another phone)
+ * is proposed as a miss. A camera throw in which no cap was found for the
+ * thrower changes nothing (it's not a miss) and doesn't hold up the next one. The confirmed mat goes back to
+ * the camera session as a training label. The game itself is shared with
+ * the camera too (camera_game), so the camera phone can show its log/stats.
  */
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/client";
+import { retry } from "@/lib/retry";
 import { format } from "@/lib/i18n";
 import type { Duo } from "@/lib/teams";
 import { BetaPill } from "@/components/beta/BetaUi";
 import { MamaShot } from "@/components/beta/MamaShot";
-import { armCameraAction, getCameraStateAction, getLiveCamerasAction, labelCameraThrowAction, linkCameraLoggerAction, unlinkCameraLoggerAction } from "@/app/(app)/camera/actions";
+import { armCameraAction, getCameraStateAction, getLiveCamerasAction, labelCameraThrowAction, linkCameraLoggerAction, setCameraGameAction, unlinkCameraLoggerAction } from "@/app/(app)/camera/actions";
+import type { CameraGame } from "@/lib/camera-log";
 import {
   BOTTLES, CORNERS, FIELD_OUTLINE, MAMAS, ZONES,
   dropCap, drunk, finishThrow, fromField, placeFromCamera, toField, knockedMamas, mamaTeam, playJoker, newMatState, nextRound, placeA1, spotOf, teamOfSlot, toGameLog, turnInfo, zoneTeam,
@@ -81,9 +87,13 @@ export function MatLogger({
   const [cam, setCam] = useState<{ id: string; name: string } | null>(null);
   const [cams, setCams] = useState<{ id: string; name: string; calibrating: boolean }[] | null>(null);
   /** A camera throw placed on the mat, waiting to be confirmed. */
-  const [camPending, setCamPending] = useState<{ n: number; left: number; touched: boolean; found: boolean } | null>(null);
+  const [camPending, setCamPending] = useState<{ n: number; left: number; touched: boolean; found: boolean; miss?: boolean } | null>(null);
+  // A camera throw whose label didn't reach the server after retrying (its number).
+  const [camSaveFail, setCamSaveFail] = useState<number | null>(null);
   const camSeen = useRef<number | null>(null);
   const armedRound = useRef<number | null>(null);
+  /** Camera throw number → index in st.throws it became (shared with the camera). */
+  const camLinks = useRef<Record<string, number>>({});
   const stRef = useRef(st);
   const camPendingRef = useRef(camPending);
   useEffect(() => {
@@ -106,10 +116,13 @@ export function MatLogger({
     const pend = camPending;
     if (cam && pend) setCamPending(null);
     apply((d) => {
+      const idx = d.throws.length;
       const ok = finishThrow(d, miss);
       if (ok && cam && pend) {
+        camLinks.current[pend.n] = idx;
         const label = d.caps.filter((c) => !c.waiting).map((c) => ({ ...toField(c), owner: c.owner, no: c.no }));
-        labelCameraThrowAction(cam.id, pend.n, label, pend.touched && how === "confirmed" ? "corrected" : how).catch(() => {});
+        const camId = cam.id;
+        retry(() => labelCameraThrowAction(camId, pend.n, label, pend.touched && how === "confirmed" ? "corrected" : how), () => setCamSaveFail(pend.n));
       }
       const last = d.throws.filter((x) => x.kind !== "skipped").at(-1);
       if (ok && celebrate && last?.moves.some((m) => m.to.spot === "ML" || m.to.spot === "MR")) {
@@ -143,7 +156,7 @@ export function MatLogger({
   useEffect(() => {
     if (!cam) return;
     const id = window.setInterval(() => {
-      getCameraStateAction(cam.id)
+      getCameraStateAction(cam.id, null)
         .then((cs) => {
           const newest = cs.throws[0]?.n ?? 0;
           if (camSeen.current === null) {
@@ -157,10 +170,24 @@ export function MatLogger({
           }
           const next = cs.throws.filter((x) => x.n > camSeen.current!).sort((a, b) => a.n - b.n)[0];
           if (!next) return;
-          if (camPendingRef.current) return; // one at a time: confirm or fix the current one first
+          // One at a time: confirm or fix the current one first (a throw the
+          // camera saw but couldn't place gives way to the next one).
+          if (camPendingRef.current?.found) return;
           camSeen.current = next.n;
+          if (next.miss) {
+            // A real miss (the cap left its box and landed nowhere, or someone tapped MISS).
+            setCamPending({ n: next.n, left: CAM_CONFIRM, touched: false, found: true, miss: true });
+            return;
+          }
           const d = structuredClone(cur);
           const found = placeFromCamera(d, next.spots.map(fromField), next.gone.map(fromField));
+          if (!found) {
+            // The camera saw a throw but found no cap for the thrower: not a miss.
+            // Leave the mat alone, but say so (place it by hand, or the next
+            // camera throw takes over) instead of silently waiting.
+            setCamPending({ n: next.n, left: CAM_CONFIRM, touched: false, found: false });
+            return;
+          }
           setHistory((h) => [...h, cur]);
           setSt(d);
           setCamPending({ n: next.n, left: CAM_CONFIRM, touched: false, found });
@@ -170,11 +197,31 @@ export function MatLogger({
     return () => window.clearInterval(id);
   }, [cam]);
 
+  // Share the game with the camera, so it can show what became of its throws.
+  useEffect(() => {
+    if (!cam) return;
+    const id = window.setTimeout(() => {
+      const links = Object.fromEntries(Object.entries(camLinks.current).filter(([, i]) => i < st.throws.length));
+      const game: CameraGame = {
+        v: 1,
+        st,
+        names: Object.fromEntries(st.order.map((s) => [s, nameOf(s)])),
+        links,
+        seen: camSeen.current ?? 0,
+        pending: camPending,
+      };
+      setCameraGameAction(cam.id, game).catch(() => {});
+    }, 400);
+    return () => window.clearTimeout(id);
+    // nameOf only reads names and slots.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cam, st, camPending, slots, names]);
+
   // Countdown: an untouched camera throw counts as right.
   useEffect(() => {
     if (!camPending || camPending.touched || !camPending.found) return;
     const id = window.setTimeout(() => {
-      if (camPending.left <= 1) throwDoneRef.current(false, "auto");
+      if (camPending.left <= 1) throwDoneRef.current(camPending.miss === true, "auto");
       else setCamPending((p) => (p && p.n === camPending.n ? { ...p, left: p.left - 1 } : p));
     }, 1000);
     return () => window.clearTimeout(id);
@@ -189,6 +236,7 @@ export function MatLogger({
     await linkCameraLoggerAction(c.id);
     camSeen.current = null;
     armedRound.current = null;
+    camLinks.current = {};
     setCam(c);
     setDialog(null);
   }
@@ -452,7 +500,7 @@ export function MatLogger({
             <div role="status" className="flex items-center gap-2 px-3 py-2 rounded-[12px] bg-red/10 border border-red/40 font-body text-[13px]">
               <span aria-hidden="true">📹</span>
               <span className="flex-1 min-w-0">
-                {!camPending.found ? M.camNone : camPending.touched ? M.camFixing : format(M.camAuto, { s: camPending.left })}
+                {!camPending.found ? M.camNone : camPending.touched ? M.camFixing : format(camPending.miss ? M.camMiss : M.camAuto, { s: camPending.left })}
               </span>
               {camPending.found && !camPending.touched && (
                 <button type="button" onClick={() => setCamPending({ ...camPending, touched: true })} className="h-8 px-3 rounded-pill bg-surface-raised border border-line font-heading font-bold text-xs">
@@ -460,6 +508,9 @@ export function MatLogger({
                 </button>
               )}
             </div>
+          )}
+          {cam && camSaveFail !== null && (
+            <span role="alert" className="font-body text-xs text-red">⚠️ {format(M.camSaveFail, { n: camSaveFail })}</span>
           )}
           {cam && !camPending && st.phase === "throw" && (
             <span className="font-body text-xs text-muted">📹 {format(M.camLinked, { name: cam.name })}</span>

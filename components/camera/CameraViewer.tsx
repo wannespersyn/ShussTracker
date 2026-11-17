@@ -4,20 +4,28 @@
  * Follow a crew member's live camera from your own phone (or laptop). While
  * the camera is calibrating, set its corners here on its empty-mat snapshot
  * (so nobody has to touch the camera) or ask it for a new snapshot. Then:
- * the newest throw
+ * a MISS button for a throw that went off the mat unseen; the newest throw
  * with its top-down picture and "Cap in zone X?", a tap on "Wrong" to point
  * at the real spot (or say there was no cap), and the list of throws (tap
- * one to fix it later). Polls the session every 2 s; pictures are fetched
- * only for the throw being looked at.
+ * one to fix it later). Fine-tune the zones one by one (ZoneEditor) from
+ * here at any time — the camera hangs above the mat, nobody can reach its
+ * screen — and follow the linked mat logger's game (CameraLog: log + stats).
+ * Polls the session every 2 s; pictures are fetched only for the throw being
+ * looked at.
  */
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import type { Pt } from "@/lib/camera";
+import { useEffect, useRef, useState } from "react";
+import type { Pt, ZoneFix } from "@/lib/camera";
 import { CornerEditor } from "@/components/camera/CameraLab";
+import { ZoneEditor } from "@/components/camera/ZoneEditor";
+import { RotateButton, useMatRotation } from "@/components/camera/rotation";
+import { CameraLog } from "@/components/camera/CameraLog";
+import { asCameraGame, boxLabelsOf, stampEvents } from "@/lib/camera-log";
 import type { CameraState } from "@/lib/db/camera";
-import { MatPick, SpotsEditor, spotsLabel, type Spot } from "@/components/camera/MatPick";
+import { MatPick, ReviewBadge, SpotsEditor, fieldPick, spotsLabel, type Spot } from "@/components/camera/MatPick";
+import { fieldDiff } from "@/lib/camera-field";
 import {
   correctCameraThrowAction,
   getCameraSnapshotAction,
@@ -25,10 +33,17 @@ import {
   getCameraThrowImageAction,
   requestCameraSnapshotAction,
   setCameraCornersAction,
+  setCameraZoneFixAction,
+  checkCameraThrowAction,
+  addCameraMissAction,
+  endCameraSessionAction,
+  nextCameraSessionAction,
 } from "@/app/(app)/camera/actions";
 import { cn } from "@/lib/cn";
+import { useRouter } from "next/navigation";
 import { useT } from "@/lib/i18n/client";
 import { format } from "@/lib/i18n";
+import { retry } from "@/lib/retry";
 
 const POLL = 2000;
 
@@ -39,20 +54,89 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
   const [state, setState] = useState(initial);
   const [open, setOpen] = useState<string | null>(initial.throws[0]?.id ?? null);
   const [fixing, setFixing] = useState(false);
+  // Throws ticked ✓ here (shown right away; the server has them on the next poll).
   const [okd, setOkd] = useState<Set<string>>(new Set());
+  const [onlyTodo, setOnlyTodo] = useState(false);
+  // "New game" tapped once: tap again to end this game and start the next.
+  const router = useRouter();
+  const [nextAsk, setNextAsk] = useState(false);
+  const [nextBusy, setNextBusy] = useState(false);
+  function newGame() {
+    if (!nextAsk) return setNextAsk(true);
+    setNextAsk(false);
+    setNextBusy(true);
+    nextCameraSessionAction(initial.id)
+      .then((id) => router.replace(`/camera/view/${id}`))
+      .catch(() => {
+        setNextBusy(false);
+        setStopFail(true);
+      });
+  }
+  // "Stop camera" tapped once: tap again to really stop it.
+  const [stopAsk, setStopAsk] = useState(false);
+  function stopCamera() {
+    if (!stopAsk) return setStopAsk(true);
+    setStopAsk(false);
+    setState((st) => ({ ...st, live: false, ended: true }));
+    retry(() => endCameraSessionAction(initial.id), () => setStopFail(true));
+  }
+  const [stopFail, setStopFail] = useState(false);
+  // A check or correction that didn't reach the server after retrying (throw number).
+  const [saveFail, setSaveFail] = useState<number | null>(null);
+  // "Miss" just sent (the button rests a moment so it isn't sent twice).
+  const [missSent, setMissSent] = useState(false);
+  function miss() {
+    setMissSent(true);
+    addCameraMissAction(initial.id)
+      .catch(() => {})
+      .finally(() => window.setTimeout(() => setMissSent(false), 2500));
+  }
+  // Turn the mat pictures the way you sit (kept on this phone).
+  const [rot, turn] = useMatRotation();
   const [images, setImages] = useState<Record<string, string | null>>({});
   // Calibration: the snapshot (per version) and the corners being set.
   const [snap, setSnap] = useState<{ version: number; url: string } | null>(null);
   const [corners, setCorners] = useState<Pt[] | null>(null);
   const [sent, setSent] = useState<"none" | "corners" | "photo">("none");
+  // Zone nudges: shared with the camera through the session (versioned).
+  const [fix, setFixState] = useState<ZoneFix>(initial.zoneFix?.fix ?? {});
+  const fixVersion = useRef(initial.zoneFix?.version ?? 0);
+  const fixPush = useRef<number | null>(null);
+  const [zonesOpen, setZonesOpen] = useState(false);
+  // When each game line was first seen here (the log's order).
+  const seenRef = useRef<Record<string, number>>({});
+  const [seenAt, setSeenAt] = useState<Record<string, number>>({});
+  const gameAt = useRef(initial.gameAt);
+  const game = state.logger ? asCameraGame(state.game) : null;
+  const boxLabels = boxLabelsOf(game);
+
+  function setFix(f: ZoneFix) {
+    setFixState(f);
+    if (fixPush.current) window.clearTimeout(fixPush.current);
+    fixPush.current = window.setTimeout(() => {
+      setCameraZoneFixAction(initial.id, f)
+        .then((v) => (fixVersion.current = Math.max(fixVersion.current, v)))
+        .catch(() => {});
+    }, 400);
+  }
 
   // Follow the session; jump to a new throw when it comes in.
   useEffect(() => {
     let last = initial.throws[0]?.n ?? 0;
     const id = window.setInterval(() => {
-      getCameraStateAction(initial.id)
+      getCameraStateAction(initial.id, gameAt.current)
         .then((st) => {
-          setState(st);
+          // The game only comes along when it changed: keep our copy otherwise.
+          // A new game was started (here or on another phone): follow it.
+          if (st.nextId) router.replace(`/camera/view/${st.nextId}`);
+          gameAt.current = st.logger ? st.gameAt : 0;
+          setState((prev) => ({ ...st, game: st.game === undefined ? prev.game : st.game }));
+          if (st.zoneFix && st.zoneFix.version > fixVersion.current) {
+            fixVersion.current = st.zoneFix.version;
+            setFixState(st.zoneFix.fix);
+          }
+          const g = st.logger && st.game !== undefined ? asCameraGame(st.game) : null;
+          if (g && stampEvents(g, seenRef.current)) setSeenAt({ ...seenRef.current });
           const newest = st.throws[0];
           if (newest && newest.n > last) {
             last = newest.n;
@@ -63,7 +147,7 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
         .catch(() => {});
     }, POLL);
     return () => window.clearInterval(id);
-  }, [initial.id, initial.throws]);
+  }, [initial.id, initial.throws, router]);
 
   // Fetch the picture of the throw being looked at.
   useEffect(() => {
@@ -73,10 +157,14 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
       .catch(() => {});
   }, [open, images]);
 
-  // Load the snapshot when a new one comes in, starting from the camera's guess.
-  const version = state.phase === "calibrating" ? (state.snap?.version ?? 0) : 0;
+  // Load the snapshot when a new one comes in, starting from the camera's guess
+  // (also while watching: the zones are fine-tuned on it).
+  const version = state.snap?.version ?? 0;
+  // The snapshot is big: fetch each version once (not again on every poll while it loads).
+  const loadingSnap = useRef(0);
   useEffect(() => {
-    if (!version || snap?.version === version) return;
+    if (!version || snap?.version === version || loadingSnap.current === version) return;
+    loadingSnap.current = version;
     getCameraSnapshotAction(initial.id)
       .then((url) => {
         if (!url) return;
@@ -90,10 +178,32 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
   const th = state.throws.find((x) => x.id === open);
   const spotText = (sp: Spot[]) => spotsLabel(sp, C, L);
 
-  function correct(id: string, spots: Spot[]) {
-    setState((st) => ({ ...st, throws: st.throws.map((x) => (x.id === id ? { ...x, spots, corrected: true } : x)) }));
+  const isChecked = (x: { id: string; checked: boolean }) => x.checked || okd.has(x.id);
+  const todo = state.throws.filter((x) => !x.corrected && !isChecked(x));
+  /** Open the next throw still to check (oldest first), if any. */
+  function nextTodo(after: string) {
+    const next = [...todo].reverse().find((x) => x.id !== after);
+    if (next) {
+      setOpen(next.id);
+      setFixing(false);
+    }
+  }
+  /** ✓: right as the camera judged it — reviewed, on to the next one. */
+  function check(x: { id: string; n: number }) {
+    setOkd((s) => new Set(s).add(x.id));
+    retry(() => checkCameraThrowAction(initial.id, x.n), () => setSaveFail(x.n));
+    nextTodo(x.id);
+  }
+
+  /** `value`: the whole field when the throw has one (lib/camera-field.ts), else the throw's caps. */
+  function correct(id: string, value: Spot[]) {
+    const old = state.throws.find((x) => x.id === id);
+    const whole = old?.field ? { field: value, ...fieldDiff(old.fieldBefore ?? [], value) } : null;
+    const spots = whole ? whole.spots : value;
+    setState((st) => ({ ...st, throws: st.throws.map((x) => (x.id === id ? { ...x, spots, ...(whole ? { field: whole.field, gone: whole.gone } : {}), corrected: true } : x)) }));
     setFixing(false);
-    correctCameraThrowAction(id, spots).catch(() => {});
+    const f = whole ? { field: whole.field, gone: whole.gone } : undefined;
+    retry(() => correctCameraThrowAction(id, spots, f), () => setSaveFail(old?.n ?? 0));
   }
 
   const kicker = "font-heading font-bold text-[12px] tracking-[0.14em] text-gold";
@@ -111,10 +221,17 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
           <span className="font-heading font-bold text-[12px] tracking-[0.14em] text-muted truncate">{crewName.toUpperCase()}</span>
           <h1 className="font-display font-extrabold text-[28px] leading-none uppercase truncate">{format(L.viewTitle, { name: state.cameraName })}</h1>
         </span>
+        <RotateButton onClick={turn} label={L.rotate} />
         <span className={cn("px-3 py-1.5 rounded-pill font-heading font-bold text-xs tracking-[0.08em]", state.live ? "bg-red text-cream" : "bg-chip text-muted")}>
           {state.live ? L.liveBadge : L.stopped}
         </span>
       </header>
+
+      {saveFail !== null && (
+        <p role="alert" className="px-3 py-2 rounded-[12px] bg-red/10 border border-red/40 font-body text-[13px] text-cream">
+          {format(L.evSaveFail, { n: saveFail })}
+        </p>
+      )}
 
       {state.live && state.phase === "calibrating" && (
         <section className="flex flex-col gap-3">
@@ -124,7 +241,7 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
           ) : (
             <>
               <p className="font-body text-[15px] leading-normal text-soft">{C.step2Auto}</p>
-              <CornerEditor photo={{ url: snap.url, frame: { w: state.snap.w, h: state.snap.h, data: new Uint8ClampedArray(0) } }} corners={corners} onChange={setCorners} labels={C} />
+              <CornerEditor photo={{ url: snap.url, frame: { w: state.snap.w, h: state.snap.h, data: new Uint8ClampedArray(0) } }} corners={corners} onChange={setCorners} labels={C} fix={fix} rot={rot} />
               <button
                 type="button"
                 disabled={sent !== "none"}
@@ -152,6 +269,29 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
         </section>
       )}
 
+      {state.live && snap && state.snap && (state.phase === "watching" ? state.corners : corners) && (
+        <section className="flex flex-col gap-3">
+          <button type="button" aria-expanded={zonesOpen} onClick={() => setZonesOpen((o) => !o)} className="flex items-center gap-2 text-left py-1">
+            <span className={kicker}>{L.zonesTitle}</span>
+            {Object.keys(fix).length > 0 && <span className="font-body text-xs text-mint">{format(L.zonesCount, { n: Object.keys(fix).length })}</span>}
+            <span className={cn("ml-auto text-muted transition-transform", zonesOpen && "rotate-180")}>▾</span>
+          </button>
+          {zonesOpen && (
+            <>
+              <p className="font-body text-[13px] leading-normal text-gold -mt-2">{L.zonesRemoteLive}</p>
+              <ZoneEditor
+                photo={{ url: snap.url, frame: { w: state.snap.w, h: state.snap.h, data: new Uint8ClampedArray(0) } }}
+                corners={(state.phase === "watching" ? state.corners : corners)!}
+                fix={fix}
+                boxLabels={boxLabels}
+                rot={rot}
+                onChange={setFix}
+              />
+            </>
+          )}
+        </section>
+      )}
+
       {state.phase === "watching" && !th && <p className="font-body text-[15px] text-soft">{state.live ? L.viewWaiting : L.viewEnded}</p>}
       {!state.live && state.phase === "calibrating" && <p className="font-body text-[15px] text-soft">{L.viewEnded}</p>}
 
@@ -159,20 +299,26 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
         <section className="flex flex-col gap-3" aria-live="polite">
           <span className={kicker}>{format(L.throwN, { n: th.n })}</span>
           {fixing ? (
-            <SpotsEditor key={th.id} src={images[th.id] ?? null} initial={th.spots} gone={th.gone} C={C} L={L} onSave={(sp) => correct(th.id, sp)} onClose={() => setFixing(false)} />
+            <SpotsEditor key={th.id} src={images[th.id] ?? null} initial={th.field ?? th.spots} before={th.field ? (th.fieldBefore ?? []) : null} gone={th.gone} C={C} L={L} onSave={(sp) => correct(th.id, sp)} onClose={() => setFixing(false)} fix={fix} boxLabels={boxLabels} rot={rot} />
           ) : (
             <>
-              <MatPick src={images[th.id] ?? null} spots={th.spots} gone={th.gone} label={spotText(th.spots)} />
+              {th.field ? (
+                // The whole mat (white = already there, orange = this throw), so a ✓ vouches for every cap.
+                <MatPick src={images[th.id] ?? null} {...fieldPick(th.fieldBefore ?? [], th.field)} label={format(L.fieldAsk, { n: th.field.length })} fix={fix} boxLabels={boxLabels} rot={rot} />
+              ) : (
+                <MatPick src={images[th.id] ?? null} spots={th.spots} gone={th.gone} label={spotText(th.spots)} fix={fix} boxLabels={boxLabels} rot={rot} />
+              )}
+              {th.field && <p className="font-body text-[13px] text-soft">{format(L.fieldAsk, { n: th.field.length })}</p>}
               <p className="font-display font-extrabold text-2xl leading-tight">
                 {th.corrected ? spotText(th.spots) : th.spots.length ? format(th.spots.length > 1 ? L.capsIn : L.capIn, { where: spotText(th.spots) }) : L.noCapQ}
               </p>
-              {th.corrected || okd.has(th.id) ? (
+              {th.corrected || th.checked || okd.has(th.id) ? (
                 <button type="button" onClick={() => setFixing(true)} className={secondary}>
                   {L.change}
                 </button>
               ) : (
                 <div className="grid grid-cols-2 gap-2">
-                  <button type="button" onClick={() => setOkd((s) => new Set(s).add(th.id))} className="h-12 rounded-[14px] bg-mint text-ink font-heading font-extrabold text-base tracking-[0.06em]">
+                  <button type="button" onClick={() => check(th)} className="h-12 rounded-[14px] bg-mint text-ink font-heading font-extrabold text-base tracking-[0.06em]">
                     ✓ {L.rightShort}
                   </button>
                   <button type="button" onClick={() => setFixing(true)} className={secondary}>
@@ -185,10 +331,34 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
         </section>
       )}
 
+      {state.live && state.phase === "watching" && (
+        <button
+          type="button"
+          onClick={miss}
+          disabled={missSent}
+          className="h-14 rounded-[16px] bg-surface-deep border border-red/50 text-red-pale font-heading font-extrabold text-lg tracking-[0.06em] disabled:opacity-50"
+        >
+          {missSent ? L.missSent : L.missBtn}
+        </button>
+      )}
+
+      {state.phase === "watching" && <CameraLog game={game} seenAt={seenAt} events={[]} />}
+
       {state.throws.length > 0 && (
         <section className="flex flex-col gap-1.5">
-          <span className={kicker}>{L.history}</span>
-          {state.throws.map((x) => (
+          <div className="flex items-center gap-2">
+            <span className={kicker}>{L.history}</span>
+            <span className="font-body text-xs text-muted">{format(L.todoCount, { n: todo.length })}</span>
+            <button
+              type="button"
+              aria-pressed={onlyTodo}
+              onClick={() => setOnlyTodo((o) => !o)}
+              className={cn("ml-auto h-8 px-3 rounded-pill font-heading font-bold text-xs tracking-[0.06em]", onlyTodo ? "bg-amber text-ink" : "bg-surface-deep border border-line text-soft")}
+            >
+              {L.onlyTodo}
+            </button>
+          </div>
+          {state.throws.filter((x) => !onlyTodo || (!x.corrected && !isChecked(x))).map((x) => (
             <button
               key={x.id}
               type="button"
@@ -201,11 +371,42 @@ export function CameraViewer({ initial, crewName }: Readonly<{ initial: CameraSt
             >
               <span className="font-heading font-extrabold text-sm text-gold w-14">{format(C.throwShort, { n: x.n })}</span>
               <span className="flex-1 min-w-0 truncate font-body text-sm">{spotText(x.spots)}</span>
-              {x.corrected && <span className="font-heading font-bold text-[11px] tracking-[0.08em] text-muted">{L.fixed}</span>}
+              <ReviewBadge corrected={x.corrected} checked={isChecked(x)} L={L} />
             </button>
           ))}
         </section>
       )}
+
+      {state.live && (
+        <section className="flex flex-col gap-2 pt-2">
+          <button
+            type="button"
+            onClick={newGame}
+            disabled={nextBusy}
+            className={cn("h-12 rounded-[14px] font-heading font-extrabold text-base tracking-[0.06em] disabled:opacity-50", nextAsk ? "bg-amber text-ink" : "bg-surface-deep border border-line-strong text-cream")}
+          >
+            {nextAsk ? L.newGameSure : L.newGame}
+          </button>
+          <button
+            type="button"
+            onClick={stopCamera}
+            className={cn("h-12 rounded-[14px] font-heading font-extrabold text-base tracking-[0.06em]", stopAsk ? "bg-red text-cream" : "bg-surface-deep border border-line-strong text-soft")}
+          >
+            {stopAsk ? L.stopRemoteSure : L.stopRemote}
+          </button>
+          {(stopAsk || nextAsk) && (
+            <button
+              type="button"
+              onClick={() => {
+                setStopAsk(false);
+                setNextAsk(false);
+              }} className="font-heading font-bold text-[13px] tracking-[0.08em] text-muted py-1">
+              {L.cancel}
+            </button>
+          )}
+        </section>
+      )}
+      {stopFail && <p role="alert" className="font-body text-[13px] text-red-pale">{L.stopRemoteFail}</p>}
     </div>
   );
 }

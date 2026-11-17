@@ -14,7 +14,9 @@
  *  5. average that over cap-sized squares, so a cap counts both as a solid
  *     disk (on black) and as just a dark rim (on white); peaks that appeared
  *     since the previous photo = caps that landed, peaks that vanished =
- *     caps shot away, a huge changed area = a hand.
+ *     caps shot away, a huge changed area = a hand;
+ *  6. optional per-zone nudges (ZoneFix) on top of the corners: a found
+ *     cap is moved back onto the real print (`unfix`).
  *
  * Data: raw RGBA pixels in, mat coordinates (lib/mat.ts) out. Pure JS.
  * Notes: tuned on real photos of the Leberschuss mat (black field, white
@@ -850,8 +852,162 @@ function inPoly(x: number, y: number, pts: [number, number][]) {
 
 /** Where a point lies on the mat: a zone ("L2", value 2), a mama, or nothing. */
 export function spotAt(p: Pt): { id: string; v: number | "mama" | null } {
-  for (const m of REAL_MAMAS) if (p.x >= m.x && p.x <= m.x + m.w && p.y >= m.y && p.y <= m.y + m.h) return { id: m.id, v: "mama" };
-  for (const z of REAL_ZONES) if (inPoly(p.x, p.y, z.pts)) return { id: z.id, v: z.v };
+  for (const m of REAL_MAMAS) if (inPoly(p.x, p.y, baseShape(m.id))) return { id: m.id, v: "mama" };
+  for (const z of REAL_ZONES) if (inPoly(p.x, p.y, baseShape(z.id))) return { id: z.id, v: z.v };
   if (p.x < 0 || p.x > MAT_W || p.y < 0 || p.y > MAT_H) return { id: "off", v: null };
   return { id: "none", v: null };
 }
+
+/* ---------- per-zone fine-tuning ---------- */
+
+/** Nudges per zone/mama after the corners (mat units): the print never lies
+ * exactly where 4 corners put it (a mat that isn't flat, a wide-angle lens).
+ * `s` = size (1 = as measured), around the shape's own centre.
+ * Keys: "L3".."R3", "ML", "MR", and "SB" = the size of the 4 shooting boxes. */
+export type ZoneFix = Record<string, { dx: number; dy: number; s?: number }>;
+const changed = (d?: { dx: number; dy: number; s?: number }) => Boolean(d && (d.dx || d.dy || (d.s !== undefined && d.s !== 1)));
+export const isFixed = changed;
+/** Shapes a cap can count in (zones and mamas). */
+const ZONE_IDS: string[] = [...REAL_ZONES.map((z) => z.id), ...REAL_MAMAS.map((m) => m.id)];
+/** Everything the zone editor can adjust. */
+export const FIX_IDS: string[] = [...ZONE_IDS, "SB"];
+/** Size range per key (the boxes were measured roughly, so they may grow more). */
+export const sizeRange = (id: string): [number, number] => (id === "SB" ? [0.5, 2.5] : [0.5, 1.5]);
+
+/** The outline of a zone or mama (mat units), with its nudge applied. "SB":
+ * the first shooting box. */
+export function fixedShape(id: string, fix?: ZoneFix | null): [number, number][] {
+  if (id === "SB") return shootingBoxes(fix)[0];
+  const d = fix?.[id] ?? { dx: 0, dy: 0 };
+  const pts = baseShape(id);
+  const c = centre(pts);
+  const s = d.s ?? 1;
+  return pts.map(([x, y]) => [c.x + (x - c.x) * s + d.dx, c.y + (y - c.y) * s + d.dy]);
+}
+
+function baseShape(id: string): [number, number][] {
+  const z = REAL_ZONES.find((x) => x.id === id);
+  if (z) return rounded(z.pts, ZONE_R);
+  const m = REAL_MAMAS.find((x) => x.id === id);
+  return m ? [[m.x, m.y], [m.x + m.w, m.y], [m.x + m.w, m.y + m.h], [m.x, m.y + m.h]] : [];
+}
+
+/** The blue zones are printed with rounded corners (mat units); the mamas
+ * and shooting boxes have sharp ones. */
+const ZONE_R = 12;
+/** A polygon with its corners rounded off (each corner → a short curve
+ * starting `r` along both edges, never more than 40% of an edge). */
+function rounded(pts: [number, number][], r: number): [number, number][] {
+  const out: [number, number][] = [];
+  const n = pts.length;
+  for (let i = 0; i < n; i++) {
+    const [px, py] = pts[(i + n - 1) % n];
+    const [cx, cy] = pts[i];
+    const [nx, ny] = pts[(i + 1) % n];
+    const lp = Math.hypot(px - cx, py - cy);
+    const ln = Math.hypot(nx - cx, ny - cy);
+    const d = Math.min(r, 0.4 * lp, 0.4 * ln);
+    const a: [number, number] = [cx + ((px - cx) * d) / lp, cy + ((py - cy) * d) / lp];
+    const b: [number, number] = [cx + ((nx - cx) * d) / ln, cy + ((ny - cy) * d) / ln];
+    // Quadratic curve a → b with the corner as control point.
+    for (let k = 0; k <= 4; k++) {
+      const t = k / 4;
+      out.push([(1 - t) ** 2 * a[0] + 2 * (1 - t) * t * cx + t * t * b[0], (1 - t) ** 2 * a[1] + 2 * (1 - t) * t * cy + t * t * b[1]]);
+    }
+  }
+  return out;
+}
+
+const centre = (pts: [number, number][]): Pt => ({ x: pts.reduce((s, p) => s + p[0], 0) / pts.length, y: pts.reduce((s, p) => s + p[1], 0) / pts.length });
+
+/** A point seen on the camera (mat units after the corners) → where it lies
+ * on the real print, so the zone it counts in is the one you see on the
+ * calibration. Inside an adjusted zone it maps onto the same spot of the
+ * measured zone; outside every adjusted zone the nudges fade out with
+ * distance, and if that would still land it in a zone (a zone was made
+ * smaller, so this spot is no longer in it) it's pushed just outside. */
+export function unfix(p: Pt, fix?: ZoneFix | null): Pt {
+  if (!fix || !ZONE_IDS.some((id) => changed(fix[id]))) return p;
+  for (const id of ZONE_IDS) {
+    if (!inPoly(p.x, p.y, fixedShape(id, fix))) continue;
+    // Undo the nudge and the size change: back to the same spot in the measured shape.
+    const d = fix[id] ?? { dx: 0, dy: 0 };
+    const c = centre(baseShape(id));
+    const s = d.s ?? 1;
+    return { x: c.x + (p.x - c.x - d.dx) / s, y: c.y + (p.y - c.y - d.dy) / s };
+  }
+  let w = 0;
+  let ox = 0;
+  let oy = 0;
+  for (const id of ZONE_IDS) {
+    const d = fix[id] ?? { dx: 0, dy: 0 };
+    const c = centre(fixedShape(id, fix));
+    const k = 1 / ((p.x - c.x) ** 2 + (p.y - c.y) ** 2 + 400);
+    w += k;
+    ox += k * d.dx;
+    oy += k * d.dy;
+  }
+  const q = { x: p.x - ox / w, y: p.y - oy / w };
+  // Not in any zone as calibrated → must not end up in one as measured.
+  const inside = ZONE_IDS.find((id) => inPoly(q.x, q.y, baseShape(id)));
+  if (!inside) return q;
+  const c = centre(baseShape(inside));
+  let ux = q.x - c.x;
+  let uy = q.y - c.y;
+  const len = Math.hypot(ux, uy) || 1;
+  ux /= len;
+  uy /= len;
+  for (let t = 1; t < 300; t++) {
+    const r = { x: q.x + ux * t, y: q.y + uy * t };
+    if (!ZONE_IDS.some((id) => inPoly(r.x, r.y, baseShape(id)))) return r;
+  }
+  return q;
+}
+
+/** Shooting box size (mat units along each edge from the corner tip): the
+ * white triangle where the field's corner is cut off. */
+export const BOX_R = 52;
+
+/** The 4 shooting boxes (mat units), in MAT_CORNERS order: (0,0), (W,0),
+ * (W,H), (0,H). Size from the "SB" fix. */
+export function shootingBoxes(fix?: ZoneFix | null): [number, number][][] {
+  const R = BOX_R * (fix?.SB?.s ?? 1);
+  // Corner tip, along one edge, straight across to the other edge.
+  const local: [number, number][] = [[0, 0], [R, 0], [0, R]];
+  const at = (cx: number, cy: number) => local.map(([x, y]): [number, number] => [cx === 0 ? x : MAT_W - x, cy === 0 ? y : MAT_H - y]);
+  return [at(0, 0), at(MAT_W, 0), at(MAT_W, MAT_H), at(0, MAT_H)];
+}
+
+/** Is a mat point in shooting box `i`? */
+export const inBox = (p: Pt, i: number, fix?: ZoneFix | null) => inPoly(p.x, p.y, shootingBoxes(fix)[i]);
+
+/** Index of the shooting box at each logger corner (lib/mat.ts Corner). */
+export const BOX_OF_CORNER: Record<"TL" | "TR" | "BL" | "BR", number> = { TR: 0, BR: 1, BL: 2, TL: 3 };
+
+/** The other way round from `unfix`: a spot on the real print → where it
+ * shows on the camera's picture (to draw stored spots on a throw's photo). */
+export function refix(p: Pt, fix?: ZoneFix | null): Pt {
+  if (!fix || !ZONE_IDS.some((id) => changed(fix[id]))) return p;
+  for (const id of ZONE_IDS) {
+    if (!inPoly(p.x, p.y, baseShape(id))) continue;
+    const d = fix[id] ?? { dx: 0, dy: 0 };
+    const c = centre(baseShape(id));
+    const s = d.s ?? 1;
+    return { x: c.x + (p.x - c.x) * s + d.dx, y: c.y + (p.y - c.y) * s + d.dy };
+  }
+  let w = 0;
+  let ox = 0;
+  let oy = 0;
+  for (const id of ZONE_IDS) {
+    const d = fix[id] ?? { dx: 0, dy: 0 };
+    const c = centre(baseShape(id));
+    const k = 1 / ((p.x - c.x) ** 2 + (p.y - c.y) ** 2 + 400);
+    w += k;
+    ox += k * d.dx;
+    oy += k * d.dy;
+  }
+  return { x: p.x + ox / w, y: p.y + oy / w };
+}
+
+/** The zones and mamas as calibrated (with the nudges), for drawing. */
+export const zoneOutlines = (fix?: ZoneFix | null) => ZONE_IDS.map((id) => ({ id, mama: id === "ML" || id === "MR", pts: fixedShape(id, fix) }));

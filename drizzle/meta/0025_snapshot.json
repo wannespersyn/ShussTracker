@@ -1,5 +1,5 @@
 {
-  "id": "3fbbae8b-54be-4546-b648-ccf0b84f8328",
+  "id": "96005160-e1a8-411b-8f63-5bf144271cbd",
   "prevId": "f4420cfe-79ce-4e28-be08-d9a552230358",
   "version": "7",
   "dialect": "postgresql",
@@ -100,6 +100,52 @@
           ]
         }
       },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.camera_game": {
+      "name": "camera_game",
+      "schema": "",
+      "columns": {
+        "session_id": {
+          "name": "session_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "state": {
+          "name": "state",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "camera_game_session_id_camera_session_id_fk": {
+          "name": "camera_game_session_id_camera_session_id_fk",
+          "tableFrom": "camera_game",
+          "tableTo": "camera_session",
+          "columnsFrom": [
+            "session_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
@@ -2564,80 +2610,6 @@
         }
       },
       "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.app_push_token": {
-      "name": "app_push_token",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "token": {
-          "name": "token",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "platform": {
-          "name": "platform",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "locale": {
-          "name": "locale",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'en'"
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "app_push_token_user_id_user_id_fk": {
-          "name": "app_push_token_user_id_user_id_fk",
-          "tableFrom": "app_push_token",
-          "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "app_push_token_token_unique": {
-          "name": "app_push_token_token_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "token"
-          ]
-        }
-      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

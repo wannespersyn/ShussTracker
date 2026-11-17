@@ -5,12 +5,20 @@
  * mamas drawn over it, the caps of that throw circled and the spots caps
  * were knocked away from dashed. Optionally tappable (mat units, 824 × 265).
  * SpotsEditor builds on it to fix a throw: tap to add a cap, tap a circle to
- * remove it, then save. spotsLabel turns spots into "R3 (3 pt) + L2 (2 pt)".
+ * remove it, then save. With the field before the throw it edits the whole
+ * field (every cap on the mat): caps already lying there are drawn white,
+ * caps of this throw amber. spotsLabel turns spots into "R3 (3 pt) + L2 (2 pt)".
+ * ReviewBadge shows whether a throw was checked: ✓ right, ✎ fixed, or still
+ * to check.
+ * With the zone fine-tuning (`fix`) the zones are drawn as calibrated, and
+ * the stored spots (on the real print) are drawn where the camera saw them.
  */
 "use client";
 
-import { useState, type MouseEvent as ReactMouseEvent } from "react";
-import { MAT_H, MAT_W, REAL_MAMAS, REAL_ZONES, spotAt } from "@/lib/camera";
+import { useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { pointIn, rotated, type Rot } from "@/components/camera/rotation";
+import { MAT_H, MAT_W, refix, shootingBoxes, spotAt, unfix, zoneOutlines, type ZoneFix } from "@/lib/camera";
+import { fieldDiff } from "@/lib/camera-field";
 import { format, type Dictionary } from "@/lib/i18n";
 
 export type Spot = { x: number; y: number };
@@ -28,32 +36,71 @@ export function spotsLabel(spots: Spot[], C: Dictionary["cam"], L: Dictionary["c
     .join(" + ");
 }
 
-export function MatPick({ src, spots, gone = [], label, onTap }: Readonly<{ src: string | null; spots: Spot[]; gone?: Spot[]; label: string; onTap?: (p: Spot) => void }>) {
+export function MatPick({
+  src,
+  spots,
+  others = [],
+  gone = [],
+  label,
+  onTap,
+  fix,
+  boxLabels,
+  rot = 0,
+}: Readonly<{ src: string | null; spots: Spot[]; others?: Spot[]; gone?: Spot[]; label: string; onTap?: (p: Spot) => void; fix?: ZoneFix | null; boxLabels?: (string | null)[]; rot?: Rot }>) {
+  const turned = useRef<SVGGElement>(null);
   function tap(e: ReactMouseEvent<HTMLButtonElement>) {
-    const b = e.currentTarget.getBoundingClientRect();
-    onTap?.({ x: ((e.clientX - b.left) / b.width) * MAT_W, y: ((e.clientY - b.top) / b.height) * MAT_H });
+    // Tapped on the (maybe turned) picture → the spot on the real print.
+    onTap?.(unfix(pointIn(turned.current!, e.clientX, e.clientY), fix));
   }
+  const pt = (p: Spot) => refix(p, fix);
+  const view = rotated(MAT_W, MAT_H, rot);
   const body = (
     <>
-      {src ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={src} alt="" className="w-full h-auto block rounded-[12px] border border-line" />
-      ) : (
-        <div className="w-full rounded-[12px] border border-line bg-black" style={{ aspectRatio: `${MAT_W} / ${MAT_H}` }} />
-      )}
-      <svg viewBox={`0 0 ${MAT_W} ${MAT_H}`} className="absolute inset-0 w-full h-full pointer-events-none" aria-hidden="true">
-        {REAL_ZONES.map((z) => (
-          <polygon key={z.id} points={z.pts.map(([x, y]) => `${x},${y}`).join(" ")} fill="rgba(79,209,255,0.08)" stroke="#4fd1ff" strokeWidth={1.5} />
+      <svg viewBox={`0 0 ${view.vw} ${view.vh}`} className="w-full h-auto max-h-[75vh] block rounded-[12px] border border-line bg-black" aria-hidden="true">
+        <g ref={turned} transform={view.transform}>
+        {src && <image href={src} x={0} y={0} width={MAT_W} height={MAT_H} preserveAspectRatio="none" />}
+        {shootingBoxes(fix).map((b, i) => (
+          <g key={`b${i}`}>
+            <polygon points={b.map(([x, y]) => `${x},${y}`).join(" ")} fill="rgba(255,255,255,0.1)" stroke="#ffffff" strokeOpacity={0.6} strokeWidth={1.5} />
+            {boxLabels?.[i] && (
+              // Who throws from this box, a bit inside it towards the tip.
+              <text
+                x={(b[0][0] * 2 + b[1][0] + b.at(-1)![0]) / 4}
+                y={(b[0][1] * 2 + b[1][1] + b.at(-1)![1]) / 4}
+                textAnchor="middle"
+                dominantBaseline="central"
+                fontSize={20}
+                fontWeight={800}
+                fill="#ffb627"
+                stroke="#000"
+                strokeWidth={4}
+                paintOrder="stroke"
+                transform={`rotate(${-rot} ${(b[0][0] * 2 + b[1][0] + b.at(-1)![0]) / 4} ${(b[0][1] * 2 + b[1][1] + b.at(-1)![1]) / 4})`}
+              >
+                {boxLabels[i]}
+              </text>
+            )}
+          </g>
         ))}
-        {REAL_MAMAS.map((m) => (
-          <rect key={m.id} x={m.x} y={m.y} width={m.w} height={m.h} fill="rgba(255,107,91,0.12)" stroke="#ff6b5b" strokeWidth={1.5} />
+        {zoneOutlines(fix).map((z) => (
+          <polygon
+            key={z.id}
+            points={z.pts.map(([x, y]) => `${x},${y}`).join(" ")}
+            fill={z.mama ? "rgba(255,107,91,0.12)" : "rgba(79,209,255,0.08)"}
+            stroke={z.mama ? "#ff6b5b" : "#4fd1ff"}
+            strokeWidth={1.5}
+          />
         ))}
         {gone.map((p, i) => (
-          <circle key={`g${i}`} cx={p.x} cy={p.y} r={20} fill="none" stroke="#ffffff" strokeOpacity={0.7} strokeWidth={3} strokeDasharray="6 5" />
+          <circle key={`g${i}`} cx={pt(p).x} cy={pt(p).y} r={20} fill="none" stroke="#ffffff" strokeOpacity={0.7} strokeWidth={3} strokeDasharray="6 5" />
+        ))}
+        {others.map((p, i) => (
+          <circle key={`o${i}`} cx={pt(p).x} cy={pt(p).y} r={20} fill="none" stroke="#ffffff" strokeWidth={3} />
         ))}
         {spots.map((p, i) => (
-          <circle key={`s${i}`} cx={p.x} cy={p.y} r={22} fill="none" stroke="#ffb627" strokeWidth={4} />
+          <circle key={`s${i}`} cx={pt(p).x} cy={pt(p).y} r={22} fill="none" stroke="#ffb627" strokeWidth={4} />
         ))}
+        </g>
       </svg>
     </>
   );
@@ -66,6 +113,19 @@ export function MatPick({ src, spots, gone = [], label, onTap }: Readonly<{ src:
       {body}
     </figure>
   );
+}
+
+/** A field against the one before: caps of this throw (`fresh`), caps that
+ * were already there (`lying`) and spots caps left (`left`). */
+export function splitField(before: Spot[], field: Spot[]): { fresh: Spot[]; lying: Spot[]; left: Spot[] } {
+  const { spots, gone } = fieldDiff(before, field);
+  return { fresh: spots, lying: field.filter((p) => !spots.includes(p)), left: gone };
+}
+
+/** A field as MatPick draws it (spread into its props). */
+export function fieldPick(before: Spot[], field: Spot[]): { spots: Spot[]; others: Spot[]; gone: Spot[] } {
+  const v = splitField(before, field);
+  return { spots: v.fresh, others: v.lying, gone: v.left };
 }
 
 /** A warped top-down frame (lib/camera) as a small JPEG data URL. */
@@ -93,28 +153,52 @@ export function warpedToJpeg(warped: Float32Array, w: number, h: number, quality
 export function SpotsEditor({
   src,
   initial,
+  before = null,
   gone,
   C,
   L,
   onSave,
   onClose,
-}: Readonly<{ src: string | null; initial: Spot[]; gone: Spot[]; C: Dictionary["cam"]; L: Dictionary["camLive"]; onSave: (s: Spot[]) => void; onClose: () => void }>) {
+  fix,
+  boxLabels,
+  rot,
+}: Readonly<{
+  src: string | null;
+  initial: Spot[];
+  /** The field before the throw: then `initial` is the whole field after it and that is what's edited and saved. */
+  before?: Spot[] | null;
+  gone: Spot[];
+  C: Dictionary["cam"];
+  L: Dictionary["camLive"];
+  onSave: (s: Spot[]) => void;
+  onClose: () => void;
+  fix?: ZoneFix | null;
+  boxLabels?: (string | null)[];
+  rot?: Rot;
+}>) {
   const [draft, setDraft] = useState(initial);
   const toggle = (p: Spot) =>
     setDraft((d) => {
       const near = d.findIndex((q) => Math.hypot(q.x - p.x, q.y - p.y) < 28);
-      return near >= 0 ? d.filter((_, i) => i !== near) : [...d, p].slice(0, 12);
+      return near >= 0 ? d.filter((_, i) => i !== near) : [...d, p].slice(0, before ? 16 : 12);
     });
   const secondary = "h-12 rounded-[14px] bg-surface-deep border border-line-strong text-cream font-heading font-extrabold text-base tracking-[0.06em]";
+  // Whole field: split it into caps already lying there and caps of this throw.
+  const v = before ? splitField(before, draft) : { fresh: draft, lying: [], left: gone };
+  const sub = before ? L.fieldSub : L.whereSub;
   return (
     <div className="flex flex-col gap-3">
-      <p className="font-body text-[15px] leading-normal text-soft">{L.whereSub}</p>
-      <MatPick src={src} spots={draft} gone={gone} label={L.whereSub} onTap={toggle} />
-      <p className="font-display font-extrabold text-xl leading-tight">{spotsLabel(draft, C, L)}</p>
+      <p className="font-body text-[15px] leading-normal text-soft">{sub}</p>
+      <MatPick src={src} spots={v.fresh} others={v.lying} gone={v.left} label={sub} onTap={toggle} fix={fix} boxLabels={boxLabels} rot={rot} />
+      <p className="font-display font-extrabold text-xl leading-tight">
+        {spotsLabel(v.fresh, C, L)}
+        {before && v.left.length > 0 && <span className="text-muted"> · {format(L.fieldGone, { n: v.left.length })}</span>}
+      </p>
+      {before && <p className="font-body text-xs text-muted -mt-2">{format(L.fieldCount, { n: draft.length })}</p>}
       <button type="button" onClick={() => onSave(draft)} className="h-14 rounded-[16px] bg-amber text-ink font-heading font-extrabold text-lg tracking-[0.06em]">
         {L.save}
       </button>
-      <button type="button" onClick={() => onSave([])} className={secondary}>
+      <button type="button" onClick={() => onSave(before ? v.lying : [])} className={secondary}>
         {L.noCapBtn}
       </button>
       <button type="button" onClick={onClose} className="font-heading font-bold text-[13px] tracking-[0.08em] text-muted py-2">
@@ -122,4 +206,14 @@ export function SpotsEditor({
       </button>
     </div>
   );
+}
+
+/** Whether a throw was looked at: ✓ right, ✎ fixed, or still to check. */
+export function ReviewBadge({ corrected, checked, L }: Readonly<{ corrected: boolean; checked: boolean; L: Dictionary["camLive"] }>) {
+  const [text, cls] = corrected
+    ? [`✎ ${L.fixed}`, "bg-gold/15 text-gold border-gold/40"]
+    : checked
+      ? [`✓ ${L.rightShort}`, "bg-mint/15 text-mint border-mint/40"]
+      : [`• ${L.todo}`, "bg-surface-raised text-muted border-line"];
+  return <span className={`shrink-0 px-2 py-0.5 rounded-pill border font-heading font-bold text-[11px] tracking-[0.08em] ${cls}`}>{text}</span>;
 }

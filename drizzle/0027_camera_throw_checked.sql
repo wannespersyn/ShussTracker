@@ -1,0 +1,2 @@
+ALTER TABLE "camera_throw" ADD COLUMN "checked_by" uuid;--> statement-breakpoint
+ALTER TABLE "camera_throw" ADD CONSTRAINT "camera_throw_checked_by_user_id_fk" FOREIGN KEY ("checked_by") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;
