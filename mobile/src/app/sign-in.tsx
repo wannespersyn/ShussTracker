@@ -1,15 +1,16 @@
 /**
  * Sign-in screen — Route: /sign-in (signed-out users only)
  *
- * Sign in with Apple (iOS), Google (placeholder until the development
- * build), and in development a "dev login" by email against a local
- * backend running with DEV_APP_LOGIN=1.
+ * Sign in with Apple (iOS) and Google (when its client ids are set, see
+ * src/auth/google.ts), and in development a "dev login" by email against a
+ * local backend running with DEV_APP_LOGIN=1.
  */
 import { useEffect, useState } from "react";
 import { Platform, StyleSheet, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as AppleAuthentication from "expo-apple-authentication";
 import { useAuth } from "@/auth/AuthProvider";
+import { googleConfigured, googleIdToken } from "@/auth/google";
 import { useT } from "@/lib/i18n";
 import { ApiError } from "@/api/client";
 import { Button, Txt } from "@/components/ui";
@@ -17,7 +18,7 @@ import { colors, fonts, radius } from "@/theme";
 
 export default function SignIn() {
   const { t } = useT();
-  const { signInWithApple, signInDev } = useAuth();
+  const { signInWithApple, signInWithGoogle, signInDev } = useAuth();
   const [appleAvailable, setAppleAvailable] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -49,6 +50,11 @@ export default function SignIn() {
     await signInWithApple(credential.identityToken, name);
   }
 
+  async function google() {
+    const idToken = await googleIdToken();
+    if (idToken) await signInWithGoogle(idToken);
+  }
+
   return (
     <SafeAreaView style={styles.screen}>
       <View style={styles.hero}>
@@ -69,8 +75,14 @@ export default function SignIn() {
             onPress={() => run(apple)}
           />
         )}
-        <Button label={t.app.google} kind="outline" disabled onPress={() => {}} />
-        <Txt style={styles.note}>{t.app.googleSoon}</Txt>
+        {googleConfigured ? (
+          <Button label={t.app.google} kind="outline" disabled={busy} onPress={() => void run(google)} />
+        ) : (
+          <>
+            <Button label={t.app.google} kind="outline" disabled onPress={() => {}} />
+            <Txt style={styles.note}>{t.app.googleSoon}</Txt>
+          </>
+        )}
 
         {__DEV__ && (
           <View style={styles.dev}>

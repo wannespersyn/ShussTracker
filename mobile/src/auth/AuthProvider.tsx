@@ -9,6 +9,7 @@
  * Notes: Google sign-in needs a development build (native module); it is
  * wired in once the Google client ids exist.
  */
+import { googleSignOut } from "@/auth/google";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { api, setUnauthorizedHandler, tokenStore } from "@/api/client";
 import type { Me, SignInResponse } from "@/api/types";
@@ -19,6 +20,7 @@ type Ctx = {
   status: Status;
   me: Me | null;
   signInWithApple: (identityToken: string, fullName: string | null) => Promise<void>;
+  signInWithGoogle: (idToken: string) => Promise<void>;
   signInDev: (email: string) => Promise<void>;
   signOut: () => Promise<void>;
   refreshMe: () => Promise<void>;
@@ -64,10 +66,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       me,
       signInWithApple: async (identityToken, fullName) =>
         finish(await api<SignInResponse>("/auth/apple", { method: "POST", body: { identityToken, fullName } })),
+      signInWithGoogle: async (idToken) => finish(await api<SignInResponse>("/auth/google", { method: "POST", body: { idToken } })),
       signInDev: async (email) => finish(await api<SignInResponse>("/auth/dev", { method: "POST", body: { email } })),
       signOut: async () => {
         const pushToken = await storedPushToken();
         await api("/auth/logout", { method: "POST", body: pushToken ? { pushToken } : {} }).catch(() => {});
+        await googleSignOut();
         await clear();
       },
       refreshMe: async () => setMe(await api<Me>("/me")),
