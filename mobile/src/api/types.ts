@@ -79,7 +79,7 @@ export type SessionInsight = {
 };
 
 export type CrewDetail = {
-  crew: { id: string; name: string; createdBy: string; isOwner: boolean; plan: string; isPro: boolean; inviteCode?: string; rules: Ruleset };
+  crew: { id: string; name: string; createdBy: string; isOwner: boolean; plan: string; isPro: boolean; inviteCode?: string; rules: Ruleset; rulesSet: boolean };
   insights: {
     players: PlayerInsight[];
     duos: DuoInsight[];

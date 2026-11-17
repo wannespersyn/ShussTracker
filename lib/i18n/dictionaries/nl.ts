@@ -1,6 +1,21 @@
 import type { Dictionary } from "../index";
 
 export const nl: Dictionary = {
+  kickstart: {
+    title: "Aan de slag",
+    rules: "Kies jullie spel",
+    rulesSub: "Leberschuss of BeerToss, en jullie huisregels.",
+    rulesCta: "Kiezen",
+    invite: "Minstens 4 spelers",
+    inviteSub: "Nu {n}. Deel de code of voeg guests toe: wie geen account heeft, claimt later z'n stats.",
+    inviteCta: "Uitnodigen",
+    first: "Log jullie eerste game",
+    firstSub: "Kies de spelers, wie wint, klaar. Shot tracking mag, moet niet.",
+    firstCta: "Loggen",
+    three: "Speel 3 games",
+    threeSub: "{n} van {total}: daarna staat jullie ranking en Elo er echt.",
+    done: "klaar",
+  },
   rules: {
     title: "Spel & regels",
     sub: "Wat jullie spelen en hoe. De mat logger, de camera en de stats volgen deze regels.",

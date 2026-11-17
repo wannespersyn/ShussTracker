@@ -50,6 +50,8 @@ export const GET = api<Ctx>(async (req, { params }) => {
       isPro: isPro(crew),
       inviteCode: isOwner ? crew.inviteCode : undefined,
       rules: parseRuleset(crew.rules),
+      /** False until the owner picked a game / house rules (kickstart checklist). */
+      rulesSet: crew.rules !== null,
     },
     insights,
     guests,

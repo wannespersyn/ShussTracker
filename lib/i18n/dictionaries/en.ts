@@ -2,6 +2,21 @@
  * language must provide exactly these keys (enforced by the `Dictionary`
  * type in ../index.ts). Grouped per screen; keep strings short. */
 export const en = {
+  kickstart: {
+    title: "Get started",
+    rules: "Pick your game",
+    rulesSub: "Leberschuss or BeerToss, and your house rules.",
+    rulesCta: "Pick",
+    invite: "At least 4 players",
+    inviteSub: "{n} so far. Share the code or add guests: players without an account claim their stats later.",
+    inviteCta: "Invite",
+    first: "Log your first game",
+    firstSub: "Pick the players, who won, done. Shot tracking is optional.",
+    firstCta: "Log",
+    three: "Play 3 games",
+    threeSub: "{n} of {total}: then your ranking and Elo really mean something.",
+    done: "done",
+  },
   rules: {
     title: "Game & rules",
     sub: "What you play and how. The mat logger, the camera and the stats follow these rules.",

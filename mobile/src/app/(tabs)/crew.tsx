@@ -9,6 +9,7 @@
  *
  * Data: GET /api/v1/crews/{crewId}, GET /api/v1/crews/{crewId}/feed
  */
+import { CrewKickstart, KICKSTART_GAMES } from "@/components/crews/CrewKickstart";
 import { useState } from "react";
 import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -112,6 +113,16 @@ export default function Crew() {
           </View>
         </View>
         <CrewSwitcher />
+        {insights.totalGames < KICKSTART_GAMES && (
+          <CrewKickstart
+            crewId={crew.id}
+            isOwner={q.data.crew.isOwner}
+            rulesSet={q.data.crew.rulesSet}
+            players={insights.players.length}
+            games={insights.totalGames}
+            onInvite={q.data.crew.inviteCode ? () => invite(q.data!.crew.name, q.data!.crew.inviteCode!) : undefined}
+          />
+        )}
         {q.data.cameras.map((c) => (
           <Pressable key={c.id} onPress={() => void WebBrowser.openBrowserAsync(apiUrl(`/camera/view/${c.id}`))} style={styles.camera}>
             <View style={styles.cameraDot} />

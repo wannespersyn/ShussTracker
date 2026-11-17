@@ -21,6 +21,7 @@ import { wilsonLowerBound } from "@/lib/ranking";
 import { isPro } from "@/lib/plan";
 import { ConfirmForm } from "@/components/ui";
 import { AddGuestDialog } from "@/components/crews/AddGuestDialog";
+import { CrewKickstart, KICKSTART_GAMES } from "@/components/crews/CrewKickstart";
 import { SettingsIcon } from "@/components/ui/icons";
 import { Chip, FormDots, IconButton, Kicker, MoveChip, Screen, SegmentLinks, TextTabs } from "@/components/v2";
 
@@ -101,6 +102,17 @@ export default async function CrewPage({
           <AddGuestDialog crewId={crewId} crewName={group.name} />
         </div>
       </header>
+
+      {insights.totalGames < KICKSTART_GAMES && (
+        <CrewKickstart
+          t={t}
+          crewId={crewId}
+          isOwner={isOwner}
+          rulesSet={group.rules !== null}
+          players={insights.players.length}
+          games={insights.totalGames}
+        />
+      )}
 
       <TextTabs
         tabs={[
