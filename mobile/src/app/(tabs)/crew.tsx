@@ -237,7 +237,7 @@ export default function Crew() {
                         key={d.key}
                         onPress={() =>
                           mine
-                            ? router.push({ pathname: "/(tabs)/duos", params: { with: partner.id } })
+                            ? router.push({ pathname: "/duos", params: { with: partner.id } })
                             : router.push({ pathname: "/player/[id]", params: { id: d.a.id } })
                         }
                         style={({ pressed }) => [styles.row, mine && styles.mine, pressed && { opacity: 0.7 }]}

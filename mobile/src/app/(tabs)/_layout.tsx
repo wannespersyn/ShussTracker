@@ -2,7 +2,7 @@
  * Tabs layout
  *
  * Native tab bar (iOS Liquid Glass / Android Material), same order as the
- * website's bottom nav: Home, Crew, Log a game, Duos and Me.
+ * website's bottom nav: Home, Crew, Log a game, Stats and Me.
  */
 import { NativeTabs } from "expo-router/native-tabs";
 import { useT } from "@/lib/i18n";
@@ -26,9 +26,9 @@ export default function TabsLayout() {
         <NativeTabs.Trigger.Label>{t.nav.log}</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="plus.circle.fill" md="add_circle" />
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="duos">
-        <NativeTabs.Trigger.Label>{t.nav.duos}</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf="person.2.fill" md="group" />
+      <NativeTabs.Trigger name="stats">
+        <NativeTabs.Trigger.Label>{t.nav.stats}</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="chart.bar.fill" md="bar_chart" />
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="me">
         <NativeTabs.Trigger.Label>{t.nav.me}</NativeTabs.Trigger.Label>

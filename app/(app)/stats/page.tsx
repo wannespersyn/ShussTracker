@@ -46,5 +46,5 @@ export default async function StatsPage() {
     );
   }
 
-  return <StatsView data={data} currentUserId={userId} backHref={`/players/${userId}`} initialCrewId={rememberedCrewId} initialLayout={layout} />;
+  return <StatsView data={data} currentUserId={userId} initialCrewId={rememberedCrewId} initialLayout={layout} />;
 }

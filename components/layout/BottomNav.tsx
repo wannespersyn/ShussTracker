@@ -6,12 +6,10 @@ import { useT } from "@/lib/i18n/client";
 import { cn } from "@/lib/cn";
 import { GroupIcon, HomeIcon, PlusIcon, UserIcon } from "../ui/icons";
 
-function DuoIcon() {
+function StatsIcon() {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-      <circle cx="8" cy="9" r="3.5" />
-      <circle cx="16" cy="9" r="3.5" />
-      <path d="M2 20c0-3 2.7-5 6-5 1.5 0 2.9.4 4 1.2 1.1-.8 2.5-1.2 4-1.2 3.3 0 6 2 6 5" />
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 20V11M10 20V5M16 20v-7M22 20H2" />
     </svg>
   );
 }
@@ -37,7 +35,8 @@ function NavItem({
   );
 }
 
-/** v2 floating scoreboard tab bar: Home · Crew · [+ Log] · Duos · Me.
+/** v2 floating scoreboard tab bar: Home · Crew · [+ Log] · Stats · Me.
+ * Duos live on the crew board (Players / Duos) and at /duos.
  * Hidden during immersive full-bleed flows with their own primary CTA:
  * the log-a-game wizard, tournament match play and the recap slides. */
 export function BottomNav({ currentUserId }: Readonly<{ currentUserId: string }>) {
@@ -59,7 +58,6 @@ export function BottomNav({ currentUserId }: Readonly<{ currentUserId: string }>
     pathname.endsWith("/manage") ||
     pathname.startsWith("/chwazi") ||
     pathname.startsWith("/camera") ||
-    pathname === "/stats" ||
     pathname === "/crews/join" ||
     pathname.includes("/vs/") ||
     pathname.endsWith("/achievements")
@@ -72,6 +70,7 @@ export function BottomNav({ currentUserId }: Readonly<{ currentUserId: string }>
   return (
     <nav
       aria-label={t.more.mainNav}
+      data-bottom-nav
       className="fixed inset-x-0 bottom-0 z-40 flex justify-center px-4"
       style={{ paddingBottom: "calc(22px + env(safe-area-inset-bottom))" }}
     >
@@ -88,7 +87,7 @@ export function BottomNav({ currentUserId }: Readonly<{ currentUserId: string }>
             <PlusIcon />
           </span>
         </Link>
-        <NavItem href="/duos" label={t.nav.duos} active={pathname === "/duos"} icon={<DuoIcon />} />
+        <NavItem href="/stats" label={t.nav.stats} active={pathname === "/stats"} icon={<StatsIcon />} />
         <NavItem href={profileHref} label={t.nav.me} active={pathname.startsWith("/players/")} icon={<UserIcon />} />
       </div>
     </nav>

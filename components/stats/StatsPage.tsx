@@ -54,7 +54,7 @@ export function StatsPage({
   backHref,
   initialCrewId,
   initialLayout,
-}: Readonly<{ data: StatsExplorerData; currentUserId: string; backHref: string; initialCrewId?: string; initialLayout: StatsLayout | null }>) {
+}: Readonly<{ data: StatsExplorerData; currentUserId: string; backHref?: string; initialCrewId?: string; initialLayout: StatsLayout | null }>) {
   const { t, locale } = useT();
   const sb = t.sb;
   const [now] = useState(() => Date.now());
@@ -258,7 +258,7 @@ export function StatsPage({
   // ---- Edit mode ------------------------------------------------------
   if (editing) {
     return (
-      <div className="relative min-h-screen bg-surface w-full max-w-xl mx-auto">
+      <div className="relative min-h-screen bg-surface w-full max-w-xl mx-auto" data-hide-nav>
         <div className="flex flex-col gap-3.5 px-5 pt-4.5 pb-32">
           <header className="flex items-center gap-2.5 h-11">
             <label className="flex-1 min-w-0 flex flex-col">
@@ -407,18 +407,20 @@ export function StatsPage({
 
   // ---- View mode ------------------------------------------------------
   return (
-    <div className="min-h-screen bg-surface w-full max-w-xl mx-auto flex flex-col gap-3.5 pt-4.5 pb-7">
+    <div className="min-h-screen bg-surface w-full max-w-xl mx-auto flex flex-col gap-3.5 pt-4.5 pb-32">
       <div className="flex flex-col gap-3.5 px-5">
         <header className="flex items-center gap-2.5 h-11">
-          <Link
-            href={backHref}
-            aria-label={t.common.back}
-            className="w-11 h-11 shrink-0 rounded-pill bg-surface-panel border border-line-strong text-cream flex items-center justify-center"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
-              <path d="M15 6l-6 6 6 6" />
-            </svg>
-          </Link>
+          {backHref && (
+            <Link
+              href={backHref}
+              aria-label={t.common.back}
+              className="w-11 h-11 shrink-0 rounded-pill bg-surface-panel border border-line-strong text-cream flex items-center justify-center"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+                <path d="M15 6l-6 6 6 6" />
+              </svg>
+            </Link>
+          )}
           <h1 className="flex-1 font-display font-extrabold text-[30px] tracking-[0.04em]">{sb.title}</h1>
           {data.crews.length > 1 ? (
             <label className="relative">

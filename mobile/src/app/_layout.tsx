@@ -58,7 +58,7 @@ function RootStack() {
         <Stack.Screen name="tournaments/[id]/match/[matchId]" />
         <Stack.Screen name="recap/[crewId]" options={{ presentation: "fullScreenModal" }} />
         <Stack.Screen name="vs/[a]/[b]" />
-        <Stack.Screen name="stats" />
+        <Stack.Screen name="duos" />
         <Stack.Screen name="feedback" />
         <Stack.Screen name="crews/[id]/tournaments" />
         <Stack.Screen name="americano/new" />

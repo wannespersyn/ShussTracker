@@ -664,3 +664,8 @@
   0% { opacity: 0.9; transform: scale(0.8); }
   100% { opacity: 0; transform: scale(1.6); }
 }
+
+/* Screens with their own bottom bar (stats edit mode) hide the tab bar. */
+body:has([data-hide-nav]) [data-bottom-nav] {
+  display: none;
+}

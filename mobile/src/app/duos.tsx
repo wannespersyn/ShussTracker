@@ -1,5 +1,5 @@
 /**
- * Duos tab — Route: /duos
+ * Duos — Route: /duos (opened from the crew board; Stats took its tab)
  *
  * Your duos in the selected crew, like the website's duo page: pick a
  * partner, then see your record together, duo rank, win %, best run, duo
@@ -11,6 +11,7 @@
 import { useState } from "react";
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Header } from "@/components/Header";
 import { router, useLocalSearchParams } from "expo-router";
 import { useAuth } from "@/auth/AuthProvider";
 import type { CrewDetail } from "@/api/types";
@@ -158,9 +159,7 @@ export default function DuosTab() {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={q.refreshing} onRefresh={q.reload} tintColor={colors.gold} />}
       >
-        <Txt v="display" style={{ textTransform: "uppercase" }}>
-          {t.duo.title}
-        </Txt>
+        <Header title={t.duo.title} />
         <CrewSwitcher />
         {mine.length > 1 && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>

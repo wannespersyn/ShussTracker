@@ -1,5 +1,5 @@
 /**
- * Stats — Route: /stats
+ * Stats tab — Route: /stats
  *
  * The player-built stats page, like the website: swipeable screens of
  * blocks, one crew / player / period filter for all of them (session, 7 or
@@ -15,7 +15,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollViewInstance } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { router } from "expo-router";
 import { api } from "@/api/client";
 import { useAuth } from "@/auth/AuthProvider";
 import type { StatsExplorerData } from "@/lib/db/stats";
@@ -280,9 +279,6 @@ function StatsPage({ data, initialLayout }: { data: StatsExplorerData; initialLa
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <View style={{ paddingHorizontal: 20, gap: 12 }}>
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={styles.round} accessibilityLabel={t.common.back}>
-            <Text style={{ color: colors.cream, fontSize: 20 }}>‹</Text>
-          </Pressable>
           <Text style={styles.title}>{sb.title}</Text>
           {data.crews.length > 1 ? (
             <Pressable onPress={() => setPicker("crew")} style={styles.select}>
