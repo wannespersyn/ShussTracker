@@ -15,7 +15,7 @@
     "android": {
       "package": "app.shussapp",
       "adaptiveIcon": {
-        "backgroundColor": "#F0782E",
+        "backgroundColor": "#FBF4E5",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -51,7 +51,7 @@
         "expo-notifications",
         {
           "icon": "./assets/images/android-icon-monochrome.png",
-          "color": "#ffb627"
+          "color": "#B80E25"
         }
       ]
     ],

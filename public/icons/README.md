@@ -1,23 +1,29 @@
-# Shussapp — app-icoon "Flick"
+# Shussapp — app-icoon (nov 2026)
 
-Kroonkurk met snelheidsstrepen op een verloop van goud (#FFC94A) via oranje (#F0782E) naar rood (#C8352B).
+Worpboog, kroonkurk en landingsring in mama-rood (#B80E25) op crème (#FBF4E5).
+Hertekend als schone vector vanaf de ChatGPT-schets: vlakke vormen, geen verloop,
+de lichtrand in de dop is een echte uitsparing.
 
 ## Inhoud
 
 | Map | Bestand | Waarvoor |
 |---|---|---|
-| `source/` | `shussapp-icon.svg` | Master, vierkant full-bleed |
+| `source/` | `shussapp-icon.svg` | Master, vierkant full-bleed (crème) |
 | | `shussapp-icon-rounded.svg` | Afgeronde versie (web, socials) |
+| | `shussapp-icon-dark.svg` | Op mat zwart (#141414) |
 | | `shussapp-glyph.svg` | Enkel het symbool, transparant |
 | `ios/` | `icon-1024.png` | App Store / Expo `icon` (geen transparantie, iOS rondt zelf af) |
 | `android/` | `adaptive-foreground.png` | Symbool binnen de safe zone |
-| | `adaptive-background.png` | Verloop |
+| | `adaptive-background.png` | Crème |
 | | `adaptive-monochrome.png` | Android 13+ themed icons |
 | | `play-store-512.png` | Play Console |
-| `pwa/` | `icon-192.png`, `icon-512.png` | Manifest `purpose: any` |
+| `pwa/` | `icon-192.png`, `icon-512.png` | Manifest `purpose: any` (afgerond) |
 | | `maskable-192.png`, `maskable-512.png` | Manifest `purpose: maskable` |
 | | `apple-touch-icon.png` | iOS "Zet op beginscherm" (180×180) |
-| `favicon/` | `favicon.svg`, `favicon.ico`, `favicon-16/32/48.png` | Vereenvoudigd: zonder kartelrand en binnenring, zodat het scherp blijft |
+| | `badge-96.png` | Meldingsbadge (wit silhouet) |
+| `favicon/` | `favicon.svg`, `favicon.ico`, `favicon-16/32/48.png` | Vereenvoudigd (dikkere boog, ronde dop zonder kartels) zodat het scherp blijft |
+
+De Expo-app gebruikt dezelfde set in `mobile/assets/images/` (adaptive achtergrond `#FBF4E5`).
 
 ## Next.js (PWA, huidige app)
 
