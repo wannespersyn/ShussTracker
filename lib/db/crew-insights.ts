@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { parseRuleset, type Ruleset } from "@/lib/rules";
+import { parseRuleset, type GameKind, type Ruleset } from "@/lib/rules";
 import { eq, sql } from "drizzle-orm";
 import { unstable_cache } from "next/cache";
 import { ALL_CREWS_TAG, crewTag } from "@/lib/cache-tags";
@@ -111,4 +111,18 @@ export const getUserCrews = cache(async (userId: string): Promise<UserCrew[]> =>
 
 export async function getCrew(groupId: string) {
   return db.query.groups.findFirst({ where: eq(groups.id, groupId) });
+}
+
+/** A crew's app theme (Ruleset.theme), cached across requests under the
+ * crew's tag — saving the rules invalidates it. Cheap enough for the app
+ * shell layout, which runs on every navigation. */
+export function getCrewTheme(groupId: string): Promise<GameKind> {
+  return unstable_cache(
+    async () => {
+      const [row] = await db.select({ rules: groups.rules }).from(groups).where(eq(groups.id, groupId)).limit(1);
+      return parseRuleset(row?.rules).theme;
+    },
+    ["crew-theme", groupId],
+    { tags: [crewTag(groupId)], revalidate: CREW_CACHE_SECONDS },
+  )();
 }
