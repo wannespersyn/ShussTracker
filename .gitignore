@@ -50,3 +50,7 @@ db-export/
 /mobile/ios/
 /mobile/android/
 /mobile/expo-env.d.ts
+
+# camera model datasets (crew photos, never in git)
+/camera-dataset/
+/camera-yolo/
