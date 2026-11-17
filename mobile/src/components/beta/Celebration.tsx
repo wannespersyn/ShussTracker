@@ -27,7 +27,7 @@ export function Celebration({ gameId, moments }: { gameId: string; moments: Cele
   useEffect(() => {
     if (moments.length === 0) return;
     let live = true;
-    SecureStore.getItemAsync(seenKey(gameId))
+    void SecureStore.getItemAsync(seenKey(gameId))
       .catch(() => null)
       .then((seen) => {
         if (!live || seen) return;

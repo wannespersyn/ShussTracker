@@ -261,6 +261,8 @@ export function Podium({ top, name }: { top: RotationStanding[]; name: Names }) 
 export function StandingsTable({ v, R, name, userId }: { v: RotationView; R: R; name: Names; userId: string }) {
   const form = formOf(v);
   const stopped = new Set(v.players.filter((p) => !p.active).map((p) => p.id));
+  // Sip balance only shows once a game was logged with shot tracking.
+  const hasSips = v.standings.some((x) => x.sips !== 0);
   return (
     <View style={s.table}>
       <View style={s.row}>
@@ -269,6 +271,7 @@ export function StandingsTable({ v, R, name, userId }: { v: RotationView; R: R; 
         <Text style={[s.th, s.cWl]}>{R.colWL}</Text>
         <Text style={[s.th, s.cPct]}>{R.colPct}</Text>
         <Text style={[s.th, s.cMama]}>{R.colMama}</Text>
+        {hasSips && <Text style={[s.th, s.cSips]}>{R.colSips}</Text>}
         <Text style={[s.th, s.cElo]}>{R.colElo}</Text>
       </View>
       {v.standings.map((st, i) => {
@@ -290,6 +293,11 @@ export function StandingsTable({ v, R, name, userId }: { v: RotationView; R: R; 
             <Text style={[s.num, s.cWl]}>{`${st.wins}–${st.losses}`}</Text>
             <Text style={[s.body, s.cPct, { color: colors.soft, fontSize: 14 }]}>{st.games ? String(st.winPct) : "—"}</Text>
             <Text style={[s.num, s.cMama, { color: st.mama > 0 ? colors.red : "#5b6460" }]}>{st.mama}</Text>
+            {hasSips && (
+              <Text style={[s.num, s.cSips, { fontSize: 16, color: st.sips > 0 ? colors.mint : st.sips < 0 ? colors.redPale : colors.muted }]}>
+                {`${st.sips > 0 ? "+" : ""}${st.sips}`}
+              </Text>
+            )}
             <Text style={[s.num, s.cElo, { fontSize: 16, color: st.elo > 0 ? colors.mint : st.elo < 0 ? colors.redPale : colors.muted }]}>
               {`${st.elo > 0 ? "+" : ""}${st.elo}`}
             </Text>
@@ -490,6 +498,7 @@ const s = StyleSheet.create({
   cPct: { width: 36, textAlign: "right" },
   cMama: { width: 40, textAlign: "right" },
   cElo: { width: 44, textAlign: "right" },
+  cSips: { width: 40, textAlign: "right" },
   badge: { fontFamily: fonts.headBold, fontSize: 12, letterSpacing: 1.4, color: colors.muted, backgroundColor: colors.raised, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, overflow: "hidden" },
   chip: { width: 22, height: 22, borderRadius: 6, alignItems: "center", justifyContent: "center" },
   chipText: { fontFamily: fonts.headBold, fontSize: 12, color: colors.muted },

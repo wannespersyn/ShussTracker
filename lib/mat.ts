@@ -7,9 +7,14 @@
  * animation; the black field is 28–796 × 10–255, shapes measured on the real
  * mat in lib/mat-geometry.ts); the component draws it rotated upright. Corners are named as seen
  * with the mat upright on a phone (TL = top-left).
+ *
+ * House rules (lib/rules.ts) live on the state: jokers per team, ad fundum
+ * after X empty rounds, shooting-box bonus throws, upside-down caps ×2 and
+ * mama vs reset. States saved before rules existed play Leberschuss defaults.
  */
 
 import { FIELD_BOTTLES, FIELD_CUT, FIELD_H, FIELD_MAMAS, FIELD_W, FIELD_ZONES } from "@/lib/mat-geometry";
+import { GAME_DEFAULTS, type Ruleset } from "@/lib/rules";
 
 export type Slot = "a1" | "a2" | "b1" | "b2";
 export type Corner = "TL" | "TR" | "BL" | "BR";
@@ -63,7 +68,8 @@ export function lineupFrom(a1: Corner, solo: boolean): Partial<Record<Slot, Corn
   return { a1, a2: SIDE[a1], b1: DIAG[a1], b2: DIAG[SIDE[a1]] };
 }
 
-export type Cap = { no: number; owner: Slot; x: number; y: number; waiting: boolean; round: number };
+/** `flipped`: the cap lies upside down (BeerToss: its sips count double). */
+export type Cap = { no: number; owner: Slot; x: number; y: number; waiting: boolean; round: number; flipped?: boolean };
 export type Spot =
   | { kind: "waiting" }
   | { kind: "box"; slot: Slot }
@@ -73,11 +79,12 @@ export type Spot =
   | { kind: "none" };
 
 export type MoveRec = { capNo: number; owner: Slot; isThrownCap: boolean; from: { x: number; y: number; spot: string }; to: { x: number; y: number; spot: string; countsFor: number | null } };
-export type ThrowRec = { round: number; slot: Slot; kind: "normal" | "bonus" | "skipped"; skipReason: "cap_knocked" | "box_empty" | null; capNo: number | null; box: Slot | null; firstSpot: string | null; missed: boolean; moves: MoveRec[] };
+export type ThrowRec = { round: number; slot: Slot; kind: "normal" | "bonus" | "skipped"; skipReason: "cap_knocked" | "box_empty" | null; capNo: number | null; box: Slot | null; firstSpot: string | null; missed: boolean; moves: MoveRec[]; flipped?: boolean };
 /** `jokerTeam`: a team played its joker on this round, so nobody drinks (mama included).
  * `allDrink`: third round in a row with nothing to drink, so everyone drinks ad fundum.
  * `emptyStreak`: how many nothing-rounds in a row up to and including this one. */
 export type RoundResult = { round: number; sips: number[]; mamaTeams: number[]; jokerTeam: number | null; allDrink: boolean; emptyStreak: number };
+/** Leberschuss default; a crew can change it (Ruleset.emptyRoundsForAll). */
 export const EMPTY_ROUNDS_FOR_ALL = 3;
 
 export type MatState = {
@@ -93,9 +100,15 @@ export type MatState = {
   activeCap: number | null;
   turnStart: { no: number; x: number; y: number; waiting: boolean }[];
   nextCap: number;
-  /** Teams that already played their joker (one per team per game). */
+  /** One entry per joker played, holding the team index. */
   jokersUsed: number[];
+  /** The crew's rules. Missing on states saved before house rules existed. */
+  rules?: Ruleset;
 };
+
+export const rulesOf = (st: Pick<MatState, "rules">): Ruleset => st.rules ?? GAME_DEFAULTS.leberschuss;
+/** Jokers a team can still play this game. */
+export const jokersLeft = (st: MatState, ti: number) => Math.max(0, rulesOf(st).jokers - st.jokersUsed.filter((t) => t === ti).length);
 
 export const teamOfSlot = (s: Slot) => (s[0] === "a" ? 0 : 1);
 const startOf = (st: MatState, s: Slot) => CORNERS[st.corner[s]!].start;
@@ -126,7 +139,7 @@ export function spotOf(st: MatState, c: { x: number; y: number; waiting: boolean
 export const spotCode = (s: Spot) => (s.kind === "zone" || s.kind === "mama" ? s.id : s.kind === "box" ? `box:${s.slot}` : s.kind);
 export const countsFor = (st: MatState, s: Spot) => (s.kind === "zone" ? zoneTeam(st, s.id) : s.kind === "mama" ? mamaTeam(st, s.id) : null);
 
-export function newMatState(solo: boolean, a1: Corner = "TR"): MatState {
+export function newMatState(solo: boolean, a1: Corner = "TR", rules?: Ruleset): MatState {
   const st: MatState = {
     solo,
     order: solo ? ["a1", "b1"] : ["a1", "b1", "a2", "b2"],
@@ -141,6 +154,7 @@ export function newMatState(solo: boolean, a1: Corner = "TR"): MatState {
     turnStart: [],
     nextCap: 1,
     jokersUsed: [],
+    rules: rules ?? GAME_DEFAULTS.leberschuss,
   };
   spawnRound(st);
   startTurn(st);
@@ -151,9 +165,10 @@ export function turnInfo(st: MatState) {
   const th = st.throws.filter((t) => t.round === st.round);
   const count = {} as Record<Slot, number>, allowed = {} as Record<Slot, number>;
   for (const p of st.order) { count[p] = 0; allowed[p] = 1; }
-  for (const t of th) { count[t.slot]++; if (t.box) allowed[t.box]++; }
+  const bonusOn = rulesOf(st).shootingBoxBonus;
+  for (const t of th) { count[t.slot]++; if (t.box && bonusOn) allowed[t.box]++; }
   let next: Slot | null = st.order.find((p) => count[p] === 0) ?? null;
-  if (!next) {
+  if (!next && bonusOn) {
     const used: Partial<Record<Slot, number>> = {};
     for (const t of th) if (t.box) { used[t.box] = (used[t.box] ?? 0) + 1; if (count[t.box] - 1 < used[t.box]!) { next = t.box; break; } }
   }
@@ -195,21 +210,24 @@ function startTurn(st: MatState) {
   }
 }
 
-/** Drinking for the round: each cap in a zone gives that zone's team its value in sips;
- * a cap in a mama makes that team empty their pints and nobody sips. */
+/** Drinking for the round: each cap in a zone gives that zone's team its value in sips
+ * (doubled for an upside-down cap when the crew plays that rule); a cap in a mama
+ * (or BeerToss reset zone) makes that team empty their drink and nobody sips. */
 export function settle(st: MatState): RoundResult {
+  const rules = rulesOf(st);
   const mamas = new Set<number>(), sips = [0, 0];
   for (const c of st.caps) {
     const s = spotOf(st, c);
     if (s.kind === "mama") mamas.add(mamaTeam(st, s.id));
-    if (s.kind === "zone") sips[zoneTeam(st, s.id)] += s.v;
+    if (s.kind === "zone") sips[zoneTeam(st, s.id)] += s.v * (c.flipped && rules.upsideDownDoubles ? 2 : 1);
   }
   if (mamas.size) return { round: st.round, sips: [0, 0], mamaTeams: [...mamas].sort(), jokerTeam: null, allDrink: false, emptyStreak: 0 };
   // Nothing to drink this round: count the streak (a joker round or an all-drink round breaks it).
   const empty = sips[0] === 0 && sips[1] === 0;
   const prev = st.results.filter((r) => r.round < st.round).at(-1);
   const emptyStreak = empty ? (prev && prev.jokerTeam === null && !prev.allDrink ? prev.emptyStreak : 0) + 1 : 0;
-  return { round: st.round, sips, mamaTeams: [], jokerTeam: null, allDrink: emptyStreak >= EMPTY_ROUNDS_FOR_ALL, emptyStreak };
+  const limit = rules.emptyRoundsForAll;
+  return { round: st.round, sips, mamaTeams: [], jokerTeam: null, allDrink: limit !== null && emptyStreak >= limit, emptyStreak };
 }
 
 /** What actually gets drunk: nothing when a joker was played. */
@@ -218,7 +236,7 @@ export const drunk = (r: RoundResult): RoundResult => (r.jokerTeam === null ? r 
 /** Play a team's joker on the round that just finished. False if not allowed. */
 export function playJoker(st: MatState, ti: number): boolean {
   const r = st.results.at(-1);
-  if (st.phase !== "done" || !r || r.round !== st.round || r.jokerTeam !== null || st.jokersUsed.includes(ti)) return false;
+  if (st.phase !== "done" || !r || r.round !== st.round || r.jokerTeam !== null || jokersLeft(st, ti) < 1) return false;
   r.jokerTeam = ti;
   st.jokersUsed.push(ti);
   return true;
@@ -258,11 +276,22 @@ export function finishThrow(st: MatState, miss: boolean): boolean {
     });
   }
   const first = spotOf(st, mine);
+  if (miss) mine.flipped = false;
   st.throws.push({
     round: st.round, slot: p, kind: bonus ? "bonus" : "normal", skipReason: null, capNo: mine.no,
     box: first.kind === "box" ? first.slot : null, firstSpot: miss ? "miss" : spotCode(first), missed: miss, moves,
+    ...(mine.flipped ? { flipped: true } : {}),
   });
   startTurn(st);
+  return true;
+}
+
+/** Mark a cap on the mat as lying upside down (or turn it back). Only when the
+ * crew plays the upside-down rule; false otherwise. */
+export function toggleFlip(st: MatState, no: number): boolean {
+  const c = st.caps.find((x) => x.no === no);
+  if (!c || c.waiting || !rulesOf(st).upsideDownDoubles) return false;
+  c.flipped = !c.flipped;
   return true;
 }
 
@@ -339,9 +368,10 @@ export function placeFromCamera(st: MatState, landed: { x: number; y: number }[]
 /* ---------- what gets saved ---------- */
 
 export type MatMoveLog = { capNo: number; ownerId: string; isThrownCap: boolean; fromX: number; fromY: number; fromSpot: string; toX: number; toY: number; toSpot: string; toCountsForTeam: number | null };
-export type MatThrowLog = { seq: number; playerId: string; slot: Slot; kind: ThrowRec["kind"]; skipReason: ThrowRec["skipReason"]; capNo: number | null; moves: MatMoveLog[] };
+export type MatThrowLog = { seq: number; playerId: string; slot: Slot; kind: ThrowRec["kind"]; skipReason: ThrowRec["skipReason"]; capNo: number | null; moves: MatMoveLog[]; flipped?: boolean };
 export type MatRoundLog = { number: number; complete: boolean; jokerTeam: number | null; allDrink: boolean; teams: { sips: number; mama: boolean }[]; throws: MatThrowLog[] };
-export type MatGameLog = { a1Corner: Corner; endedBy: "pints_empty"; winnerTeam: number; rounds: MatRoundLog[] };
+/** `rules`: the crew rules the game was played with (missing on logs from before house rules). */
+export type MatGameLog = { a1Corner: Corner; endedBy: "pints_empty"; winnerTeam: number; rounds: MatRoundLog[]; rules?: Ruleset };
 
 /** Stats that follow from a finished mat log. `kruipTeams`: losing teams
  * that never got to drink (no sips or mama in a finished, non-joker round and
@@ -383,6 +413,7 @@ export function toGameLog(st: MatState, players: Record<Slot, string | undefined
         kind: t.kind,
         skipReason: t.skipReason,
         capNo: t.capNo,
+        ...(t.flipped ? { flipped: true } : {}),
         moves: t.moves.map((m) => ({
           capNo: m.capNo, ownerId: players[m.owner]!, isThrownCap: m.isThrownCap,
           fromX: m.from.x, fromY: m.from.y, fromSpot: m.from.spot,
@@ -392,5 +423,5 @@ export function toGameLog(st: MatState, players: Record<Slot, string | undefined
     });
   }
   const a1Corner = st.corner.a1!;
-  return { a1Corner, endedBy: "pints_empty", winnerTeam, rounds };
+  return { a1Corner, endedBy: "pints_empty", winnerTeam, rounds, rules: rulesOf(st) };
 }

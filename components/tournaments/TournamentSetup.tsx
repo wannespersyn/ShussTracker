@@ -107,12 +107,12 @@ export function TournamentSetup({
 
   function start() {
     if (!canStart || !teams) return;
-    startTransition(() => {
-      createTournamentAction({
+    startTransition(async () => {
+      await createTournamentAction({
         groupId,
         name: name.trim() || T.defaultName,
         format,
-        entrantPairs: teams.map((t) => [t.players[0]!.id, t.players[1]!.id] as [string, string]),
+        entrantPairs: teams.map((t) => [t.players[0].id, t.players[1].id] as [string, string]),
       });
     });
   }

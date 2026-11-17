@@ -49,7 +49,7 @@ export default function ManageRotation() {
     : v.mode === "americano"
       ? format(R.impactA, { from: currentRound + 1, to: Math.max(st.rounds, currentRound + 1), n })
       : format(R.impactM, { n });
-  const label: Record<TiebreakKey, string> = { pct: R.tbPct, wins: R.tbWins, mama: R.tbMama, elo: R.tbElo };
+  const label: Record<TiebreakKey, string> = { pct: R.tbPct, wins: R.tbWins, mama: R.tbMama, sips: R.tbSips, elo: R.tbElo };
   const move = (i: number, d: -1 | 1) => {
     const j = i + d;
     if (j < 0 || j >= st.order.length) return;

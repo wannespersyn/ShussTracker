@@ -62,7 +62,7 @@ export function FingerPicker({ onClose, onDone, doneLabel }: { onClose: () => vo
       const fs = live.current;
       setWinner(fs[Math.floor(Math.random() * fs.length)]?.id ?? null);
       setPhase("chosen");
-      buzz();
+      void buzz();
     }, BEAT_MS);
     return () => clearTimeout(id);
   }, [phase]);
@@ -147,7 +147,7 @@ export function TeamFingers({
     const id = setTimeout(() => {
       const ids = players.map((p) => p.id).sort(() => Math.random() - 0.5);
       setOrder(ids);
-      buzz();
+      void buzz();
     }, HOLD_MS + BEAT_MS / 2);
     return () => clearTimeout(id);
   }, [all, order, players]);
@@ -208,7 +208,7 @@ export function CapToss({ teamA, teamB, onClose, onDone }: { teamA: string; team
     setSpin((n) => n + 1);
     setTimeout(() => {
       setSide(Math.random() < 0.5 ? "A" : "B");
-      buzz();
+      void buzz();
     }, 900);
   };
   return (
@@ -254,7 +254,7 @@ export function Countdown({ label, onDone }: { label: string; onDone: () => void
       return;
     }
     const id = setTimeout(() => setN((x) => x - 1), n === 0 ? 900 : 800);
-    if (n === 0) buzz();
+    if (n === 0) void buzz();
     return () => clearTimeout(id);
   }, [n]);
   return (

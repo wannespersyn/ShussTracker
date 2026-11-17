@@ -22,7 +22,7 @@ export default async function LogGamePage({
 }>) {
   const session = await requireSession();
   const t = await getT();
-  const { crewId, teams, casual, rematch } = await searchParams;
+  const { crewId, teams, rematch } = await searchParams;
   const [start, celebrations, mat] = await Promise.all([
     hasBeta(session.user.id, "start"),
     hasBeta(session.user.id, "celebrations"),

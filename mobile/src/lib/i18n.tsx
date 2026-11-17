@@ -37,9 +37,11 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>(deviceLocale);
 
   useEffect(() => {
-    SecureStore.getItemAsync(KEY).then((v) => {
-      if (v === "en" || v === "nl") setLocaleState(v);
-    });
+    SecureStore.getItemAsync(KEY)
+      .then((v) => {
+        if (v === "en" || v === "nl") setLocaleState(v);
+      })
+      .catch(() => {});
   }, []);
 
   setApiLocale(locale);

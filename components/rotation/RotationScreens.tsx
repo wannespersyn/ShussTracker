@@ -293,7 +293,12 @@ export function Podium({ top, name }: Readonly<{ top: RotationStanding[]; name: 
 export function StandingsTable({ v, R, name, userId }: Readonly<{ v: RotationView; R: R; name: Names; userId: string }>) {
   const form = formOf(v);
   const stopped = new Set(v.players.filter((p) => !p.active).map((p) => p.id));
-  const cols = "grid grid-cols-[26px_minmax(0,1fr)_44px_36px_38px_44px] gap-2 items-center";
+  // Sip balance only shows once a game was logged with shot tracking.
+  const hasSips = v.standings.some((s) => s.sips !== 0);
+  const cols = cn(
+    "grid gap-2 items-center",
+    hasSips ? "grid-cols-[26px_minmax(0,1fr)_44px_36px_38px_40px_44px]" : "grid-cols-[26px_minmax(0,1fr)_44px_36px_38px_44px]",
+  );
   return (
     <section aria-label={R.tabStandings} className="rounded-[18px] bg-surface-deep border border-line overflow-hidden">
       <div className={cn(cols, "px-3.5 py-2.5 font-heading font-bold text-[11px] tracking-[0.12em] text-muted")}>
@@ -302,6 +307,7 @@ export function StandingsTable({ v, R, name, userId }: Readonly<{ v: RotationVie
         <span className="text-right">{R.colWL}</span>
         <span className="text-right">{R.colPct}</span>
         <span className="text-right">{R.colMama}</span>
+        {hasSips && <span className="text-right">{R.colSips}</span>}
         <span className="text-right">{R.colElo}</span>
       </div>
       {v.standings.map((s, i) => {
@@ -325,6 +331,12 @@ export function StandingsTable({ v, R, name, userId }: Readonly<{ v: RotationVie
             </span>
             <span className="text-right font-body text-sm text-soft tabular-nums">{s.games ? s.winPct : "—"}</span>
             <span className={cn("text-right font-heading font-extrabold text-[17px] tabular-nums", s.mama > 0 ? "text-red" : "text-[#5b6460]")}>{s.mama}</span>
+            {hasSips && (
+              <span className={cn("text-right font-heading font-extrabold text-base tabular-nums", s.sips > 0 ? "text-mint" : s.sips < 0 ? "text-red-pale" : "text-muted")}>
+                {s.sips > 0 ? "+" : ""}
+                {s.sips}
+              </span>
+            )}
             <span className={cn("text-right font-heading font-extrabold text-base tabular-nums", s.elo > 0 ? "text-mint" : s.elo < 0 ? "text-red-pale" : "text-muted")}>
               {s.elo > 0 ? "+" : ""}
               {s.elo}

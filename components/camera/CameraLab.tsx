@@ -191,7 +191,7 @@ export function CameraLab() {
         className="hidden"
         onChange={(e) => {
           const f = e.target.files?.[0];
-          if (f) onPhoto(f);
+          if (f) void onPhoto(f);
           e.target.value = "";
         }}
       />

@@ -12,8 +12,7 @@ import {
 
 /** Dev-only dummy data. Run with: npx tsx --env-file=.env lib/db/seed.ts */
 
-const FIELD_HITS = ["1", "2", "3", "mama", "miss"] as const;
-type FieldHit = (typeof FIELD_HITS)[number];
+type FieldHit = "1" | "2" | "3" | "mama" | "miss";
 
 function randomHit(): FieldHit {
   const weights: [FieldHit, number][] = [

@@ -6,7 +6,7 @@
  */
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState } from "react";
 import { useT } from "@/lib/i18n/client";
 import { format, type Dictionary } from "@/lib/i18n";
 import { ACHIEVEMENT_ICON_PATH } from "@/lib/achievements-v2";
@@ -138,7 +138,7 @@ function Streak({ m, C }: Readonly<{ m: Extract<CelebrationMoment, { kind: "stre
         </svg>
       </div>
       {embers.map(([l, tp, sz, col, dx, dl], k) => (
-        <div key={k} className={c.skEmber} style={{ position: "absolute", left: l, top: tp, width: sz, height: sz, borderRadius: "50%", background: col, ["--dx" as string]: `${dx}px`, animationDelay: `${dl}s` } as CSSProperties} />
+        <div key={k} className={c.skEmber} style={{ position: "absolute", left: l, top: tp, width: sz, height: sz, borderRadius: "50%", background: col, ["--dx" as string]: `${dx}px`, animationDelay: `${dl}s` }} />
       ))}
       <div style={{ position: "absolute", left: 0, right: 0, top: 470, height: 150, overflow: "hidden" }}>
         <div className={c.skOld} style={{ ...D, position: "absolute", left: 0, right: 0, top: 0, textAlign: "center", fontSize: 150, lineHeight: 1, color: "#FFFFFF" }}>{m.n - 1}</div>
@@ -147,7 +147,7 @@ function Streak({ m, C }: Readonly<{ m: Extract<CelebrationMoment, { kind: "stre
       <div style={{ ...D, position: "absolute", left: 0, right: 0, top: 622, textAlign: "center", fontSize: 32, lineHeight: 1 }}>{C.winsInRow}</div>
       <div style={{ position: "absolute", left: 0, right: 0, top: 676, display: "flex", justifyContent: "center", gap: 6 }}>
         {Array.from({ length: dots }, (_, k) => (
-          <div key={k} className={k === dots - 1 ? c.skDot : undefined} style={{ width: 14, height: 14, borderRadius: "50%", background: k === dots - 1 ? "#2A2A2A" : tier.flame, ["--dot" as string]: tier.flame } as CSSProperties} />
+          <div key={k} className={k === dots - 1 ? c.skDot : undefined} style={{ width: 14, height: 14, borderRadius: "50%", background: k === dots - 1 ? "#2A2A2A" : tier.flame, ["--dot" as string]: tier.flame }} />
         ))}
       </div>
       {m.record && (
@@ -196,7 +196,7 @@ function Climb({ m, C }: Readonly<{ m: Extract<CelebrationMoment, { kind: "climb
         {m.rows
           .filter((r) => r.me)
           .map((r) => (
-            <div key="me" className={c.rkMe} style={{ position: "absolute", left: 40, right: 0, top: m.oldSlot * 84, height: 76, borderRadius: 16, background: "#FFC23D", color: "#0E0E0F", display: "flex", alignItems: "center", gap: 12, padding: "0 16px", zIndex: 2, ["--up" as string]: `${-(m.oldSlot - m.newSlot) * 84}px` } as CSSProperties}>
+            <div key="me" className={c.rkMe} style={{ position: "absolute", left: 40, right: 0, top: m.oldSlot * 84, height: 76, borderRadius: 16, background: "#FFC23D", color: "#0E0E0F", display: "flex", alignItems: "center", gap: 12, padding: "0 16px", zIndex: 2, ["--up" as string]: `${-(m.oldSlot - m.newSlot) * 84}px` }}>
               <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#0E0E0F", color: "#FFC23D", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800 }}>{r.initial}</div>
               <div style={{ flex: 1, fontSize: 17, fontWeight: 800, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{format(C.you, { name: r.name })}</div>
               <svg className={c.rkArrow} width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -264,7 +264,7 @@ function Achievement({ m, C }: Readonly<{ m: Extract<CelebrationMoment, { kind: 
             </div>
           </div>
           <div style={{ marginTop: 10, height: 10, borderRadius: 5, background: "#2A2A2A", overflow: "hidden" }}>
-            <div className={cn(c.acBar)} style={{ height: 10, borderRadius: 5, background: "#FFC23D", ["--from" as string]: `${from}%` } as CSSProperties} />
+            <div className={cn(c.acBar)} style={{ height: 10, borderRadius: 5, background: "#FFC23D", ["--from" as string]: `${from}%` }} />
           </div>
         </div>
       )}

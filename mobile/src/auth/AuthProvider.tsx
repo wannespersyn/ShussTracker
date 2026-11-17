@@ -38,7 +38,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     setUnauthorizedHandler(() => void clear());
-    (async () => {
+    void (async () => {
       if (!(await tokenStore.load())) return setStatus("signedOut");
       try {
         setMe(await api<Me>("/me"));

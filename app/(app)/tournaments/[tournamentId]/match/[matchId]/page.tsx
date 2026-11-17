@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
-import { tournamentMatches, groups } from "@/lib/db/schema";
+import { tournamentMatches } from "@/lib/db/schema";
 import { requireSession, requireGroupMember } from "@/lib/db/authz";
 import { MatchPlayer } from "@/components/tournaments/MatchPlayer";
 import { getT } from "@/lib/i18n/server";
@@ -33,7 +33,6 @@ export default async function TournamentMatchPage({
   // Not playable yet (waiting on a previous round) or already played.
   if (!match.entrantA || !match.entrantB || match.gameId) notFound();
 
-  const group = await db.query.groups.findFirst({ where: eq(groups.id, match.tournament.groupId) });
   const P = (await getT()).more.player;
 
   const entrantA = match.entrantA;

@@ -241,12 +241,12 @@ export function LogGameWizard({
     const shotsByPlayer = Object.entries(shots).flatMap(([playerId, byHit]) =>
       Array.from({ length: byHit.mama ?? 0 }, () => ({ playerId, fieldHit: "mama" as FieldHit })),
     );
-    startTransition(() => {
+    startTransition(async () => {
       if (onComplete) {
-        onComplete({ matType: mat, teams: finalTeams, shotsByPlayer });
+        await onComplete({ matType: mat, teams: finalTeams, shotsByPlayer });
         return;
       }
-      logGame({ groupId: groupId!, matType: mat, teams: finalTeams, shotsByPlayer });
+      await logGame({ groupId: groupId!, matType: mat, teams: finalTeams, shotsByPlayer });
     });
   }
 
@@ -262,12 +262,12 @@ export function LogGameWizard({
       kruip: extras.kruipTeams.includes(i),
     }));
     const result = { matType: mat, teams: finalTeams, shotsByPlayer: shotsFromMat(log), mat: log };
-    startTransition(() => {
+    startTransition(async () => {
       if (onComplete) {
-        onComplete(result);
+        await onComplete(result);
         return;
       }
-      logGame({ groupId: groupId!, ...result });
+      await logGame({ groupId: groupId!, ...result });
     });
   }
 

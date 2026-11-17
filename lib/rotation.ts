@@ -23,7 +23,26 @@ export type RotationGameResult = RotationPairing & {
   kruipB?: boolean;
   /** Elo change per player in this game. */
   elo?: Record<string, number>;
+  /** Sips handed out minus sips drunk, per player, for games logged with
+   * shot tracking (missing for games without a mat log). */
+  sips?: Record<string, number>;
 };
+
+/** A team's sip balance in one game: sips the other team drank minus sips it
+ * drank itself, over finished rounds without a joker. `null` when the game
+ * has no rounds (logged without shot tracking). */
+export function sipBalance(
+  rounds: { complete: boolean; jokerTeamId: string | null; teams: { gameTeamId: string; sips: number }[] }[],
+  teamId: string,
+): number | null {
+  if (!rounds.length) return null;
+  let n = 0;
+  for (const r of rounds) {
+    if (!r.complete || r.jokerTeamId !== null) continue;
+    for (const t of r.teams) n += t.gameTeamId === teamId ? -t.sips : t.sips;
+  }
+  return n;
+}
 
 /** Rounds for a full rotation: with 4k players everyone partners everyone
  * once in n−1 rounds; otherwise n rounds (one bye-group per round). */
@@ -147,26 +166,28 @@ export type RotationStanding = {
   mama: number;
   kruipen: number;
   elo: number;
+  /** Sips handed out minus sips drunk (shot-tracked games only). */
+  sips: number;
   byes: number;
   /** Distinct partners played with. */
   partners: number;
 };
 
-export type TiebreakKey = "pct" | "wins" | "mama" | "elo";
-export const TIEBREAK_KEYS: TiebreakKey[] = ["pct", "wins", "mama", "elo"];
+export type TiebreakKey = "pct" | "wins" | "mama" | "sips" | "elo";
+export const TIEBREAK_KEYS: TiebreakKey[] = ["pct", "wins", "mama", "sips", "elo"];
 
-/** Parses a stored "pct,wins,mama,elo" order; unknown keys dropped, missing ones appended. */
+/** Parses a stored "pct,wins,mama,sips,elo" order; unknown keys dropped, missing ones appended. */
 export function parseTiebreaks(raw: string | null | undefined): TiebreakKey[] {
   const picked = (raw ?? "").split(",").filter((k): k is TiebreakKey => (TIEBREAK_KEYS as string[]).includes(k));
   return [...new Set([...picked, ...TIEBREAK_KEYS])];
 }
 
 /** Individual standings, sorted by `order` (default: win %, then wins,
- * mamas and Elo gained in the tournament — win % rather than raw wins, so a
- * bye doesn't cost you); fewer losses breaks any tie left. */
+ * mamas, sip balance and Elo gained in the tournament — win % rather than raw
+ * wins, so a bye doesn't cost you); fewer losses breaks any tie left. */
 export function rotationStandings(players: string[], games: RotationGameResult[], byeRounds: string[][], order: TiebreakKey[] = TIEBREAK_KEYS): RotationStanding[] {
   const s = new Map<string, RotationStanding & { partnerSet: Set<string> }>(
-    players.map((id) => [id, { userId: id, games: 0, wins: 0, losses: 0, winPct: 0, mama: 0, kruipen: 0, elo: 0, byes: 0, partners: 0, partnerSet: new Set() }]),
+    players.map((id) => [id, { userId: id, games: 0, wins: 0, losses: 0, winPct: 0, mama: 0, kruipen: 0, elo: 0, sips: 0, byes: 0, partners: 0, partnerSet: new Set() }]),
   );
   for (const g of games) {
     if (g.aWon === null) continue;
@@ -183,6 +204,7 @@ export function rotationStandings(players: string[], games: RotationGameResult[]
         if (!won && kruip) x.kruipen++;
         x.mama += g.mama?.[id] ?? 0;
         x.elo += g.elo?.[id] ?? 0;
+        x.sips += g.sips?.[id] ?? 0;
         x.partnerSet.add(team[0] === id ? team[1] : team[0]);
       }
     }
@@ -191,7 +213,8 @@ export function rotationStandings(players: string[], games: RotationGameResult[]
   return [...s.values()]
     .map(({ partnerSet, ...x }) => ({ ...x, partners: partnerSet.size, winPct: x.games ? Math.round((x.wins / x.games) * 100) : 0 }))
     .sort((x, y) => {
-      const val = (s: RotationStanding, k: TiebreakKey) => (k === "pct" ? (s.games ? s.wins / s.games : 0) : k === "wins" ? s.wins : k === "mama" ? s.mama : s.elo);
+      const val = (s: RotationStanding, k: TiebreakKey) =>
+        k === "pct" ? (s.games ? s.wins / s.games : 0) : k === "wins" ? s.wins : k === "mama" ? s.mama : k === "sips" ? s.sips : s.elo;
       for (const k of order) {
         const d = val(y, k) - val(x, k);
         if (d !== 0) return d;

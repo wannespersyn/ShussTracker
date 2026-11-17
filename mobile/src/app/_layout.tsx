@@ -23,7 +23,7 @@ import { I18nProvider } from "@/lib/i18n";
 import { CrewProvider } from "@/lib/crew";
 import { colors } from "@/theme";
 
-SplashScreen.preventAutoHideAsync();
+void SplashScreen.preventAutoHideAsync();
 
 function RootStack() {
   const { status } = useAuth();
@@ -39,7 +39,7 @@ function RootStack() {
   const ready = fontsLoaded && status !== "loading";
 
   useEffect(() => {
-    if (ready) SplashScreen.hideAsync();
+    if (ready) void SplashScreen.hideAsync();
   }, [ready]);
   if (!ready) return null;
 

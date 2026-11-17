@@ -11,7 +11,7 @@ import { getCrewGuests } from "@/lib/db/guests";
 import { getCrewEvents } from "@/lib/db/crew-events";
 import { getLiveCameras } from "@/lib/db/camera";
 import { CrewEventRow, NewEventButtons } from "@/components/crews/CrewEvents";
-import { addGuestAction, removeGuestAction } from "./guests/actions";
+import { removeGuestAction } from "./guests/actions";
 import { leaveCrew } from "@/app/(app)/crews/actions";
 import { getLocale, getT } from "@/lib/i18n/server";
 import { format } from "@/lib/i18n";

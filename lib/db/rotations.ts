@@ -20,6 +20,7 @@ import {
   planAmericanoRound,
   planMexicanoRound,
   rotationStandings,
+  sipBalance,
   TIEBREAK_KEYS,
   type TiebreakKey,
   type RotationGameResult,
@@ -109,7 +110,10 @@ export async function getRotation(rotationId: string): Promise<RotationView | nu
       ? db.query.games.findMany({
           where: inArray(games.id, gameIds),
           columns: { id: true },
-          with: { teams: { columns: { finalRank: true, kruip: true }, with: { players: { columns: { userId: true }, with: { shots: { columns: { fieldHit: true } } } } } } },
+          with: {
+            teams: { columns: { id: true, finalRank: true, kruip: true }, with: { players: { columns: { userId: true }, with: { shots: { columns: { fieldHit: true } } } } } },
+            rounds: { columns: { complete: true, jokerTeamId: true }, with: { teams: { columns: { gameTeamId: true, sips: true } } } },
+          },
         })
       : Promise.resolve([]),
     getCrewInsights(rotation.groupId),
@@ -122,7 +126,14 @@ export async function getRotation(rotationId: string): Promise<RotationView | nu
     const tA = teamOf(r.a1);
     const tB = teamOf(r.b1);
     const mama: Record<string, number> = {};
-    for (const t of g?.teams ?? []) for (const p of t.players) mama[p.userId] = p.shots.filter((s) => s.fieldHit === "mama").length;
+    const sips: Record<string, number> = {};
+    for (const t of g?.teams ?? []) {
+      const bal = sipBalance(g?.rounds ?? [], t.id);
+      for (const p of t.players) {
+        mama[p.userId] = p.shots.filter((s) => s.fieldHit === "mama").length;
+        if (bal !== null) sips[p.userId] = bal;
+      }
+    }
     return {
       id: r.id,
       idx: r.idx,
@@ -135,6 +146,7 @@ export async function getRotation(rotationId: string): Promise<RotationView | nu
       kruipA: tA?.kruip ?? false,
       kruipB: tB?.kruip ?? false,
       mama,
+      sips,
       elo: g ? (insights.gameElo[g.id] ?? {}) : {},
     };
   });

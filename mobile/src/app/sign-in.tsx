@@ -24,7 +24,7 @@ export default function SignIn() {
   const [email, setEmail] = useState("");
 
   useEffect(() => {
-    if (Platform.OS === "ios") AppleAuthentication.isAvailableAsync().then(setAppleAvailable);
+    if (Platform.OS === "ios") AppleAuthentication.isAvailableAsync().then(setAppleAvailable).catch(() => setAppleAvailable(false));
   }, []);
 
   async function run(fn: () => Promise<void>) {
