@@ -123,6 +123,9 @@ export const groups = pgTable("group", {
   // Pro free until `proUntil`. No paywall is enforced yet (see lib/plan.ts).
   plan: crewPlanEnum("plan").notNull().default("free"),
   proUntil: timestamp("pro_until"),
+  // Game, theme and house rules (lib/rules.ts). null = Leberschuss defaults;
+  // always read through parseRuleset.
+  rules: jsonb("rules"),
 });
 
 export const groupMembers = pgTable(

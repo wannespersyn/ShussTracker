@@ -218,6 +218,13 @@
       "when": 1794488918079,
       "tag": "0030_app_push_tokens",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1794919453679,
+      "tag": "0031_crew_rules",
+      "breakpoints": true
     }
   ]
 }

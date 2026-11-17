@@ -170,7 +170,7 @@ export function gameStats(g: CameraGame): { players: PlayerStats[]; teams: TeamS
       if (victim) victim.knockedBy++;
     }
   });
-  const teams: TeamStats[] = [0, 1].map((ti) => ({ team: ti, sips: 0, adFundum: 0, jokers: st.jokersUsed.includes(ti) ? 1 : 0 }));
+  const teams: TeamStats[] = [0, 1].map((ti) => ({ team: ti, sips: 0, adFundum: 0, jokers: st.jokersUsed.filter((t) => t === ti).length }));
   for (const raw of st.results) {
     const r = drunk(raw);
     r.sips.forEach((n, ti) => (teams[ti].sips += n));

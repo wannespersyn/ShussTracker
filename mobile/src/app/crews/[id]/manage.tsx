@@ -2,8 +2,7 @@
  * Manage crew — Route: /crews/[id]/manage (owner only)
  *
  * The website's "Manage crew" in the app: invite code (share or replace),
- * rename, members (remove) and
- * delete the crew.
+ * rename, game & house rules, members (remove) and delete the crew.
  *
  * Data: GET/PATCH/DELETE /api/v1/crews/{id}, POST …/invite-code,
  *       DELETE …/members/{userId}
@@ -20,6 +19,7 @@ import { format, useT } from "@/lib/i18n";
 import { useQuery } from "@/lib/useQuery";
 import { Avatar, Button, Card, CenterState, ErrorState, Kicker, Txt } from "@/components/ui";
 import { Header, LinkRow } from "@/components/Header";
+import { CrewRulesCard } from "@/components/crews/CrewRulesCard";
 import { colors, fonts, radius } from "@/theme";
 
 export default function ManageScreen() {
@@ -117,6 +117,21 @@ export default function ManageScreen() {
               </View>
             </View>
           </Card>
+
+          <CrewRulesCard
+            initial={crew.rules}
+            onSave={async (rules) => {
+              const ok = await api(`/crews/${id}`, { method: "PATCH", body: { rules } }).then(
+                () => true,
+                () => false,
+              );
+              if (ok) {
+                invalidate();
+                await refreshMe().catch(() => {});
+              }
+              return ok;
+            }}
+          />
 
           <LinkRow label={t.manage.guests} sub={`${q.data.guests.length}`} onPress={() => router.push({ pathname: "/crews/[id]/guests", params: { id } })} />
 

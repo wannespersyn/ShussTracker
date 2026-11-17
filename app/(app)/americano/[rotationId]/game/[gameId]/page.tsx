@@ -8,6 +8,7 @@ import { notFound } from "next/navigation";
 import { requireGroupMember, requireSession } from "@/lib/db/authz";
 import { getRotation } from "@/lib/db/rotations";
 import { hasBeta } from "@/lib/db/beta";
+import { getCrewRules } from "@/lib/db/crews";
 import { RotationGamePlayer } from "@/components/rotation/RotationGamePlayer";
 
 export default async function RotationGamePage({ params }: Readonly<{ params: Promise<{ rotationId: string; gameId: string }> }>) {
@@ -23,10 +24,11 @@ export default async function RotationGamePage({ params }: Readonly<{ params: Pr
   const g = rotation.games.find((x) => x.id === gameId);
   if (!g || g.played || rotation.status === "completed") notFound();
 
-  const [start, celebrations, mat] = await Promise.all([
+  const [start, celebrations, mat, rules] = await Promise.all([
     hasBeta(session.user.id, "start"),
     hasBeta(session.user.id, "celebrations"),
     hasBeta(session.user.id, "mat"),
+    getCrewRules(rotation.groupId),
   ]);
   const name = new Map(rotation.players.map((p) => [p.id, p.name]));
   const side = (ids: readonly string[]) => ids.map((id) => ({ id, name: name.get(id) ?? "Player" })) as [{ id: string; name: string }, { id: string; name: string }];
@@ -38,6 +40,7 @@ export default async function RotationGamePage({ params }: Readonly<{ params: Pr
       teamA={side(g.a)}
       teamB={side(g.b)}
       beta={{ start, celebrations, mat }}
+      rules={rules}
     />
   );
 }

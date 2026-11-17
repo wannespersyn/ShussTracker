@@ -9,6 +9,7 @@
  */
 "use client";
 
+import type { Ruleset } from "@/lib/rules";
 import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { shortNamesFor } from "@/lib/format";
@@ -83,7 +84,10 @@ export function LogGameWizard({
   duoRecords = {},
   crewName,
   beta,
+  rules,
 }: Readonly<{
+  /** The crew's game and house rules, for the mat logger. */
+  rules?: Ruleset;
   groupId?: string;
   roster: RosterPlayer[];
   presetPlayerIds?: string[];
@@ -489,6 +493,7 @@ export function LogGameWizard({
           celebrate={beta?.celebrations}
           onSave={saveMat}
           onClose={() => setStep("start")}
+          rules={rules}
         />
       )}
 

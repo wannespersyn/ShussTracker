@@ -18,6 +18,7 @@
  */
 "use client";
 
+import type { Ruleset } from "@/lib/rules";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/client";
@@ -30,7 +31,7 @@ import { armCameraAction, getCameraStateAction, getLiveCamerasAction, labelCamer
 import type { CameraGame } from "@/lib/camera-log";
 import {
   BOTTLES, CORNERS, FIELD_OUTLINE, MAMAS, ZONES,
-  dropCap, drunk, finishThrow, fromField, placeFromCamera, toField, knockedMamas, mamaTeam, playJoker, newMatState, nextRound, placeA1, spotOf, teamOfSlot, toGameLog, turnInfo, zoneTeam,
+  dropCap, drunk, finishThrow, fromField, placeFromCamera, toField, knockedMamas, mamaTeam, playJoker, newMatState, jokersLeft, rulesOf, toggleFlip, nextRound, placeA1, spotOf, teamOfSlot, toGameLog, turnInfo, zoneTeam,
   type Corner, type MatGameLog, type MatState, type Slot, type Spot,
 } from "@/lib/mat";
 
@@ -50,7 +51,10 @@ export function MatLogger({
   onSave,
   onClose,
   groupId,
+  rules,
 }: Readonly<{
+  /** The crew's game and house rules; Leberschuss defaults when missing. */
+  rules?: Ruleset;
   /** The crew, to find a live camera to link (beta). */
   groupId?: string;
   teams: Duo[];
@@ -64,7 +68,7 @@ export function MatLogger({
   const { t } = useT();
   const M = t.mat;
   const solo = teams[0].players.length === 1;
-  const [st, setSt] = useState<MatState>(() => newMatState(solo));
+  const [st, setSt] = useState<MatState>(() => newMatState(solo, "TR", rules));
   const [history, setHistory] = useState<MatState[]>([]);
   const [slots, setSlots] = useState<Record<Slot, string | undefined>>({
     a1: teams[0].players[0]?.id, a2: teams[0].players[1]?.id, b1: teams[1].players[0]?.id, b2: teams[1].players[1]?.id,
@@ -248,11 +252,13 @@ export function MatLogger({
   }
 
   /* ---------- labels ---------- */
+  const R = rulesOf(st);
+  const reset = R.centerZone === "reset";
   const spotLabel = (s: Spot, short = false) => {
     const forTeam = (ti: number) => (short ? format(M.forTeamShort, { t: "AB"[ti] }) : format(M.forTeam, { team: teamName(ti) }));
     switch (s.kind) {
       case "zone": return format(M.spotZone, { v: s.v }) + " " + forTeam(zoneTeam(st, s.id));
-      case "mama": return M.spotMama + " " + forTeam(mamaTeam(st, s.id));
+      case "mama": return (reset ? M.spotReset : M.spotMama) + " " + forTeam(mamaTeam(st, s.id));
       case "box": return format(M.spotBox, { name: nameOf(s.slot) });
       case "off": return M.spotOff;
       case "none": return M.spotNone;
@@ -396,7 +402,11 @@ export function MatLogger({
                 <span className={cn("w-2.5 h-2.5 rounded-full", TEAM_DOT[ti])} />
                 {totals[ti].sips}
                 {totals[ti].af > 0 && <small className="font-body font-semibold text-[11px] text-red-pale">{totals[ti].af}×M</small>}
-                {!st.jokersUsed.includes(ti) && <small className="text-[12px]" aria-label={M.jokerLeft}>🃏</small>}
+                {jokersLeft(st, ti) > 0 && (
+                  <small className="text-[12px]" aria-label={jokersLeft(st, ti) > 1 ? format(M.jokersLeftN, { n: jokersLeft(st, ti) }) : M.jokerLeft}>
+                    🃏{jokersLeft(st, ti) > 1 ? jokersLeft(st, ti) : ""}
+                  </small>
+                )}
               </span>
             ))}
           </span>
@@ -521,8 +531,8 @@ export function MatLogger({
               <div className={cn("flex flex-col gap-2.5", lastResult.jokerTeam !== null && "opacity-40 line-through")}>
               {lastResult.mamaTeams.length ? (
                 <>
-                  {lastResult.mamaTeams.map((ti) => <span key={ti} className="font-body font-bold text-base text-red-pale">{format(M.mamaLine, { team: teamName(ti) })}</span>)}
-                  <span className="font-body text-xs text-muted">{M.mamaNoSips}</span>
+                  {lastResult.mamaTeams.map((ti) => <span key={ti} className="font-body font-bold text-base text-red-pale">{format(reset ? M.resetLine : M.mamaLine, { team: teamName(ti) })}</span>)}
+                  <span className="font-body text-xs text-muted">{reset ? M.resetNoSips : M.mamaNoSips}</span>
                 </>
               ) : lastResult.allDrink ? (
                 <>
@@ -540,15 +550,15 @@ export function MatLogger({
               )}
               </div>
               {!lastResult.allDrink && lastResult.emptyStreak > 0 && lastResult.jokerTeam === null && (
-                <span className="font-body text-xs text-gold">{format(M.emptyStreak, { n: lastResult.emptyStreak, left: 3 - lastResult.emptyStreak })}</span>
+                <span className="font-body text-xs text-gold">{R.emptyRoundsForAll !== null && format(M.emptyStreak, { n: lastResult.emptyStreak, left: R.emptyRoundsForAll - lastResult.emptyStreak })}</span>
               )}
               {lastResult.jokerTeam !== null ? (
                 <span className="font-body font-bold text-base text-gold">{format(M.jokerUsed, { team: teamName(lastResult.jokerTeam) })}</span>
               ) : (
-                [0, 1].some((ti) => !st.jokersUsed.includes(ti)) && (
+                R.jokers > 0 && [0, 1].some((ti) => jokersLeft(st, ti) > 0) && (
                   <div className="grid grid-cols-2 gap-2">
                     {[0, 1].map((ti) =>
-                      st.jokersUsed.includes(ti) ? (
+                      jokersLeft(st, ti) < 1 ? (
                         <span key={ti} className="h-10 rounded-[12px] border border-dashed border-line flex items-center justify-center font-body text-xs text-muted">{M.jokerGone}</span>
                       ) : (
                         <button key={ti} type="button" onClick={() => apply((d) => playJoker(d, ti))} className="h-10 rounded-[12px] bg-surface-raised border border-gold/50 font-body font-semibold text-[13px] flex items-center justify-center gap-1.5 min-w-0 px-2">
@@ -581,6 +591,19 @@ export function MatLogger({
                       ? M.movedHint
                       : M.dropHint}
               </span>
+              {R.upsideDownDoubles && placed && (
+                <button
+                  type="button"
+                  aria-pressed={Boolean(myCap.flipped)}
+                  onClick={() => apply((d) => toggleFlip(d, myCap.no), false)}
+                  className={cn(
+                    "h-10 rounded-[12px] border font-body font-semibold text-[13px]",
+                    myCap.flipped ? "bg-gold/15 border-gold text-gold" : "bg-surface-raised border-line-strong text-cream",
+                  )}
+                >
+                  🔄 {myCap.flipped ? M.flipOn : M.flip}
+                </button>
+              )}
               <div className="grid grid-cols-[1fr_2fr] gap-2">
                 <button type="button" onClick={() => throwDone(true)} className="h-12.5 rounded-[14px] bg-surface-raised border border-line-strong font-display font-bold text-[17px] tracking-[0.04em] uppercase">
                   {M.miss}
@@ -646,7 +669,7 @@ export function MatLogger({
                   <h2 className="font-display font-extrabold text-[28px] leading-none uppercase">{M.helpTitle}</h2>
                   <BetaPill>{t.beta.pill}</BetaPill>
                 </div>
-                {[["1", M.help1], ["2", M.help2], ["3", M.help3], ["+1", M.help4], ["🍺", M.help5]].map(([ic, txt]) => (
+                {[["1", M.help1], ["2", M.help2], ["3", M.help3], ...(R.shootingBoxBonus ? [["+1", M.help4]] : []), ["🍺", M.help5]].map(([ic, txt]) => (
                   <div key={ic} className="flex gap-3 items-start font-body text-sm leading-[1.45]">
                     <span className="shrink-0 w-9.5 h-7 rounded-pill bg-surface-panel border border-line text-gold flex items-center justify-center font-display font-extrabold text-[13px]">{ic}</span>
                     <span>{txt}</span>

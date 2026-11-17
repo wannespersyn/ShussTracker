@@ -16,6 +16,8 @@ import { ConfirmForm } from "@/components/ui";
 import { Avatar, Kicker, Screen } from "@/components/v2";
 import { ShareButton } from "@/components/game/ShareButton";
 import { AddGuestDialog } from "@/components/crews/AddGuestDialog";
+import { CrewRulesForm } from "@/components/crews/CrewRulesForm";
+import { parseRuleset } from "@/lib/rules";
 import { renameCrewAction, regenerateInviteCodeAction, removeCrewMemberAction, deleteCrewAction } from "./actions";
 
 export default async function ManageCrewPage({ params }: Readonly<{ params: Promise<{ crewId: string }> }>) {
@@ -167,6 +169,8 @@ export default async function ManageCrewPage({ params }: Readonly<{ params: Prom
           );
         })}
       </section>
+
+      <CrewRulesForm crewId={crewId} initial={parseRuleset(group.rules)} />
 
       <form action={renameCrewAction.bind(null, crewId)} className="flex items-center gap-2 min-h-13 pl-4 pr-2 rounded-[14px] bg-surface-deep border border-line">
         <label htmlFor="crew-name" className="font-body font-semibold text-[15px] text-muted shrink-0">

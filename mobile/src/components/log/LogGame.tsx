@@ -294,6 +294,7 @@ export function LogGame({
         celebrate={beta?.celebrations}
         onSave={saveMat}
         onClose={() => setStep("start")}
+        rules={detail.crew.rules}
       />
     );
   }

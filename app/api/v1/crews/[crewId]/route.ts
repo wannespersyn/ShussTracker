@@ -6,13 +6,15 @@
  * crew's events (brackets + Americano/Mexicano) and live beta cameras.
  * The invite code is only included for the owner. Members only.
  *
- * PATCH  → owner: `{ name }` renames the crew.
+ * PATCH  → owner: `{ name }` renames the crew; `{ rules }` sets the game,
+ *          theme and house rules (lib/rules.ts; invalid values fall back).
  * DELETE → owner: deletes the crew (games stay on record, crew-less).
  */
 import { api, badRequest, notFound, readJson } from "@/lib/api/http";
 import { requireApiUser } from "@/lib/api/session";
 import { requireGroupMember, requireGroupOwner } from "@/lib/db/authz";
-import { deleteCrew, renameCrew } from "@/lib/db/crews";
+import { deleteCrew, renameCrew, setCrewRules } from "@/lib/db/crews";
+import { parseRuleset } from "@/lib/rules";
 import { expireCrew } from "@/lib/cache-tags";
 import { getCrew, getCrewInsights } from "@/lib/db/crew-insights";
 import { getCrewGuests } from "@/lib/db/guests";
@@ -47,6 +49,7 @@ export const GET = api<Ctx>(async (req, { params }) => {
       plan: crew.plan,
       isPro: isPro(crew),
       inviteCode: isOwner ? crew.inviteCode : undefined,
+      rules: parseRuleset(crew.rules),
     },
     insights,
     guests,
@@ -64,6 +67,10 @@ export const PATCH = api<Ctx>(async (req, { params }) => {
   if (body.name !== undefined) {
     if (typeof body.name !== "string" || !body.name.trim()) throw badRequest('"name" must be a non-empty string');
     await renameCrew(crewId, body.name.trim().slice(0, 40));
+  }
+  if (body.rules !== undefined) {
+    if (body.rules === null || typeof body.rules !== "object") throw badRequest('"rules" must be an object');
+    await setCrewRules(crewId, body.rules);
   }
   expireCrew(crewId);
 });

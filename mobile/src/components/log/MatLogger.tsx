@@ -17,6 +17,7 @@ import { Modal, PanResponder, Pressable, ScrollView, StyleSheet, Text, View, typ
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle, G, Polygon, Rect, Text as SvgText } from "react-native-svg";
 import * as SecureStore from "expo-secure-store";
+import type { Ruleset } from "@shared/rules";
 import {
   BOTTLES,
   CORNERS,
@@ -27,8 +28,11 @@ import {
   drunk,
   finishThrow,
   knockedMamas,
+  jokersLeft,
   mamaTeam,
   newMatState,
+  rulesOf,
+  toggleFlip,
   nextRound,
   placeA1,
   playJoker,
@@ -63,7 +67,10 @@ export function MatLogger({
   celebrate,
   onSave,
   onClose,
+  rules,
 }: {
+  /** The crew's game and house rules; Leberschuss defaults when missing. */
+  rules?: Ruleset;
   teams: Team[];
   names: Record<string, string>;
   saving?: boolean;
@@ -74,7 +81,7 @@ export function MatLogger({
   const { t } = useT();
   const M = t.mat;
   const solo = teams[0].players.length === 1;
-  const [st, setSt] = useState<MatState>(() => newMatState(solo));
+  const [st, setSt] = useState<MatState>(() => newMatState(solo, "TR", rules));
   const [history, setHistory] = useState<MatState[]>([]);
   const [slots, setSlots] = useState<Record<Slot, string | undefined>>({
     a1: teams[0].players[0]?.id,
@@ -129,13 +136,15 @@ export function MatLogger({
   }
 
   /* ---------- labels ---------- */
+  const R = rulesOf(st);
+  const reset = R.centerZone === "reset";
   const spotLabel = (s: Spot, short = false) => {
     const forTeam = (ti: number) => (short ? format(M.forTeamShort, { t: "AB"[ti] }) : format(M.forTeam, { team: teamName(ti) }));
     switch (s.kind) {
       case "zone":
         return `${format(M.spotZone, { v: s.v })} ${forTeam(zoneTeam(st, s.id))}`;
       case "mama":
-        return `${M.spotMama} ${forTeam(mamaTeam(st, s.id))}`;
+        return `${reset ? M.spotReset : M.spotMama} ${forTeam(mamaTeam(st, s.id))}`;
       case "box":
         return format(M.spotBox, { name: nameOf(s.slot) });
       case "off":
@@ -324,7 +333,7 @@ export function MatLogger({
               <View style={[styles.dot, { backgroundColor: TEAM_FILL[ti] }]} />
               <Text style={styles.scoreN}>{totals[ti].sips}</Text>
               {totals[ti].af > 0 && <Text style={styles.af}>{`${totals[ti].af}×M`}</Text>}
-              {!st.jokersUsed.includes(ti) && <Text style={{ fontSize: 11 }}>🃏</Text>}
+              {jokersLeft(st, ti) > 0 && <Text style={{ fontSize: 11 }}>{`🃏${jokersLeft(st, ti) > 1 ? jokersLeft(st, ti) : ""}`}</Text>}
             </View>
           ))}
         </View>
@@ -436,10 +445,10 @@ export function MatLogger({
                 <>
                   {lastResult.mamaTeams.map((ti) => (
                     <Text key={ti} style={styles.redLine}>
-                      {format(M.mamaLine, { team: teamName(ti) })}
+                      {format(reset ? M.resetLine : M.mamaLine, { team: teamName(ti) })}
                     </Text>
                   ))}
-                  <Text style={styles.small}>{M.mamaNoSips}</Text>
+                  <Text style={styles.small}>{reset ? M.resetNoSips : M.mamaNoSips}</Text>
                 </>
               ) : lastResult.allDrink ? (
                 <>
@@ -458,16 +467,17 @@ export function MatLogger({
                 ))
               )}
             </View>
-            {!lastResult.allDrink && lastResult.emptyStreak > 0 && lastResult.jokerTeam === null && (
-              <Text style={[styles.small, { color: colors.gold }]}>{format(M.emptyStreak, { n: lastResult.emptyStreak, left: 3 - lastResult.emptyStreak })}</Text>
+            {!lastResult.allDrink && lastResult.emptyStreak > 0 && lastResult.jokerTeam === null && R.emptyRoundsForAll !== null && (
+              <Text style={[styles.small, { color: colors.gold }]}>{format(M.emptyStreak, { n: lastResult.emptyStreak, left: R.emptyRoundsForAll - lastResult.emptyStreak })}</Text>
             )}
             {lastResult.jokerTeam !== null ? (
               <Text style={[styles.body, { color: colors.gold, fontFamily: fonts.bodyBold }]}>{format(M.jokerUsed, { team: teamName(lastResult.jokerTeam) })}</Text>
             ) : (
-              [0, 1].some((ti) => !st.jokersUsed.includes(ti)) && (
+              R.jokers > 0 &&
+              [0, 1].some((ti) => jokersLeft(st, ti) > 0) && (
                 <View style={{ flexDirection: "row", gap: 8 }}>
                   {[0, 1].map((ti) =>
-                    st.jokersUsed.includes(ti) ? (
+                    jokersLeft(st, ti) < 1 ? (
                       <View key={ti} style={[styles.joker, { borderStyle: "dashed", borderColor: colors.line }]}>
                         <Text style={styles.small}>{M.jokerGone}</Text>
                       </View>
@@ -507,6 +517,16 @@ export function MatLogger({
                     ? M.movedHint
                     : M.dropHint}
             </Text>
+            {R.upsideDownDoubles && placed && myCap && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ selected: Boolean(myCap.flipped) }}
+                onPress={() => apply((d) => toggleFlip(d, myCap.no), false)}
+                style={[styles.secondary, { height: 40 }, myCap.flipped && { borderColor: colors.gold }]}
+              >
+                <Text style={[styles.secondaryText, { fontSize: 13 }, myCap.flipped && { color: colors.gold }]}>{`🔄 ${myCap.flipped ? M.flipOn : M.flip}`}</Text>
+              </Pressable>
+            )}
             <View style={{ flexDirection: "row", gap: 8 }}>
               <Pressable onPress={() => throwDone(true)} style={[styles.secondary, { flex: 1 }]}>
                 <Text style={styles.secondaryText}>{M.miss}</Text>
@@ -568,7 +588,7 @@ export function MatLogger({
             ["1", M.help1],
             ["2", M.help2],
             ["3", M.help3],
-            ["+1", M.help4],
+            ...(R.shootingBoxBonus ? ([["+1", M.help4]] as const) : []),
             ["🍺", M.help5],
           ] as const
         ).map(([ic, txt]) => (

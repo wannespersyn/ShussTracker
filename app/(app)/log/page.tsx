@@ -1,3 +1,4 @@
+import { parseRuleset } from "@/lib/rules";
 import Link from "next/link";
 import { eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
@@ -63,6 +64,7 @@ export default async function LogGamePage({
         backHref={`/game/${rematch}`}
         crewName={rematchGroup?.name}
         beta={beta}
+        rules={parseRuleset(rematchGroup?.rules)}
       />
     );
   }
@@ -157,6 +159,7 @@ export default async function LogGamePage({
       duoRecords={duoRecords}
       crewName={group?.name}
       beta={beta}
+      rules={parseRuleset(group?.rules)}
     />
   );
 }

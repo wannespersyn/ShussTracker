@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { parseRuleset, type Ruleset } from "@/lib/rules";
 import { eq, sql } from "drizzle-orm";
 import { unstable_cache } from "next/cache";
 import { ALL_CREWS_TAG, crewTag } from "@/lib/cache-tags";
@@ -87,20 +88,21 @@ export const getCrewInsights = cache(async (groupId: string): Promise<CrewInsigh
   );
 });
 
-export type UserCrew = { id: string; name: string; members: number; games: number; lastPlayedAt: Date | null; createdBy: string };
+/** `rules`: the crew's game and house rules (lib/rules.ts), already parsed. */
+export type UserCrew = { id: string; name: string; members: number; games: number; lastPlayedAt: Date | null; createdBy: string; rules: Ruleset };
 
 /** The viewer's crews, most active first (most recent game, then size). */
 export const getUserCrews = cache(async (userId: string): Promise<UserCrew[]> => {
   const res = await db.execute(sql`
-    select g.id, g.name, g.created_by as "createdBy",
+    select g.id, g.name, g.created_by as "createdBy", g.rules,
       (select count(*) from "group_member" m2 where m2.group_id = g.id)::int as members,
       (select count(*) from "game" x where x.group_id = g.id)::int as games,
       (select max(played_at) from "game" x where x.group_id = g.id) as "lastPlayedAt"
     from "group_member" m join "group" g on g.id = m.group_id
     where m.user_id = ${userId}
   `);
-  const crews = (res.rows as { id: string; name: string; createdBy: string; members: number; games: number; lastPlayedAt: string | Date | null }[]).map(
-    (r) => ({ ...r, lastPlayedAt: r.lastPlayedAt ? new Date(r.lastPlayedAt) : null }),
+  const crews = (res.rows as { id: string; name: string; createdBy: string; members: number; games: number; lastPlayedAt: string | Date | null; rules: unknown }[]).map(
+    (r) => ({ ...r, lastPlayedAt: r.lastPlayedAt ? new Date(r.lastPlayedAt) : null, rules: parseRuleset(r.rules) }),
   );
   return crews.sort(
     (a, b) => (b.lastPlayedAt?.getTime() ?? 0) - (a.lastPlayedAt?.getTime() ?? 0) || b.members - a.members,

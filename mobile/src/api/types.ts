@@ -4,6 +4,7 @@
  * Shapes of the /api/v1 responses the app uses (see docs/api-v1.md in the
  * repo root). Dates arrive as ISO strings.
  */
+import type { Ruleset } from "@shared/rules";
 export type BetaKey = "wrapped" | "start" | "celebrations" | "mat" | "camera";
 export type BetaInfo = { optIn: boolean; newCount: number; features: Record<BetaKey, boolean>; disabled: string[] };
 
@@ -21,6 +22,8 @@ export type CrewSummary = {
   lastPlayedAt: string | null;
   createdBy: string;
   isOwner: boolean;
+  /** Game, theme and house rules (lib/rules.ts). */
+  rules: Ruleset;
 };
 
 export type SignInResponse = Me & { token: string; expiresAt: string; created: boolean };
@@ -76,7 +79,7 @@ export type SessionInsight = {
 };
 
 export type CrewDetail = {
-  crew: { id: string; name: string; createdBy: string; isOwner: boolean; plan: string; isPro: boolean; inviteCode?: string };
+  crew: { id: string; name: string; createdBy: string; isOwner: boolean; plan: string; isPro: boolean; inviteCode?: string; rules: Ruleset };
   insights: {
     players: PlayerInsight[];
     duos: DuoInsight[];

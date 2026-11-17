@@ -7,6 +7,7 @@ import { groups, groupMembers, games } from "@/lib/db/schema";
 import { wilsonLowerBound } from "@/lib/ranking";
 import { computeEloRatings, ELO_BASE } from "@/lib/elo";
 import { generateCode } from "@/lib/codes";
+import { parseRuleset, type Ruleset } from "@/lib/rules";
 
 function isToday(date: Date) {
   const now = new Date();
@@ -61,6 +62,19 @@ export async function joinCrewByCode(
 
 export async function renameCrew(groupId: string, name: string) {
   await db.update(groups).set({ name }).where(eq(groups.id, groupId));
+}
+
+/** The crew's game and house rules (Leberschuss defaults when never set). */
+export async function getCrewRules(groupId: string): Promise<Ruleset> {
+  const [row] = await db.select({ rules: groups.rules }).from(groups).where(eq(groups.id, groupId)).limit(1);
+  return parseRuleset(row?.rules);
+}
+
+/** Store the crew's rules; anything invalid falls back to the game's defaults. */
+export async function setCrewRules(groupId: string, rules: unknown): Promise<Ruleset> {
+  const parsed = parseRuleset(rules);
+  await db.update(groups).set({ rules: parsed }).where(eq(groups.id, groupId));
+  return parsed;
 }
 
 export async function regenerateInviteCode(groupId: string): Promise<string> {

@@ -490,6 +490,32 @@
   }
 }
 
+/* Game theme per crew (lib/rules.ts → Ruleset.theme), set as data-game on
+ * the app shell from the active crew: BeerToss crews swap the amber accent
+ * for blue. The streak "on fire" look still wins while it shows. */
+[data-game="beertoss"]:not(:has(.on-fire)) {
+  --color-gold: #4cc2ff;
+  --color-gold-hover: #8ad8ff;
+  --color-gold-dark: #1f9be0;
+  --color-gold-end: #1479b8;
+  --color-amber-fill: #4cc2ff;
+  --color-nav-active: #4cc2ff;
+}
+:root[data-theme="light"] [data-game="beertoss"]:not(:has(.on-fire)) {
+  --color-gold: #0a6fb0;
+  --color-gold-hover: #085a8f;
+  --color-gold-dark: #085a8f;
+  --color-nav-active: #0a3d5e;
+}
+@media (prefers-color-scheme: light) {
+  :root[data-theme="system"] [data-game="beertoss"]:not(:has(.on-fire)) {
+    --color-gold: #0a6fb0;
+    --color-gold-hover: #085a8f;
+    --color-gold-dark: #085a8f;
+    --color-nav-active: #0a3d5e;
+  }
+}
+
 /* "On fire" flair (mockup "Home — on a streak"): while the home screen
  * shows a 3+ win streak, the whole dark theme heats up to orange — nav
  * included. (No viewport frame: dropped after feedback, too loud.) */

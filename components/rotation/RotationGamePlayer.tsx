@@ -6,6 +6,7 @@
  */
 "use client";
 
+import type { Ruleset } from "@/lib/rules";
 import { LogGameWizard } from "@/components/log/LogGameWizard";
 import { TEAM_COLORS, type Duo } from "@/lib/teams";
 import { initialsFor } from "@/lib/format";
@@ -22,7 +23,8 @@ export function RotationGamePlayer({
   teamA,
   teamB,
   beta,
-}: Readonly<{ rotationId: string; rotationGameId: string; teamA: Side; teamB: Side; beta: { start: boolean; celebrations: boolean; mat: boolean } }>) {
+  rules,
+}: Readonly<{ rotationId: string; rotationGameId: string; teamA: Side; teamB: Side; beta: { start: boolean; celebrations: boolean; mat: boolean }; rules?: Ruleset }>) {
   const team = (side: Side, i: number, label: string): Duo => ({
     id: label,
     label: side.map((p) => firstName(p.name)).join(" & "),
@@ -46,6 +48,7 @@ export function RotationGamePlayer({
       onComplete={handleComplete}
       backHref={`/americano/${rotationId}`}
       beta={beta}
+      rules={rules}
     />
   );
 }

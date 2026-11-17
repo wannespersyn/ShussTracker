@@ -27,8 +27,8 @@ The Expo app talks to the same Next.js backend as the website, through
 | POST / DELETE | `/me/push-token` | `{ token, platform }` / `{ token }` | 204 |
 | GET / POST | `/crews` | — / `{ name }` | `{ crews }` / `{ crewId }` |
 | POST | `/crews/join` | `{ code }` | `{ crewId }` |
-| GET | `/crews/{id}` | | `{ crew, insights, guests, tournaments }` |
-| PATCH / DELETE | `/crews/{id}` | owner: `{ name?, trackShotZones? }` / — | 204 |
+| GET | `/crews/{id}` | | `{ crew, insights, guests, tournaments, events, cameras }` — `crew.rules` is the parsed ruleset (lib/rules.ts) |
+| PATCH / DELETE | `/crews/{id}` | owner: `{ name?, rules? }` (rules: game, theme, jokers, emptyRoundsForAll, shootingBoxBonus, upsideDownDoubles, centerZone; invalid values fall back to the game's defaults) / — | 204 |
 | POST | `/crews/{id}/invite-code` | owner | `{ inviteCode }` |
 | DELETE | `/crews/{id}/members/{userId}` | owner | 204 (a guest without games is deleted) |
 | GET | `/crews/{id}/feed?limit=25` | | `{ games }` |
